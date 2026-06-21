@@ -1,12 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'ble/companion_device.dart';
 import 'ble/esk8os_ble.dart';
+import 'pages/settings_page.dart';
+import 'pages/wifi_export_page.dart';
 
-void main() => runApp(const Esk8App());
+void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  runApp(const Esk8App());
+}
 
 const _accent = Color(0xFFB950D7); // matches the board's CAM accent
 
@@ -153,6 +160,7 @@ class DashboardPage extends StatefulWidget {
 class _DashboardPageState extends State<DashboardPage> {
   late final Stream<Telemetry> _telemetry = widget.dev.telemetry();
   StreamSubscription<BluetoothConnectionState>? _connSub;
+  BoardSettings? _boardSettings;
 
   @override
   void initState() {
@@ -162,6 +170,15 @@ class _DashboardPageState extends State<DashboardPage> {
         Navigator.of(context).pop();
       }
     });
+    // Read settings once so we know mph vs kmh for the speed label.
+    _fetchSettings();
+  }
+
+  Future<void> _fetchSettings() async {
+    try {
+      final s = await widget.dev.readSettings();
+      if (mounted && s != null) setState(() => _boardSettings = s);
+    } catch (_) {/* non-fatal — label falls back to SPEED */}
   }
 
   @override
@@ -189,7 +206,24 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.dev.name)),
+      appBar: AppBar(
+        title: Text(widget.dev.name),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Board settings',
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => SettingsPage(dev: widget.dev),
+                ),
+              );
+              // Re-read settings when returning (user may have changed units).
+              _fetchSettings();
+            },
+          ),
+        ],
+      ),
       body: StreamBuilder<Telemetry>(
         stream: _telemetry,
         builder: (_, snap) {
@@ -203,7 +237,12 @@ class _DashboardPageState extends State<DashboardPage> {
                   child: Center(child: Text('Waiting for telemetry…')),
                 )
               else ...[
-                _Hero(value: t.speed.toStringAsFixed(1)),
+                _Hero(
+                  value: t.speed.toStringAsFixed(1),
+                  unitLabel: _boardSettings?.mph == true
+                      ? 'MPH'
+                      : (_boardSettings != null ? 'KM/H' : 'SPEED'),
+                ),
                 const SizedBox(height: 16),
                 GridView.count(
                   crossAxisCount: 2,
@@ -232,8 +271,13 @@ class _DashboardPageState extends State<DashboardPage> {
                   _CmdButton('Trip Reset', () => _cmd(Esk8Commands.tripReset, 'Trip reset')),
                   _CmdButton('Page ◀', () => _cmd(Esk8Commands.pagePrev, 'Prev page')),
                   _CmdButton('Page ▶', () => _cmd(Esk8Commands.pageNext, 'Next page')),
-                  _CmdButton('WiFi Export', () => _cmd(Esk8Commands.wifiExportStart, 'WiFi export start')),
-                  _CmdButton('WiFi Off', () => _cmd(Esk8Commands.wifiExportStop, 'WiFi export stop')),
+                  _CmdButton('WiFi Export / OTA', () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => WifiExportPage(dev: widget.dev),
+                      ),
+                    );
+                  }),
                   _CmdButton('Bridge Mode', () => _cmd(Esk8Commands.bridgeMode, 'Bridge mode')),
                   _CmdButton('Reboot', () => _cmd(Esk8Commands.reboot, 'Reboot')),
                 ],
@@ -248,7 +292,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
 class _Hero extends StatelessWidget {
   final String value;
-  const _Hero({required this.value});
+  final String unitLabel;
+  const _Hero({required this.value, this.unitLabel = 'SPEED'});
 
   @override
   Widget build(BuildContext context) {
@@ -256,7 +301,7 @@ class _Hero extends StatelessWidget {
       children: [
         Text(value,
             style: const TextStyle(fontSize: 84, fontWeight: FontWeight.bold, height: 1)),
-        Text('SPEED', style: TextStyle(color: Colors.grey[500], letterSpacing: 2)),
+        Text(unitLabel, style: TextStyle(color: Colors.grey[500], letterSpacing: 2)),
       ],
     );
   }
