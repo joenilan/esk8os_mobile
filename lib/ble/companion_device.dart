@@ -55,22 +55,16 @@ class CompanionDevice implements Esk8Device {
 
   @override
   Stream<DeviceConnectionState> get connectionState =>
-      device.connectionState.map((s) {
-        switch (s) {
-          case BluetoothConnectionState.disconnected:
-            return DeviceConnectionState.disconnected;
-          case BluetoothConnectionState.connected:
-            return DeviceConnectionState.connected;
-          default:
-            return DeviceConnectionState.disconnected;
-        }
-      });
+      device.connectionState.map((s) => s == BluetoothConnectionState.connected
+          ? DeviceConnectionState.connected
+          : DeviceConnectionState.disconnected);
 
   @override
   bool get isReady => _telemetry != null && _settings != null && _command != null;
 
   /// Connect, raise the MTU so JSON notifies aren't truncated, discover services,
   /// and bind the three companion characteristics.
+  @override
   Future<void> connect() async {
     // flutter_blue_plus 2.x requires declaring a license at connect; nonprofit =
     // free tier for personal/hobby use (this app). Switch to commercial if sold.
@@ -98,9 +92,11 @@ class CompanionDevice implements Esk8Device {
     }
   }
 
+  @override
   Future<void> disconnect() => device.disconnect();
 
   /// 5 Hz telemetry. Enables notifications and decodes each JSON notify.
+  @override
   Stream<Telemetry> telemetry() async* {
     final c = _telemetry!;
     await c.setNotifyValue(true);
@@ -117,6 +113,7 @@ class CompanionDevice implements Esk8Device {
   }
 
   /// Read the board's current configuration.
+  @override
   Future<BoardSettings?> readSettings() async {
     final bytes = await _settings!.read();
     if (bytes.isEmpty) return null;
@@ -128,12 +125,14 @@ class CompanionDevice implements Esk8Device {
   }
 
   /// Write a partial settings update (see [BoardSettings.writeJson]).
+  @override
   Future<void> writeSettings(Map<String, dynamic> partial) async {
     final bytes = utf8.encode(jsonEncode(partial));
     await _settings!.write(bytes); // settings char is WRITE (with response)
   }
 
   /// Send an ASCII command string (see [Esk8Commands]).
+  @override
   Future<void> sendCommand(String cmd) async {
     await _command!.write(utf8.encode(cmd), withoutResponse: true);
   }

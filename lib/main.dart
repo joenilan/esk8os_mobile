@@ -263,7 +263,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     HudView(telemetry: t, settings: _boardSettings),
                     DashView(telemetry: t, settings: _boardSettings),
                     PowerView(telemetry: t),
-                    TripView(telemetry: t, settings: _boardSettings),
+                    TripView(dev: widget.dev, telemetry: t, settings: _boardSettings),
                     GraphsView(telemetry: t),
                   ],
                 ),
