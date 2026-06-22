@@ -12,7 +12,11 @@ import 'pages/wifi_export_page.dart';
 import 'views/dash_view.dart';
 import 'views/graphs_view.dart';
 import 'views/hud_view.dart';
+import 'views/logs_view.dart';
 import 'views/power_view.dart';
+import 'views/settings_summary_view.dart';
+import 'views/system_view.dart';
+import 'views/trip_stats_view.dart';
 import 'views/trip_view.dart';
 import 'widgets/esk8_theme.dart';
 import 'widgets/esk8_widgets.dart';
@@ -241,10 +245,10 @@ class _DashboardPageState extends State<DashboardPage> {
         SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
   }
 
-  // App page -> board PageId. The GPS map (TRIP) is app-only — it has no board
-  // equivalent, so it sends nothing and leaves the board on its current page.
-  static const _pageNames = ['HUD', 'DASH', 'POWER', 'TRIP', 'GRAPHS'];
-  static const _boardPage = [0, 1, 2, -1, 6]; // -1 = no board sync (GPS map)
+  // App page -> board PageId. Mirrors the board's 8-page deck, plus the GPS MAP
+  // which is app-only (-1 = no board sync; it leaves the board where it is).
+  static const _pageNames = ['HUD', 'DASH', 'POWER', 'TRIP', 'MAP', 'SETTINGS', 'SYSTEM', 'GRAPHS', 'LOGS'];
+  static const _boardPage = [0, 1, 2, 3, -1, 4, 5, 6, 7];
 
   void _onPageChanged(int index) {
     setState(() => _currentPage = index);
@@ -307,9 +311,17 @@ class _DashboardPageState extends State<DashboardPage> {
                               case 2:
                                 return PowerView(telemetry: t, settings: _boardSettings);
                               case 3:
+                                return TripStatsView(telemetry: t, settings: _boardSettings);
+                              case 4:
                                 return TripView(dev: widget.dev, telemetry: t, settings: _boardSettings);
-                              default:
+                              case 5:
+                                return SettingsSummaryView(dev: widget.dev, settings: _boardSettings, onEdited: _fetchSettings);
+                              case 6:
+                                return SystemView(telemetry: t, settings: _boardSettings);
+                              case 7:
                                 return GraphsView(telemetry: t, settings: _boardSettings);
+                              default:
+                                return LogsView(settings: _boardSettings);
                             }
                           },
                         ),
@@ -387,10 +399,10 @@ class _DashboardPageState extends State<DashboardPage> {
                   padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(5, (i) => Container(
-                      width: 7,
-                      height: 7,
-                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                    children: List.generate(_pageNames.length, (i) => Container(
+                      width: 6,
+                      height: 6,
+                      margin: const EdgeInsets.symmetric(horizontal: 3),
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: i == _currentPage ? _accent : Colors.white.withValues(alpha: 0.25),

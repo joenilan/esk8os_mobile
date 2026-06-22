@@ -275,6 +275,74 @@ class _SettingsPageState extends State<SettingsPage> {
 
             const SizedBox(height: 16),
 
+            // ── Battery / Range tuning ─────────────────────────────────
+            _SectionHeader('BATTERY / RANGE'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Column(
+                  children: [
+                    _SliderRow(
+                      icon: Icons.battery_charging_full,
+                      label: 'Pack capacity',
+                      value: s.packAh.clamp(4.0, 40.0),
+                      min: 4, max: 40, divisions: 72,
+                      display: '${s.packAh.toStringAsFixed(1)} Ah',
+                      onEnd: (v) => _write(BoardSettings.writeJson(packAh: double.parse(v.toStringAsFixed(1))), 'Pack capacity'),
+                    ),
+                    _SliderRow(
+                      icon: Icons.power_settings_new,
+                      label: 'Stop-cell voltage',
+                      value: s.stopCellV.clamp(3.0, 3.6),
+                      min: 3.0, max: 3.6, divisions: 12,
+                      display: '${s.stopCellV.toStringAsFixed(2)} V',
+                      onEnd: (v) => _write(BoardSettings.writeJson(stopCellV: double.parse(v.toStringAsFixed(2))), 'Stop-cell'),
+                    ),
+                    _SliderRow(
+                      icon: Icons.route,
+                      label: 'Range model',
+                      value: s.whPerMile.toDouble().clamp(14, 40),
+                      min: 14, max: 40, divisions: 26,
+                      display: '${s.whPerMile} Wh/mi',
+                      onEnd: (v) => _write(BoardSettings.writeJson(whPerMile: v.round()), 'Wh/mi'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // ── Display ────────────────────────────────────────────────
+            _SectionHeader('DISPLAY'),
+            Card(
+              child: Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: _SliderRow(
+                      icon: Icons.brightness_6,
+                      label: 'Brightness',
+                      value: s.brightness.toDouble().clamp(10, 100),
+                      min: 10, max: 100, divisions: 18,
+                      display: '${s.brightness}%',
+                      onEnd: (v) => _write(BoardSettings.writeJson(brightness: v.round()), 'Brightness'),
+                    ),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Demo mode', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Synthetic telemetry (no VESC needed)'),
+                    secondary: Icon(Icons.science, color: _accent),
+                    value: s.demo,
+                    activeThumbColor: _accent,
+                    onChanged: (v) => _write(BoardSettings.writeJson(demo: v), 'Demo mode'),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
             // ── Wheel Profile ──────────────────────────────────────────
             _SectionHeader('WHEEL PROFILE'),
             Card(
@@ -352,6 +420,66 @@ class _SectionHeader extends StatelessWidget {
                 letterSpacing: 1.5,
                 fontWeight: FontWeight.w600)),
       );
+}
+
+class _SliderRow extends StatefulWidget {
+  final IconData icon;
+  final String label;
+  final String display;
+  final double value, min, max;
+  final int divisions;
+  final ValueChanged<double> onEnd;
+  const _SliderRow({
+    required this.icon,
+    required this.label,
+    required this.display,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.divisions,
+    required this.onEnd,
+  });
+
+  @override
+  State<_SliderRow> createState() => _SliderRowState();
+}
+
+class _SliderRowState extends State<_SliderRow> {
+  late double _v = widget.value;
+
+  @override
+  void didUpdateWidget(_SliderRow old) {
+    super.didUpdateWidget(old);
+    if (old.value != widget.value) _v = widget.value; // re-sync after a confirmed write
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final v = _v.clamp(widget.min, widget.max);
+    return Column(
+      children: [
+        Row(
+          children: [
+            Icon(widget.icon, color: _accent),
+            const SizedBox(width: 16),
+            Text(widget.label, style: const TextStyle(fontSize: 16)),
+            const Spacer(),
+            Text(widget.display, style: TextStyle(color: Colors.grey[400], fontSize: 14)),
+          ],
+        ),
+        Slider(
+          value: v,
+          min: widget.min,
+          max: widget.max,
+          divisions: widget.divisions,
+          activeColor: _accent,
+          label: v.toStringAsFixed(2),
+          onChanged: (x) => setState(() => _v = x),
+          onChangeEnd: widget.onEnd,
+        ),
+      ],
+    );
+  }
 }
 
 class _ReadOnlyField extends StatelessWidget {
