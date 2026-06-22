@@ -1,61 +1,66 @@
 import 'package:flutter/material.dart';
 import '../ble/esk8os_ble.dart';
+import '../widgets/esk8_theme.dart';
+import '../widgets/esk8_widgets.dart';
 
+/// POWER — mirrors the board's Power page: POWER / ENERGY / SPEED / SESSION
+/// fieldsets with semantic value colours (duty & peak escalate to yellow/red,
+/// regen is green).
 class PowerView extends StatelessWidget {
   final Telemetry? telemetry;
+  final BoardSettings? settings;
 
-  const PowerView({super.key, required this.telemetry});
-
-  @override
-  Widget build(BuildContext context) {
-    if (telemetry == null) {
-      return const Center(child: Text('Waiting for telemetry…'));
-    }
-
-    final amps = telemetry!.volts > 0 ? (telemetry!.watts / telemetry!.volts).toStringAsFixed(1) : '0.0';
-
-    return Padding(
-      padding: const EdgeInsets.all(24.0),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Text('POWER', style: TextStyle(fontSize: 24, color: Colors.grey, letterSpacing: 4)),
-          const SizedBox(height: 48),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _Stat(label: 'BATTERY', value: '${telemetry!.battery}%'),
-              _Stat(label: 'VOLTS', value: telemetry!.volts.toStringAsFixed(1)),
-            ],
-          ),
-          const SizedBox(height: 32),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              _Stat(label: 'AMPS', value: amps),
-              _Stat(label: 'WATTS', value: '${telemetry!.watts}'),
-            ],
-          ),
-          const SizedBox(height: 32),
-          _Stat(label: 'SESSION WH', value: '${telemetry!.wattHours}'),
-        ],
-      ),
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  final String label;
-  final String value;
-  const _Stat({required this.label, required this.value});
+  const PowerView({super.key, required this.telemetry, this.settings});
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(value, style: const TextStyle(fontSize: 32, fontWeight: FontWeight.w600)),
-        Text(label, style: const TextStyle(fontSize: 16, color: Colors.grey)),
+    final t = telemetry;
+    if (t == null) return const WaitingForTelemetry();
+
+    final isMph = settings?.mph == true;
+    final speedUnit = isMph ? 'mph' : 'km/h';
+
+    return PageChrome(
+      sections: [
+        FieldSection(
+          title: 'Power',
+          rows: [
+            FieldRow(label: 'Motor', value: t.motorAmps.toStringAsFixed(1), unit: 'A'),
+            FieldRow(label: 'Battery', value: t.batteryAmps.toStringAsFixed(1), unit: 'A'),
+            FieldRow(label: 'Duty', value: '${t.duty}', unit: '%', valueColor: Esk8Theme.dutyColor(t.duty)),
+            FieldRow(label: 'Peak', value: '${t.peakWatts}', unit: 'W', valueColor: Esk8Theme.wattsColor(t.peakWatts)),
+          ],
+        ),
+        FieldSection(
+          title: 'Energy',
+          rows: [
+            FieldRow(label: 'Used', value: '${t.wattHours}', unit: 'Wh'),
+            FieldRow(label: 'Regen', value: '+${t.regenWh}', unit: 'Wh', valueColor: Esk8Theme.green),
+          ],
+        ),
+        FieldSection(
+          title: 'Speed',
+          rows: [
+            FieldRow(label: 'Max', value: t.maxSpeed.toStringAsFixed(1), unit: speedUnit),
+            FieldRow(label: 'Avg', value: t.avgSpeed.toStringAsFixed(1), unit: speedUnit),
+          ],
+        ),
+        FieldSection(
+          title: 'Session',
+          rows: [
+            FieldRow(label: 'Min Volt', value: t.minVolts.toStringAsFixed(1), unit: 'V'),
+            FieldRow(label: 'Ride', value: _hms(t.rideSeconds)),
+          ],
+        ),
       ],
     );
+  }
+
+  String _hms(int s) {
+    final h = s ~/ 3600;
+    final m = (s % 3600) ~/ 60;
+    final sec = s % 60;
+    if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+    return '$m:${sec.toString().padLeft(2, '0')}';
   }
 }

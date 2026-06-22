@@ -14,6 +14,8 @@ import 'views/graphs_view.dart';
 import 'views/hud_view.dart';
 import 'views/power_view.dart';
 import 'views/trip_view.dart';
+import 'widgets/esk8_theme.dart';
+import 'widgets/esk8_widgets.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,7 +36,7 @@ class Esk8App extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF141414),
+        scaffoldBackgroundColor: const Color(0xFF1A1A1A),
         colorScheme: ColorScheme.fromSeed(
           seedColor: _accent,
           brightness: Brightness.dark,
@@ -241,7 +243,15 @@ class _DashboardPageState extends State<DashboardPage> {
     } else if (index < _currentPage) {
       widget.dev.sendCommand(Esk8Commands.pagePrev).catchError((_) {});
     }
-    _currentPage = index;
+    setState(() => _currentPage = index);
+  }
+
+  static const _pageNames = ['HUD', 'DASH', 'POWER', 'TRIP', 'GRAPHS'];
+  String _pageName(int i) => (i >= 0 && i < _pageNames.length) ? _pageNames[i] : '';
+
+  static String _clock() {
+    final now = DateTime.now();
+    return '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -251,96 +261,146 @@ class _DashboardPageState extends State<DashboardPage> {
         stream: _telemetry,
         builder: (_, snap) {
           final t = snap.data;
-          return Stack(
-            children: [
-              // 1. The main swipeable views — double-tap toggles controls
-              GestureDetector(
-                onDoubleTap: () => setState(() => _showControls = !_showControls),
-                child: PageView(
-                  controller: _pageCtrl,
-                  onPageChanged: _onPageChanged,
-                  children: [
-                    HudView(telemetry: t, settings: _boardSettings),
-                    DashView(telemetry: t, settings: _boardSettings),
-                    PowerView(telemetry: t),
-                    TripView(dev: widget.dev, telemetry: t, settings: _boardSettings),
-                    GraphsView(telemetry: t),
-                  ],
-                ),
-              ),
-
-              // 2. Page indicator dots (bottom center)
-              Positioned(
-                bottom: 16,
-                left: 0,
-                right: 0,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(5, (i) => Container(
-                    width: 8,
-                    height: 8,
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: i == _currentPage
-                          ? const Color(0xFF8B5CF6)
-                          : Colors.white.withValues(alpha: 0.3),
-                    ),
-                  )),
-                ),
-              ),
-
-              // 3. Settings Gear (Top Right)
-              if (_showControls)
-                Positioned(
-                  top: 32,
-                  right: 16,
-                  child: IconButton(
-                    icon: const Icon(Icons.settings, size: 32),
-                    color: Colors.white54,
-                    onPressed: () async {
-                      await Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => SettingsPage(dev: widget.dev)),
-                      );
-                      _fetchSettings();
-                    },
+          final du = _boardSettings?.mph == true ? 'mi' : 'km';
+          final rider = (_boardSettings?.rider ?? '').trim().toUpperCase();
+          return SafeArea(
+            top: false,
+            bottom: false,
+            child: Column(
+              children: [
+                // TOP PANEL — rider (left) · time (right). The centre is left
+                // empty so the camera punch-hole sits in clear space; the panel
+                // rides up at the notch line. Page title moves into the content.
+                Container(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+                  decoration: const BoxDecoration(
+                    border: Border(bottom: BorderSide(color: Esk8Theme.border)),
+                  ),
+                  child: TopStatusBar(
+                    left: rider.isNotEmpty ? 'RIDER: $rider' : 'ESK8OS',
+                    right: _clock(),
                   ),
                 ),
 
-              // 4. Command Controls (Bottom Overlay)
-              if (_showControls)
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: Container(
-                    color: Colors.black87,
-                    padding: const EdgeInsets.all(16).copyWith(bottom: 32),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Text('CONTROLS', style: TextStyle(color: Colors.grey, letterSpacing: 2)),
-                        const SizedBox(height: 16),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
+                // PAGES — double-tap toggles the controls overlay
+                Expanded(
+                  child: Stack(
+                    children: [
+                      GestureDetector(
+                        onDoubleTap: () => setState(() => _showControls = !_showControls),
+                        child: PageView(
+                          controller: _pageCtrl,
+                          onPageChanged: _onPageChanged,
                           children: [
-                            _CmdButton('Trip Reset', () => _cmd(Esk8Commands.tripReset, 'Trip reset')),
-                            _CmdButton('WiFi Export / OTA', () {
-                              Navigator.of(context).push(
-                                MaterialPageRoute(builder: (_) => WifiExportPage(dev: widget.dev)),
-                              );
-                            }),
-                            _CmdButton('Bridge Mode', () => _cmd(Esk8Commands.bridgeMode, 'Bridge mode')),
-                            _CmdButton('Reboot', () => _cmd(Esk8Commands.reboot, 'Reboot')),
+                            HudView(telemetry: t, settings: _boardSettings),
+                            DashView(telemetry: t, settings: _boardSettings),
+                            PowerView(telemetry: t, settings: _boardSettings),
+                            TripView(dev: widget.dev, telemetry: t, settings: _boardSettings),
+                            GraphsView(telemetry: t, settings: _boardSettings),
                           ],
                         ),
-                      ],
-                    ),
+                      ),
+                      // Page title — moved out of the top panel, centered at the
+                      // top of the content (in the open space above the speed).
+                      Positioned(
+                        top: 6,
+                        left: 0,
+                        right: 0,
+                        child: IgnorePointer(
+                          child: Center(
+                            child: Text(_pageName(_currentPage),
+                                style: const TextStyle(
+                                    fontSize: 13,
+                                    color: Esk8Theme.dim,
+                                    letterSpacing: 2,
+                                    fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                      ),
+                      if (_showControls)
+                        Positioned(
+                          top: 8,
+                          right: 8,
+                          child: IconButton(
+                            icon: const Icon(Icons.settings, size: 32),
+                            color: Colors.white54,
+                            onPressed: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => SettingsPage(dev: widget.dev)),
+                              );
+                              _fetchSettings();
+                            },
+                          ),
+                        ),
+                      if (_showControls)
+                        Positioned(
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          child: Container(
+                            color: Colors.black87,
+                            padding: const EdgeInsets.all(16).copyWith(bottom: 32),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                const Text('CONTROLS', style: TextStyle(color: Colors.grey, letterSpacing: 2)),
+                                const SizedBox(height: 16),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  children: [
+                                    _CmdButton('Trip Reset', () => _cmd(Esk8Commands.tripReset, 'Trip reset')),
+                                    _CmdButton('WiFi Export / OTA', () {
+                                      Navigator.of(context).push(
+                                        MaterialPageRoute(builder: (_) => WifiExportPage(dev: widget.dev)),
+                                      );
+                                    }),
+                                    _CmdButton('Bridge Mode', () => _cmd(Esk8Commands.bridgeMode, 'Bridge mode')),
+                                    _CmdButton('Reboot', () => _cmd(Esk8Commands.reboot, 'Reboot')),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
-            ],
+
+                // PAGE DOTS
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: List.generate(5, (i) => Container(
+                      width: 7,
+                      height: 7,
+                      margin: const EdgeInsets.symmetric(horizontal: 4),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: i == _currentPage ? _accent : Colors.white.withValues(alpha: 0.25),
+                      ),
+                    )),
+                  ),
+                ),
+
+                // BOTTOM PANEL — identifies battery · trip · odometer
+                Container(
+                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+                  decoration: const BoxDecoration(
+                    border: Border(top: BorderSide(color: Esk8Theme.border)),
+                  ),
+                  child: t == null
+                      ? const SizedBox(height: 18)
+                      : BottomStatus(
+                          percent: t.battery,
+                          trip: '${t.trip.toStringAsFixed(1)}$du',
+                          odo: '${t.odometer.toStringAsFixed(0)}$du',
+                        ),
+                ),
+              ],
+            ),
           );
         },
       ),

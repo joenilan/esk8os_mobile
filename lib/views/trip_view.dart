@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import '../ble/esk8os_ble.dart';
 import '../pages/trip_history_page.dart';
 import '../services/trip_recorder.dart';
+import '../widgets/esk8_theme.dart';
 
 /// Live ride map + trip controls. Recording itself lives in [TripRecorder]
 /// (app-level singleton) so it survives page swipes / screen-off / backgrounding;
@@ -188,7 +189,7 @@ class _TripViewState extends State<TripView> {
                   Polyline(
                     points: route,
                     strokeWidth: 4.0,
-                    color: const Color(0xFF8B5CF6),
+                    color: Esk8Theme.accent,
                   ),
                 ],
               ),
@@ -201,12 +202,12 @@ class _TripViewState extends State<TripView> {
                     height: 20,
                     child: Container(
                       decoration: BoxDecoration(
-                        color: const Color(0xFF8B5CF6),
+                        color: Esk8Theme.accent,
                         shape: BoxShape.circle,
                         border: Border.all(color: Colors.white, width: 2),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF8B5CF6).withValues(alpha: 0.5),
+                            color: Esk8Theme.accent.withValues(alpha: 0.5),
                             blurRadius: 8,
                             spreadRadius: 2,
                           ),
@@ -239,7 +240,7 @@ class _TripViewState extends State<TripView> {
                     Icon(
                       Icons.gps_fixed,
                       size: 14,
-                      color: (_locationReady || isTracking) ? const Color(0xFF8B5CF6) : Colors.grey,
+                      color: (_locationReady || isTracking) ? Esk8Theme.accent : Colors.grey,
                     ),
                     const SizedBox(width: 6),
                     Text(
@@ -322,8 +323,8 @@ class _TripViewState extends State<TripView> {
                     margin: const EdgeInsets.only(bottom: 8),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: _showComparison ? const Color(0xFF8B5CF6) : const Color(0xDD1E1E1E),
-                      border: Border.all(color: _showComparison ? const Color(0xFF8B5CF6) : const Color(0xFF333333)),
+                      color: _showComparison ? Esk8Theme.accent : const Color(0xDD1E1E1E),
+                      border: Border.all(color: _showComparison ? Esk8Theme.accent : const Color(0xFF333333)),
                       borderRadius: BorderRadius.circular(4),
                     ),
                     child: Text(
@@ -372,7 +373,7 @@ class _TripViewState extends State<TripView> {
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF8B5CF6),
+                  color: Esk8Theme.accent,
                   borderRadius: BorderRadius.circular(4),
                 ),
                 child: const Text(
@@ -412,7 +413,7 @@ class _TripViewState extends State<TripView> {
           bottom: 48,
           right: 16,
           child: FloatingActionButton.extended(
-            backgroundColor: isTracking ? const Color(0xFFEF4444) : const Color(0xFF8B5CF6),
+            backgroundColor: isTracking ? const Color(0xFFEF4444) : Esk8Theme.accent,
             onPressed: _toggleTracking,
             icon: Icon(isTracking ? Icons.stop : Icons.play_arrow, color: Colors.white),
             label: Text(
@@ -447,11 +448,11 @@ class _MapButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: const Color(0xDD1E1E1E),
           border: Border.all(
-            color: highlighted ? const Color(0xFF8B5CF6) : const Color(0xFF333333),
+            color: highlighted ? Esk8Theme.accent : const Color(0xFF333333),
           ),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Icon(icon, color: highlighted ? const Color(0xFF8B5CF6) : Colors.white, size: 20),
+        child: Icon(icon, color: highlighted ? Esk8Theme.accent : Colors.white, size: 20),
       ),
     );
   }
@@ -528,7 +529,7 @@ class _CompareStatCard extends StatelessWidget {
       padding: const EdgeInsets.all(10.0),
       decoration: BoxDecoration(
         color: const Color(0xDD1E1E1E),
-        border: Border.all(color: const Color(0xFF8B5CF6)),
+        border: Border.all(color: Esk8Theme.accent),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Column(
@@ -560,7 +561,7 @@ class _CompareStatCard extends StatelessWidget {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(gpsVal, style: GoogleFonts.bebasNeue(fontSize: 22, fontWeight: FontWeight.normal, color: const Color(0xFF8B5CF6), letterSpacing: 1.5)),
+                  Text(gpsVal, style: GoogleFonts.bebasNeue(fontSize: 22, fontWeight: FontWeight.normal, color: Esk8Theme.accent, letterSpacing: 1.5)),
                   const Text('GPS', style: TextStyle(fontSize: 9, color: Colors.grey)),
                 ],
               ),

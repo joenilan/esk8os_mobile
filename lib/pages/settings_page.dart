@@ -29,11 +29,18 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _loading = true;
   bool _writing = false;
   String? _error;
+  final _riderCtrl = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _read();
+  }
+
+  @override
+  void dispose() {
+    _riderCtrl.dispose();
+    super.dispose();
   }
 
   // ── BLE helpers ──────────────────────────────────────────────────────────
@@ -49,6 +56,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (!mounted) return;
       setState(() {
         _settings = s;
+        _riderCtrl.text = s.rider;
         _loading = false;
       });
     } catch (e) {
@@ -139,6 +147,43 @@ class _SettingsPageState extends State<SettingsPage> {
         child: ListView(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           children: [
+            // ── Rider ──────────────────────────────────────────────────
+            _SectionHeader('RIDER'),
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    const Icon(Icons.person, color: _accent),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: TextField(
+                        controller: _riderCtrl,
+                        maxLength: 15,
+                        textCapitalization: TextCapitalization.characters,
+                        textInputAction: TextInputAction.done,
+                        decoration: const InputDecoration(
+                          labelText: 'Rider name',
+                          border: InputBorder.none,
+                          counterText: '',
+                        ),
+                        onSubmitted: (v) =>
+                            _write(BoardSettings.writeJson(rider: v.trim()), 'Rider'),
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.check, color: _accent),
+                      tooltip: 'Save rider',
+                      onPressed: () => _write(
+                          BoardSettings.writeJson(rider: _riderCtrl.text.trim()), 'Rider'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
             // ── Units ──────────────────────────────────────────────────
             _SectionHeader('UNITS'),
             Card(

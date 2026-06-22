@@ -10,7 +10,7 @@
 | Repo | github.com/joenilan/Esk8OS | github.com/joenilan/esk8os_mobile |
 | Path | `E:\AI\Longboard-Display` | `E:\AI\esk8os_mobile` |
 | Branch | `next-dev` | `main` |
-| Version | **0.8.4** | **0.1.0** |
+| Version | **0.9.1** | **0.1.0** |
 
 ⚠️ **Nested-repo hazard:** `E:\AI\esk8os_mobile` lives inside the `E:\AI` repo (holds `.env`/secrets, no remote, NEVER push). The app has its own `.git`; always run git from *inside* `esk8os_mobile`. Never `git add`/commit/push from `E:\AI`.
 
@@ -71,7 +71,14 @@ Mirror the board's display so the rider reads the **phone in-hand** while moving
 | **SYSTEM** | device / memory / runtime / firmware version |
 | **SETTINGS** | wheel profile · display · battery |
 
-## ⛔ Track 1 FIRST — Firmware: expand the BLE payload (prerequisite)
+## ✅ Track 1 DONE — Firmware: BLE payload expanded (fw 0.9.0)
+Implemented in `companion_ble.cpp` and documented in `docs/companion_api_spec.md`. Builds clean (`tdisplay_s3_debug_usb`). **Still needs flash + on-device verification** on the board — not yet flashed/ride-tested.
+- Telemetry now adds: `btemp, bata, mota, duty, pkw, whr, minv, avs, trip, odo, est, eff, fault, rtime` (distance/speed/range in display units; `eff` Wh/mi when mph; `duty` already %).
+- Settings now also writable: `packAh, stopCell, whmi, bright, demo` (clamped, persisted to NVS; `stopCell` recomputes battery bounds, `packAh`/`whmi` refresh range, `bright` applies to backlight live).
+- Telemetry buffer bumped to 320 B, settings read buffer to 256 B (still < 512 MTU).
+
+<details><summary>Original Track-1 spec (for reference)</summary>
+
 The current telemetry JSON is too thin to mirror the board. **All needed values already exist as globals** in `telemetry.cpp` — it's just adding them to the JSON in `companion_ble.cpp` → `companionBleTick()`:
 
 Add to telemetry JSON (current keys: `spd,bat,v,w,mtr_t,esc_t,rng,max_s,wh`):
@@ -85,18 +92,28 @@ Expand settings JSON (`buildSettingsJson` + `applySettings` in `companion_ble.cp
 - `packAh` = `BATTERY_EFFECTIVE_CAPACITY_AH`, `stopCell` = `BATTERY_STOP_CELL_V`, `whmi` = `RANGE_DEFAULT_WH_PER_MILE`, optionally `bright` = `gBrightnessPct`, `demo` = `gDemoMode`.
 
 Then: bump firmware version, **update `docs/companion_api_spec.md`** to match, build + flash. Mind MTU (JSON grows but stays < 512; app already negotiates 512).
+</details>
 
-## Track 2 — App
-1. **Expand models** (`esk8os_ble.dart`): add the new fields to `Telemetry` + `BoardSettings` (+ `writeJson`).
-2. **Shared widget kit** (`lib/widgets/`): one stat-card/tile, one page-scaffold; kill the duplicated `_Stat`/`_CamStatCard`.
-3. **Fix overflow**: speed hero uses `FittedBox`/`Flexible` (or unit on its own line) so value+unit never clip. Make all cards responsive.
-4. **Rebuild each page distinct, mirroring the board** (HUD, Dash=temps+range, Power=power/energy/speed/session, Trip=trip+odometer, Graphs=multi-metric, optional System). Remove the redundant overlap.
-5. **Expand Settings** with the new fields once firmware exposes them (pack Ah, stop-cell, Wh/mi, brightness).
-6. **Design pass** — use the `frontend-design` skill; unify accent, typography, glanceability.
+## Track 2 — App (← resume at step 4)
+1. ✅ **Expand models** (`esk8os_ble.dart`): all fw-0.9.0 fields added to `Telemetry` + `BoardSettings` (+ `writeJson`); new fields default to 0/false (older board / DB replay safe). Mock device emits them all.
+2. ✅ **Shared widget kit** (`lib/widgets/esk8_theme.dart` + `esk8_widgets.dart`): `Esk8Theme` tokens (single accent `#B950D7`), `StatTile`, `SpeedHero`, `GlancePanel`, `SectionTitle`, `WaitingForTelemetry`. Killed duplicated `_Stat` (dash/power) + `_CamStatCard` (hud). *Trip's local `_CamStatCard`/`_CompareStatCard` left for the step-4 rebuild — its accent is already unified.*
+3. ✅ **Overflow fixed**: `SpeedHero` + `StatTile` wrap value+unit in `FittedBox(scaleDown)` so they never clip. Accent unified across main/hud/dash/power/trip/graphs.
+4. ✅ **Pages rebuilt distinct, mirroring the board** (verified on emulator, mock):
+   - HUD = speed hero + battery + 2×2 (watts/volts/range/motor) overview.
+   - DASH = TEMPS (motor/battery/esc) + RANGE (estimated/remaining/efficiency).
+   - POWER = POWER (motor A/battery A/duty/peak) · ENERGY (used/regen) · SPEED (max/avg) · SESSION (min volt/ride time).
+   - GRAPHS = 3 stacked live charts (speed/power/voltage), each auto-scaled.
+   - TRIP = the GPS map (already distinct; its overlay cards still use local widgets — fold into the kit during the design pass).
+   - Layout: pages now reclaim the top display-cutout band (`SafeArea(top:false)`) and reserve bottom room so the page-indicator dots don't sit on the tiles.
+5. **Expand Settings** with the new fields (pack Ah, stop-cell V, Wh/mi, brightness, demo) — firmware now exposes them (fw 0.9.0). `BoardSettings.writeJson` already takes them; just add the UI controls in `pages/settings_page.dart`.
+6. **Design pass** — use the `frontend-design` skill; refine typography, glanceability, fold trip's overlay cards into the kit. (Accent already unified to `#B950D7`.)
 7. Keep page-swipe → board `pageNext`/`pagePrev` sync (already works).
 
+## Emulator (UI testing without the board)
+AVD **`esk8_pixel`** is set up to mirror the S23 screen (1080×2340 @ 480dpi). `flutter run -d emulator-5554`, then tap the bug icon for mock mode. ⚠️ `sdkmanager`/`avdmanager` need `JAVA_HOME` = Android Studio's `jbr` (PATH java is v8). Full notes in the agent memory `esk8os-android-emulator`.
+
 ## Suggested order
-Firmware payload+settings expansion → flash → app models → shared widgets + overflow fix → rebuild pages → settings → design pass. Test on device (or mock for UI-only) each step.
+Firmware payload+settings expansion ✅ → app models ✅ → shared widgets + overflow ✅ → rebuild pages ✅ → **settings UI (next)** → design pass. Flash + on-device verify the firmware whenever convenient.
 
 ---
 

@@ -1,230 +1,58 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import '../ble/esk8os_ble.dart';
+import '../widgets/esk8_theme.dart';
+import '../widgets/esk8_widgets.dart';
 
+/// HUD — big speed, segmented battery + %, and a 2×2 of cells (watts / volts /
+/// range / temp) with semantic value colours. The top/bottom identifying panels
+/// and page dots are drawn by the dashboard around all pages.
 class HudView extends StatelessWidget {
   final Telemetry? telemetry;
   final BoardSettings? settings;
 
   const HudView({super.key, required this.telemetry, required this.settings});
 
-  @override
-  Widget build(BuildContext context) {
-    if (telemetry == null) {
-      return const Center(child: Text('Waiting for telemetry…', style: TextStyle(color: Colors.white)));
-    }
-
-    final speedStr = telemetry!.speed.toStringAsFixed(1);
-    final unitStr = settings?.mph == true ? 'MPH' : 'KM/H';
-    final distUnit = settings?.mph == true ? 'MI' : 'KM';
-    final amps = telemetry!.volts > 0 ? (telemetry!.watts / telemetry!.volts).toStringAsFixed(1) : '0.0';
-
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            // Top Section: Massive Speed
-            Expanded(
-              child: Container(
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
-                  border: Border.all(color: const Color(0xFF333333)),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Align(
-                      alignment: Alignment.topLeft,
-                      child: Padding(
-                        padding: EdgeInsets.all(16.0),
-                        child: Text(
-                          'Speed',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const Spacer(),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.baseline,
-                      textBaseline: TextBaseline.alphabetic,
-                      children: [
-                        Text(
-                          speedStr,
-                          style: GoogleFonts.bebasNeue(
-                            fontSize: 180,
-                            fontWeight: FontWeight.normal,
-                            color: Colors.white,
-                            height: 1.0,
-                            letterSpacing: 2.0,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          unitStr,
-                          style: const TextStyle(
-                            fontSize: 24,
-                            color: Colors.grey,
-                            fontWeight: FontWeight.w400,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Spacer(flex: 2),
-                  ],
-                ),
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-
-            // Middle Section: Battery Bar
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16.0),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1E1E1E),
-                border: Border.all(color: const Color(0xFF333333)),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Battery',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(2),
-                          child: LinearProgressIndicator(
-                            value: telemetry!.battery / 100.0,
-                            minHeight: 12,
-                            backgroundColor: const Color(0xFF333333),
-                            color: _getBatteryColor(telemetry!.battery),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 16),
-                      Text(
-                        '${telemetry!.battery}%',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          color: Colors.white,
-                          fontWeight: FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 16),
-
-            // Bottom Section: Secondary Stats Panel
-            Row(
-              children: [
-                Expanded(child: _CamStatCard(label: 'Range', value: telemetry!.range.toStringAsFixed(1), unit: distUnit)),
-                const SizedBox(width: 16),
-                Expanded(child: _CamStatCard(label: 'Power', value: '${telemetry!.watts}', unit: 'W')),
-                const SizedBox(width: 16),
-                Expanded(child: _CamStatCard(label: 'Voltage', value: telemetry!.volts.toStringAsFixed(1), unit: 'V')),
-              ],
-            ),
-
-            const SizedBox(height: 16),
-
-            Row(
-              children: [
-                Expanded(child: _CamStatCard(label: 'Current', value: amps, unit: 'A')),
-                const SizedBox(width: 16),
-                Expanded(child: _CamStatCard(label: 'Motor', value: '${telemetry!.motorTempC}', unit: '°C')),
-                const SizedBox(width: 16),
-                Expanded(child: _CamStatCard(label: 'ESC', value: '${telemetry!.escTempC}', unit: '°C')),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
+  static Color _tempColor(int c) {
+    if (c >= 70) return Esk8Theme.danger;
+    if (c >= 55) return Esk8Theme.yellow;
+    return Esk8Theme.green;
   }
-
-  Color _getBatteryColor(int battery) {
-    // Keeping the NZXT feel with solid, slightly muted colors
-    if (battery > 50) return const Color(0xFF8B5CF6); // Purple brand color
-    if (battery > 20) return const Color(0xFFEAB308); // Yellow
-    return const Color(0xFFEF4444); // Red
-  }
-}
-
-class _CamStatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final String unit;
-
-  const _CamStatCard({required this.label, required this.value, required this.unit});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16.0),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
-        border: Border.all(color: const Color(0xFF333333)),
-        borderRadius: BorderRadius.circular(4),
-      ),
+    final t = telemetry;
+    if (t == null) return const WaitingForTelemetry();
+
+    final isMph = settings?.mph == true;
+    final speedUnit = isMph ? 'MPH' : 'KM/H';
+    final distUnit = isMph ? 'MI' : 'KM';
+    final cells = settings?.batterySeries ?? 12;
+
+    // Display values are whole numbers (precision lives in the logs); dropping
+    // the decimals frees width so the cell numbers can be big and glanceable.
+    const cellSize = 56.0;
+    const cellPad = EdgeInsets.symmetric(horizontal: 12, vertical: 18);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
-            ),
-          ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                value,
-                style: GoogleFonts.bebasNeue(
-                  fontSize: 48,
-                  fontWeight: FontWeight.normal,
-                  color: Colors.white,
-                  letterSpacing: 1.5,
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                unit,
-                style: const TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
+          // Speed — big but not overpowering, MPH snug underneath.
+          Expanded(child: Center(child: SpeedHero(value: t.speed.toStringAsFixed(0), unit: speedUnit))),
+          const Divider(height: 1, thickness: 1, color: Esk8Theme.border),
+          const SizedBox(height: 10),
+          SegmentedBattery(percent: t.battery, cells: cells),
+          const SizedBox(height: 2),
+          Text('${t.battery}%', style: Esk8Theme.number(38)),
+          const SizedBox(height: 14),
+          StatRow([
+            StatTile(label: 'Watts', value: '${t.watts}', unit: 'W', valueSize: cellSize, padding: cellPad, valueColor: Esk8Theme.wattsColor(t.watts)),
+            StatTile(label: 'Volts', value: t.volts.toStringAsFixed(0), unit: 'V', valueSize: cellSize, padding: cellPad, valueColor: Esk8Theme.green),
+          ]),
+          const SizedBox(height: 12),
+          StatRow([
+            StatTile(label: 'Range', value: t.range.toStringAsFixed(0), unit: distUnit, valueSize: cellSize, padding: cellPad),
+            StatTile(label: 'Temp', value: '${t.motorTempC}', unit: '°C', valueSize: cellSize, padding: cellPad, valueColor: _tempColor(t.motorTempC)),
+          ]),
         ],
       ),
     );
