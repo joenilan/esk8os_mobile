@@ -23,11 +23,24 @@ class DashView extends StatelessWidget {
     if (t == null) return const WaitingForTelemetry();
 
     final isMph = settings?.mph == true;
+    final speedUnit = isMph ? 'MPH' : 'KM/H';
     final distUnit = isMph ? 'mi' : 'km';
     final effUnit = isMph ? 'wh/mi' : 'wh/km';
 
     return PageChrome(
       sections: [
+        // Speed + volts/watts header — the detailed companion to the HUD.
+        Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SpeedHero(value: t.speed.toStringAsFixed(0), unit: speedUnit, maxSize: 104),
+            const SizedBox(height: 10),
+            StatRow([
+              StatTile(label: 'Volts', value: t.volts.toStringAsFixed(0), unit: 'V', valueSize: 44, valueColor: Esk8Theme.green),
+              StatTile(label: 'Watts', value: '${t.watts}', unit: 'W', valueSize: 44, valueColor: Esk8Theme.wattsColor(t.watts)),
+            ]),
+          ],
+        ),
         FieldSection(
           title: 'Temps',
           rows: [

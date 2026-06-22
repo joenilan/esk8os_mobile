@@ -192,7 +192,11 @@ class _DashboardPageState extends State<DashboardPage> {
   StreamSubscription<DeviceConnectionState>? _connSub;
   BoardSettings? _boardSettings;
 
-  final PageController _pageCtrl = PageController();
+  // Start deep in a large virtual range so the deck wraps both ways (last page
+  // swipes back to the first, and vice-versa). _kLoopBase is a multiple of the
+  // page count so the initial page is HUD (index 0).
+  static const int _kLoopBase = 10000;
+  final PageController _pageCtrl = PageController(initialPage: _kLoopBase);
   int _currentPage = 0;
   bool _showControls = false;
 
@@ -237,16 +241,19 @@ class _DashboardPageState extends State<DashboardPage> {
         SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
   }
 
+  // App page -> board PageId. The GPS map (TRIP) is app-only — it has no board
+  // equivalent, so it sends nothing and leaves the board on its current page.
+  static const _pageNames = ['HUD', 'DASH', 'POWER', 'TRIP', 'GRAPHS'];
+  static const _boardPage = [0, 1, 2, -1, 6]; // -1 = no board sync (GPS map)
+
   void _onPageChanged(int index) {
-    if (index > _currentPage) {
-      widget.dev.sendCommand(Esk8Commands.pageNext).catchError((_) {});
-    } else if (index < _currentPage) {
-      widget.dev.sendCommand(Esk8Commands.pagePrev).catchError((_) {});
-    }
     setState(() => _currentPage = index);
+    final bp = (index >= 0 && index < _boardPage.length) ? _boardPage[index] : -1;
+    if (bp >= 0) {
+      widget.dev.sendCommand(Esk8Commands.pageSet(bp)).catchError((_) {});
+    }
   }
 
-  static const _pageNames = ['HUD', 'DASH', 'POWER', 'TRIP', 'GRAPHS'];
   String _pageName(int i) => (i >= 0 && i < _pageNames.length) ? _pageNames[i] : '';
 
   static String _clock() {
@@ -288,16 +295,23 @@ class _DashboardPageState extends State<DashboardPage> {
                     children: [
                       GestureDetector(
                         onDoubleTap: () => setState(() => _showControls = !_showControls),
-                        child: PageView(
+                        child: PageView.builder(
                           controller: _pageCtrl,
-                          onPageChanged: _onPageChanged,
-                          children: [
-                            HudView(telemetry: t, settings: _boardSettings),
-                            DashView(telemetry: t, settings: _boardSettings),
-                            PowerView(telemetry: t, settings: _boardSettings),
-                            TripView(dev: widget.dev, telemetry: t, settings: _boardSettings),
-                            GraphsView(telemetry: t, settings: _boardSettings),
-                          ],
+                          onPageChanged: (i) => _onPageChanged(i % _pageNames.length),
+                          itemBuilder: (_, i) {
+                            switch (i % _pageNames.length) {
+                              case 0:
+                                return HudView(telemetry: t, settings: _boardSettings);
+                              case 1:
+                                return DashView(telemetry: t, settings: _boardSettings);
+                              case 2:
+                                return PowerView(telemetry: t, settings: _boardSettings);
+                              case 3:
+                                return TripView(dev: widget.dev, telemetry: t, settings: _boardSettings);
+                              default:
+                                return GraphsView(telemetry: t, settings: _boardSettings);
+                            }
+                          },
                         ),
                       ),
                       // Page title — moved out of the top panel, centered at the

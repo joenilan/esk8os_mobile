@@ -15,6 +15,10 @@ class Esk8Commands {
   static const String tripReset = 'TRIP_RESET';
   static const String pageNext = 'PAGE_NEXT';
   static const String pagePrev = 'PAGE_PREV';
+
+  /// Jump the board to an absolute page index (board PageId enum:
+  /// 0=HUD 1=DASH 2=POWER 3=TRIP 4=SETTINGS 5=SYSTEM 6=GRAPHS 7=LOGS).
+  static String pageSet(int boardPage) => 'PAGE_SET:$boardPage';
   static const String bridgeMode = 'BRIDGE_MODE';
   static const String wifiExportStart = 'WIFI_EXPORT_START';
   static const String wifiExportStop = 'WIFI_EXPORT_STOP';
