@@ -46,13 +46,19 @@ the user rides looking at the phone in their hand, only glancing at the board's 
 
 ```
 lib/
-├── main.dart                      # Esk8App, ScanPage, DashboardPage
+├── main.dart                      # Esk8App, ScanPage, DashboardPage (PageView)
 ├── ble/
 │   ├── esk8os_ble.dart            # Pure-Dart contract: UUIDs, models, commands
 │   └── companion_device.dart      # flutter_blue_plus wrapper: scan, connect, telemetry
 ├── pages/
 │   ├── settings_page.dart         # Board settings (units, theme, battery, profile)
 │   └── wifi_export_page.dart      # Hybrid WiFi OTA and log download wizard
+├── views/                         # Swipeable display pages (mirror the board)
+│   ├── hud_view.dart              # Massive speed + battery bar
+│   ├── dash_view.dart             # Speed, watts, volts, motor/esc temps
+│   ├── power_view.dart            # Battery %, volts, amps, watts, session Wh
+│   ├── trip_view.dart             # Distance, max speed
+│   └── graphs_view.dart           # Live power chart (fl_chart)
 └── wifi/
     └── wifi_service.dart          # HTTP requests for the board's standalone AP
 ```
@@ -67,15 +73,22 @@ lib/
 - Single NimBLE server shared with VESC bridge
 
 ### App (v0.1.0, `main`) — hardware-verified on S23
+- **Full-Screen Immersive Mode**: `SystemUiMode.immersiveSticky` on app start
 - **ScanPage**: scan for boards advertising companion service UUID, tap to connect
-- **DashboardPage**: live telemetry hero display (speed + unit label), 8-tile grid, command buttons
+- **DashboardPage**: swipeable PageView mirroring the board's 5 display pages:
+  - **HudView**: massive speed text + battery bar (minimalist, glanceable)
+  - **DashView**: speed, watts, volts, motor/ESC temps
+  - **PowerView**: battery %, volts, amps, watts, session Wh
+  - **TripView**: trip distance, max speed
+  - **GraphsView**: live power chart (fl_chart, rolling 60-point window)
+  - Swiping sends `pageNext`/`pagePrev` to the board → both screens stay in sync
+  - Tap to reveal overlay: Settings gear + command buttons (Trip Reset, WiFi, Bridge, Reboot)
 - **SettingsPage**: read/write board settings over BLE
   - Units toggle (MPH/KM/H)
   - Theme dropdown (8 themes: CAM, EMBER, ICE, LIGHT, CYBER, SYNTHWAVE, MONO, FOREST)
   - Battery cells slider (6–14S)
   - Wheel profile selector (0/1) with read-only derived fields (poles, wheel, gear)
   - Immediate-write-on-change, re-read to confirm round-trip
-- Dynamic speed label (MPH/KM/H based on board settings)
 - **WifiExportPage**: Hybrid WiFi OTA and log download wizard
   - Triggers the board to start its AP over BLE
   - Downloads `.csv` ride logs via HTTP
@@ -115,42 +128,27 @@ lib/
 ### 1. ✅ Settings Screen — DONE
 Board settings read/write via BLE.
 
-### 2. 🔲 Full-Screen Immersive Mode
-- Enable `SystemUiMode.immersiveSticky` on app start and on dashboard entry
-- Ensure all pages respect the full-screen state
+### 2. ✅ Full-Screen Immersive Mode — DONE
+- `SystemUiMode.immersiveSticky` enabled on app start
 
 ### 3. ✅ Hybrid WiFi Log-Download + OTA — DONE
 - Complete UI flow built in `WifiExportPage` and integrated into the Dashboard.
 
-### 4. 🔲 GPS Trip Tracking (like GPS Speedometer app, but for esk8)
+### 4. ✅ UI Polish / Mirror Display — DONE
+- Swipeable PageView (HUD → Dash → Power → Trip → Graphs)
+- Page swipes sync with board via `pageNext`/`pagePrev` commands
+- Tap-to-reveal controls overlay (no AppBar clutter)
+- Live power graph with `fl_chart`
+
+### 5. 🔲 GPS Trip Tracking (BACKLOG — not started)
 **Reference**: [GPS Speedometer Odometer](https://play.google.com/store/apps/details?id=gps.speedometer.gpsspeedometer.odometer) — replicate but for electric skateboarding, ad-free.
 
 **Core features**:
 - **Live GPS tracking** while riding — record route path using phone GPS
 - **Google Maps overlay** — show the entire trip route drawn on a map after the ride
-- **Trip statistics** (computed from BLE telemetry + GPS):
-  - Total distance
-  - Average speed / max speed (from board telemetry — more accurate than GPS)
-  - Ride duration
-  - Elevation change (from phone sensors / GPS altitude)
-  - Watt-hours consumed (from board telemetry)
-  - Average power / max power
-- **Start/Stop trip** button — user taps to begin recording
+- **Trip statistics** (computed from BLE telemetry + GPS)
 - **Trip history** — save past rides with route + stats, browse/review later
 - **Export** — GPX export, shareable trip summaries
-
-**Data sources**:
-- Board telemetry (5 Hz via BLE): speed, watts, watt-hours, battery, temps — **more accurate than phone GPS for speed**
-- Phone GPS: lat/lng for route mapping, elevation
-- Phone sensors: optional accelerometer/gyro data
-
-**Why this is killer**: existing speedometer apps use phone GPS for speed (laggy, inaccurate at low speeds), and are riddled with ads. ESK8OS gets speed/power/energy from the VESC motor controller — way more precise. Combine that with phone GPS for the map, and you have the best esk8 trip tracker possible.
-
-### 5. 🔲 UI Polish / Design Pass
-- Match the board's theme (accent `#B950D7`, dark mode)
-- Glanceable-at-arm's-length while riding
-- Page through the same views the board shows (HUD, Dash, Power, Trip, Graphs)
-- Use `frontend-design` skill
 
 ---
 

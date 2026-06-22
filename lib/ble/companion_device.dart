@@ -41,7 +41,7 @@ class CompanionScanner {
 
 /// A connected ESK8OS board: owns the GATT characteristics and exposes the
 /// telemetry stream plus settings/command helpers.
-class CompanionDevice {
+class CompanionDevice implements Esk8Device {
   final BluetoothDevice device;
   BluetoothCharacteristic? _telemetry;
   BluetoothCharacteristic? _settings;
@@ -49,12 +49,24 @@ class CompanionDevice {
 
   CompanionDevice(this.device);
 
+  @override
   String get name =>
       device.platformName.isNotEmpty ? device.platformName : device.remoteId.str;
 
-  Stream<BluetoothConnectionState> get connectionState =>
-      device.connectionState;
+  @override
+  Stream<DeviceConnectionState> get connectionState =>
+      device.connectionState.map((s) {
+        switch (s) {
+          case BluetoothConnectionState.disconnected:
+            return DeviceConnectionState.disconnected;
+          case BluetoothConnectionState.connected:
+            return DeviceConnectionState.connected;
+          default:
+            return DeviceConnectionState.disconnected;
+        }
+      });
 
+  @override
   bool get isReady => _telemetry != null && _settings != null && _command != null;
 
   /// Connect, raise the MTU so JSON notifies aren't truncated, discover services,

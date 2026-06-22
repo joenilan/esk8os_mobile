@@ -43,3 +43,8 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Gradle build output (not just the root /build/)
+/android/build/
+/android/.gradle/
+**/build/

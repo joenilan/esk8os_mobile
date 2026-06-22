@@ -1,16 +1,15 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:file_selector/file_selector.dart';
 
-import '../ble/companion_device.dart';
 import '../ble/esk8os_ble.dart';
 import '../wifi/wifi_service.dart';
 
 const _accent = Color(0xFFB950D7);
 
 class WifiExportPage extends StatefulWidget {
-  final CompanionDevice dev;
+  final Esk8Device dev;
   const WifiExportPage({super.key, required this.dev});
 
   @override
@@ -101,13 +100,11 @@ class _WifiExportPageState extends State<WifiExportPage> {
 
   Future<void> _pickAndUploadOta() async {
     try {
-      FilePickerResult? result = await FilePicker.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['bin'],
-      );
+      const XTypeGroup typeGroup = XTypeGroup(extensions: <String>['bin']);
+      final XFile? result = await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
 
-      if (result != null && result.files.single.path != null) {
-        final file = File(result.files.single.path!);
+      if (result != null) {
+        final file = File(result.path);
         setState(() => _uploading = true);
         
         await WifiService.uploadOta(file);

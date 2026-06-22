@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../ble/companion_device.dart';
 import '../ble/esk8os_ble.dart';
 
 /// Board theme names — the firmware recognises these (case-insensitive).
@@ -18,7 +17,7 @@ const _themeNames = [
 const _accent = Color(0xFFB950D7);
 
 class SettingsPage extends StatefulWidget {
-  final CompanionDevice dev;
+  final Esk8Device dev;
   const SettingsPage({super.key, required this.dev});
 
   @override

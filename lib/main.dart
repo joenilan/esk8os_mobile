@@ -6,8 +6,14 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 import 'ble/companion_device.dart';
 import 'ble/esk8os_ble.dart';
+import 'ble/mock_device.dart';
 import 'pages/settings_page.dart';
 import 'pages/wifi_export_page.dart';
+import 'views/dash_view.dart';
+import 'views/graphs_view.dart';
+import 'views/hud_view.dart';
+import 'views/power_view.dart';
+import 'views/trip_view.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -84,12 +90,34 @@ class _ScanPageState extends State<ScanPage> {
     }
   }
 
+  Future<void> _startMockMode() async {
+    await CompanionScanner.stop();
+    setState(() => _connecting = true);
+    final dev = MockDevice();
+    try {
+      await dev.connect();
+      if (!mounted) return;
+      await Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => DashboardPage(dev: dev)),
+      );
+    } catch (e) {
+      if (mounted) setState(() => _error = 'Mock connect failed: $e');
+    } finally {
+      if (mounted) setState(() => _connecting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('ESK8OS'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.bug_report),
+            tooltip: 'Mock Mode',
+            onPressed: _connecting ? null : _startMockMode,
+          ),
           StreamBuilder<bool>(
             stream: CompanionScanner.isScanning,
             initialData: false,
@@ -150,7 +178,7 @@ class _ScanPageState extends State<ScanPage> {
 // Dashboard: live telemetry + command buttons for a connected board.
 // ─────────────────────────────────────────────────────────────────────────────
 class DashboardPage extends StatefulWidget {
-  final CompanionDevice dev;
+  final Esk8Device dev;
   const DashboardPage({super.key, required this.dev});
 
   @override
@@ -159,18 +187,21 @@ class DashboardPage extends StatefulWidget {
 
 class _DashboardPageState extends State<DashboardPage> {
   late final Stream<Telemetry> _telemetry = widget.dev.telemetry();
-  StreamSubscription<BluetoothConnectionState>? _connSub;
+  StreamSubscription<DeviceConnectionState>? _connSub;
   BoardSettings? _boardSettings;
+
+  final PageController _pageCtrl = PageController();
+  int _currentPage = 0;
+  bool _showControls = false;
 
   @override
   void initState() {
     super.initState();
     _connSub = widget.dev.connectionState.listen((s) {
-      if (s == BluetoothConnectionState.disconnected && mounted) {
+      if (s == DeviceConnectionState.disconnected && mounted) {
         Navigator.of(context).pop();
       }
     });
-    // Read settings once so we know mph vs kmh for the speed label.
     _fetchSettings();
   }
 
@@ -178,12 +209,13 @@ class _DashboardPageState extends State<DashboardPage> {
     try {
       final s = await widget.dev.readSettings();
       if (mounted && s != null) setState(() => _boardSettings = s);
-    } catch (_) {/* non-fatal — label falls back to SPEED */}
+    } catch (_) {}
   }
 
   @override
   void dispose() {
     _connSub?.cancel();
+    _pageCtrl.dispose();
     widget.dev.disconnect();
     super.dispose();
   }
@@ -203,129 +235,114 @@ class _DashboardPageState extends State<DashboardPage> {
         SnackBar(content: Text(msg), duration: const Duration(seconds: 2)));
   }
 
+  void _onPageChanged(int index) {
+    if (index > _currentPage) {
+      widget.dev.sendCommand(Esk8Commands.pageNext).catchError((_) {});
+    } else if (index < _currentPage) {
+      widget.dev.sendCommand(Esk8Commands.pagePrev).catchError((_) {});
+    }
+    _currentPage = index;
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.dev.name),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings),
-            tooltip: 'Board settings',
-            onPressed: () async {
-              await Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => SettingsPage(dev: widget.dev),
-                ),
-              );
-              // Re-read settings when returning (user may have changed units).
-              _fetchSettings();
-            },
-          ),
-        ],
-      ),
       body: StreamBuilder<Telemetry>(
         stream: _telemetry,
         builder: (_, snap) {
           final t = snap.data;
-          return ListView(
-            padding: const EdgeInsets.all(16),
+          return Stack(
             children: [
-              if (t == null)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 24),
-                  child: Center(child: Text('Waiting for telemetry…')),
-                )
-              else ...[
-                _Hero(
-                  value: t.speed.toStringAsFixed(1),
-                  unitLabel: _boardSettings?.mph == true
-                      ? 'MPH'
-                      : (_boardSettings != null ? 'KM/H' : 'SPEED'),
-                ),
-                const SizedBox(height: 16),
-                GridView.count(
-                  crossAxisCount: 2,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  childAspectRatio: 2.2,
+              // 1. The main swipeable views — double-tap toggles controls
+              GestureDetector(
+                onDoubleTap: () => setState(() => _showControls = !_showControls),
+                child: PageView(
+                  controller: _pageCtrl,
+                  onPageChanged: _onPageChanged,
                   children: [
-                    _Tile(label: 'BATTERY', value: '${t.battery}%'),
-                    _Tile(label: 'VOLTS', value: t.volts.toStringAsFixed(1)),
-                    _Tile(label: 'WATTS', value: '${t.watts}'),
-                    _Tile(label: 'RANGE', value: t.range.toStringAsFixed(1)),
-                    _Tile(label: 'MOTOR °C', value: '${t.motorTempC}'),
-                    _Tile(label: 'ESC °C', value: '${t.escTempC}'),
-                    _Tile(label: 'MAX SPD', value: t.maxSpeed.toStringAsFixed(1)),
-                    _Tile(label: 'SESSION WH', value: '${t.wattHours}'),
+                    HudView(telemetry: t, settings: _boardSettings),
+                    DashView(telemetry: t, settings: _boardSettings),
+                    PowerView(telemetry: t),
+                    TripView(telemetry: t, settings: _boardSettings),
+                    GraphsView(telemetry: t),
                   ],
                 ),
-              ],
-              const Divider(height: 32),
-              Text('COMMANDS', style: Theme.of(context).textTheme.labelMedium),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _CmdButton('Trip Reset', () => _cmd(Esk8Commands.tripReset, 'Trip reset')),
-                  _CmdButton('Page ◀', () => _cmd(Esk8Commands.pagePrev, 'Prev page')),
-                  _CmdButton('Page ▶', () => _cmd(Esk8Commands.pageNext, 'Next page')),
-                  _CmdButton('WiFi Export / OTA', () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => WifiExportPage(dev: widget.dev),
-                      ),
-                    );
-                  }),
-                  _CmdButton('Bridge Mode', () => _cmd(Esk8Commands.bridgeMode, 'Bridge mode')),
-                  _CmdButton('Reboot', () => _cmd(Esk8Commands.reboot, 'Reboot')),
-                ],
               ),
+
+              // 2. Page indicator dots (bottom center)
+              Positioned(
+                bottom: 16,
+                left: 0,
+                right: 0,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (i) => Container(
+                    width: 8,
+                    height: 8,
+                    margin: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: i == _currentPage
+                          ? const Color(0xFF8B5CF6)
+                          : Colors.white.withValues(alpha: 0.3),
+                    ),
+                  )),
+                ),
+              ),
+
+              // 3. Settings Gear (Top Right)
+              if (_showControls)
+                Positioned(
+                  top: 32,
+                  right: 16,
+                  child: IconButton(
+                    icon: const Icon(Icons.settings, size: 32),
+                    color: Colors.white54,
+                    onPressed: () async {
+                      await Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => SettingsPage(dev: widget.dev)),
+                      );
+                      _fetchSettings();
+                    },
+                  ),
+                ),
+
+              // 4. Command Controls (Bottom Overlay)
+              if (_showControls)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    color: Colors.black87,
+                    padding: const EdgeInsets.all(16).copyWith(bottom: 32),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        const Text('CONTROLS', style: TextStyle(color: Colors.grey, letterSpacing: 2)),
+                        const SizedBox(height: 16),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            _CmdButton('Trip Reset', () => _cmd(Esk8Commands.tripReset, 'Trip reset')),
+                            _CmdButton('WiFi Export / OTA', () {
+                              Navigator.of(context).push(
+                                MaterialPageRoute(builder: (_) => WifiExportPage(dev: widget.dev)),
+                              );
+                            }),
+                            _CmdButton('Bridge Mode', () => _cmd(Esk8Commands.bridgeMode, 'Bridge mode')),
+                            _CmdButton('Reboot', () => _cmd(Esk8Commands.reboot, 'Reboot')),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-class _Hero extends StatelessWidget {
-  final String value;
-  final String unitLabel;
-  const _Hero({required this.value, this.unitLabel = 'SPEED'});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(value,
-            style: const TextStyle(fontSize: 84, fontWeight: FontWeight.bold, height: 1)),
-        Text(unitLabel, style: TextStyle(color: Colors.grey[500], letterSpacing: 2)),
-      ],
-    );
-  }
-}
-
-class _Tile extends StatelessWidget {
-  final String label;
-  final String value;
-  const _Tile({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.all(4),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(label, style: TextStyle(fontSize: 11, color: Colors.grey[500])),
-            Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-          ],
-        ),
       ),
     );
   }

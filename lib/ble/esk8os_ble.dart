@@ -119,3 +119,21 @@ class BoardSettings {
 
 double _d(dynamic v) => v is num ? v.toDouble() : 0.0;
 int _i(dynamic v) => v is num ? v.toInt() : 0;
+
+enum DeviceConnectionState { disconnected, connecting, connected, disconnecting }
+
+abstract class Esk8Device {
+  String get name;
+  Stream<DeviceConnectionState> get connectionState;
+  bool get isReady;
+
+  Future<void> connect();
+  Future<void> disconnect();
+  
+  Stream<Telemetry> telemetry();
+  
+  Future<BoardSettings?> readSettings();
+  Future<void> writeSettings(Map<String, dynamic> partial);
+  Future<void> sendCommand(String command);
+}
+
