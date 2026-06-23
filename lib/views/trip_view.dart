@@ -233,6 +233,8 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     final boardTripDisplay = telemetry.trip;
     final boardMovingTime = Duration(seconds: telemetry.tripMovingSeconds);
     // ── TRIP STATS (GPS-measured, per recording) — all 0 until you start ──
+    // GPS trip distance is shown as a compare against the board's wheel distance.
+    final gpsTripDistDisplay = isMph ? (_rec.gpsDistanceM / 1609.34) : (_rec.gpsDistanceM / 1000.0);
     final gpsMaxSpeedDisplay = isMph ? (_rec.gpsMaxSpeedKmh / 1.60934) : _rec.gpsMaxSpeedKmh;
     final elapsed = _rec.elapsed;
     final gpsAvgKmh = elapsed.inSeconds > 0 ? _rec.gpsDistanceM * 3.6 / elapsed.inSeconds : 0.0;
@@ -444,6 +446,10 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                     const Divider(color: Esk8Theme.border, height: 6),
                     const SizedBox(height: 6),
                     _miniRow('TRIP $unitStr', boardTripDisplay.toStringAsFixed(2), 'TIME', _formatDuration(boardMovingTime)),
+                    const SizedBox(height: 8),
+                    // GPS compare (board wheel distance is canonical above; GPS may
+                    // differ — different sensor). GPS TIME is wall-clock elapsed.
+                    _miniRow('GPS $unitStr', gpsTripDistDisplay.toStringAsFixed(2), 'GPS TIME', _formatDuration(elapsed)),
                     const SizedBox(height: 8),
                     _miniRow('MAX', gpsMaxSpeedDisplay.toStringAsFixed(1), 'AVG', gpsAvgDisplay.toStringAsFixed(1)),
                     const SizedBox(height: 8),
