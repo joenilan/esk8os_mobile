@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
@@ -422,8 +424,56 @@ class _SettingsPageState extends State<SettingsPage> {
                     onChanged: (v) async {
                       if (v && !await FlutterOverlayWindow.isPermissionGranted()) {
                         await FlutterOverlayWindow.requestPermission();
+                        if (context.mounted && !await FlutterOverlayWindow.isPermissionGranted()) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                                content: Text('Grant "Display over other apps" to use the floating window')));
+                          }
+                          return;
+                        }
                       }
                       setState(() => AppPrefs.overlayEnabled = v);
+                    },
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.open_in_new, color: _accent),
+                    title: const Text('Test floating window', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Show it now to check it appears / drags / taps — no trip needed'),
+                    onTap: () async {
+                      if (!await FlutterOverlayWindow.isPermissionGranted()) {
+                        await FlutterOverlayWindow.requestPermission();
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                              content: Text('Grant the permission, then tap Test again')));
+                        }
+                        return;
+                      }
+                      if (await FlutterOverlayWindow.isActive()) {
+                        await FlutterOverlayWindow.closeOverlay();
+                        return;
+                      }
+                      await FlutterOverlayWindow.showOverlay(
+                        height: 150,
+                        width: 460,
+                        alignment: OverlayAlignment.topCenter,
+                        enableDrag: true,
+                        positionGravity: PositionGravity.auto,
+                        overlayTitle: 'ESK8OS trip',
+                        flag: OverlayFlag.defaultFlag,
+                      );
+                      await Future.delayed(const Duration(milliseconds: 300));
+                      await FlutterOverlayWindow.shareData(jsonEncode({
+                        'spd': '12',
+                        'unit': s.mph ? 'MPH' : 'KM/H',
+                        'trip': '0.42',
+                        'tu': s.mph ? 'mi' : 'km',
+                        'time': '2m 5s',
+                        'paused': false,
+                      }));
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                            content: Text('Bubble shown — drag it, tap it to return, or tap Test again to close')));
+                      }
                     },
                   ),
                   Padding(

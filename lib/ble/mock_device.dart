@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
+
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'esk8os_ble.dart';
 
@@ -129,6 +132,7 @@ class MockDevice implements Esk8Device {
 
   @override
   Future<BoardSettings?> readSettings() async {
+    await _loadSettings(); // restore the rider/units/etc you set last time
     await Future.delayed(const Duration(milliseconds: 100));
     return _settings;
   }
@@ -151,6 +155,47 @@ class MockDevice implements Esk8Device {
       demo: partial['demo'] ?? _settings.demo,
       rider: partial['rider'] ?? _settings.rider,
     );
+    await _saveSettings(); // mock persists like the real board's NVS
+  }
+
+  // Mock settings survive app restarts/updates (the real board uses NVS; this
+  // mirrors that so testing doesn't reset rider/units every time.)
+  Future<void> _loadSettings() async {
+    final p = await SharedPreferences.getInstance();
+    final raw = p.getString('mock_settings');
+    if (raw == null) return;
+    final m = jsonDecode(raw) as Map<String, dynamic>;
+    _settings = BoardSettings(
+      mph: m['mph'] ?? _settings.mph,
+      theme: m['theme'] ?? _settings.theme,
+      poles: _settings.poles,
+      wheelMm: _settings.wheelMm,
+      gear: _settings.gear,
+      batterySeries: m['bat_s'] ?? _settings.batterySeries,
+      profile: m['profile'] ?? _settings.profile,
+      packAh: (m['packAh'] as num?)?.toDouble() ?? _settings.packAh,
+      stopCellV: (m['stopCell'] as num?)?.toDouble() ?? _settings.stopCellV,
+      whPerMile: (m['whmi'] as num?)?.toInt() ?? _settings.whPerMile,
+      brightness: (m['bright'] as num?)?.toInt() ?? _settings.brightness,
+      demo: m['demo'] ?? _settings.demo,
+      rider: m['rider'] ?? _settings.rider,
+    );
+  }
+
+  Future<void> _saveSettings() async {
+    final p = await SharedPreferences.getInstance();
+    await p.setString('mock_settings', jsonEncode({
+      'mph': _settings.mph,
+      'theme': _settings.theme,
+      'bat_s': _settings.batterySeries,
+      'profile': _settings.profile,
+      'packAh': _settings.packAh,
+      'stopCell': _settings.stopCellV,
+      'whmi': _settings.whPerMile,
+      'bright': _settings.brightness,
+      'demo': _settings.demo,
+      'rider': _settings.rider,
+    }));
   }
 
   @override

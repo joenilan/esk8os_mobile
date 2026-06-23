@@ -36,6 +36,7 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
   final TripRecorder _rec = TripRecorder.instance;
 
   bool _locationReady = false;
+  bool _statsExpanded = false; // collapsed = speed only; tap to show all stats
   bool _followMode = true;
   double _currentZoom = 16.0;
   // Persisted across page swipes / restarts (see AppPrefs).
@@ -419,36 +420,42 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
           ),
         ),
 
-        // Top-right: ONE compact card — speed prominent, then ALL trip stats in
-        // a tight grid (always shown; 0s until you record). Replaces the old
-        // 7-card stack that covered the map.
+        // Top-right: ONE compact card. Collapsed = just speed (map stays the
+        // star); tap it to expand the full trip-stats grid.
         Positioned(
           top: 48,
           right: 12,
-          child: Container(
-            width: 156,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: Esk8Theme.panelBox(),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    Text(telemetry.speed.toStringAsFixed(0), style: Esk8Theme.number(38)),
-                    const SizedBox(width: 3),
-                    Text(speedUnitStr, style: Esk8Theme.labelStyle),
+          child: GestureDetector(
+            onTap: () => setState(() => _statsExpanded = !_statsExpanded),
+            child: Container(
+              width: _statsExpanded ? 156 : 96,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: Esk8Theme.panelBox(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Text(telemetry.speed.toStringAsFixed(0), style: Esk8Theme.number(38)),
+                      const SizedBox(width: 3),
+                      Text(speedUnitStr, style: Esk8Theme.labelStyle),
+                    ],
+                  ),
+                  Icon(_statsExpanded ? Icons.expand_less : Icons.expand_more, size: 16, color: Esk8Theme.dim),
+                  if (_statsExpanded) ...[
+                    const Divider(color: Esk8Theme.border, height: 6),
+                    const SizedBox(height: 6),
+                    _miniRow('TRIP $unitStr', gpsTripDistDisplay.toStringAsFixed(2), 'TIME', _formatDuration(elapsed)),
+                    const SizedBox(height: 8),
+                    _miniRow('MAX', gpsMaxSpeedDisplay.toStringAsFixed(1), 'AVG', gpsAvgDisplay.toStringAsFixed(1)),
+                    const SizedBox(height: 8),
+                    _miniRow('MOVE', gpsMovingAvgDisplay.toStringAsFixed(1), 'CLIMB $climbUnit', climbDisplay.toStringAsFixed(0)),
                   ],
-                ),
-                const Divider(color: Esk8Theme.border, height: 14),
-                _miniRow('TRIP $unitStr', gpsTripDistDisplay.toStringAsFixed(2), 'TIME', _formatDuration(elapsed)),
-                const SizedBox(height: 8),
-                _miniRow('MAX', gpsMaxSpeedDisplay.toStringAsFixed(1), 'AVG', gpsAvgDisplay.toStringAsFixed(1)),
-                const SizedBox(height: 8),
-                _miniRow('MOVE', gpsMovingAvgDisplay.toStringAsFixed(1), 'CLIMB $climbUnit', climbDisplay.toStringAsFixed(0)),
-              ],
+                ],
+              ),
             ),
           ),
         ),
