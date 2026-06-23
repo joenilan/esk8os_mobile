@@ -422,13 +422,12 @@ class _SettingsPageState extends State<SettingsPage> {
                     value: AppPrefs.overlayEnabled,
                     activeThumbColor: _accent,
                     onChanged: (v) async {
+                      final messenger = ScaffoldMessenger.of(context);
                       if (v && !await FlutterOverlayWindow.isPermissionGranted()) {
                         await FlutterOverlayWindow.requestPermission();
-                        if (context.mounted && !await FlutterOverlayWindow.isPermissionGranted()) {
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                                content: Text('Grant "Display over other apps" to use the floating window')));
-                          }
+                        if (!await FlutterOverlayWindow.isPermissionGranted()) {
+                          messenger.showSnackBar(const SnackBar(
+                              content: Text('Grant "Display over other apps" to use the floating window')));
                           return;
                         }
                       }
@@ -440,12 +439,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     title: const Text('Test floating window', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                     subtitle: const Text('Show it now to check it appears / drags / taps — no trip needed'),
                     onTap: () async {
+                      final messenger = ScaffoldMessenger.of(context);
                       if (!await FlutterOverlayWindow.isPermissionGranted()) {
                         await FlutterOverlayWindow.requestPermission();
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                              content: Text('Grant the permission, then tap Test again')));
-                        }
+                        messenger.showSnackBar(const SnackBar(
+                            content: Text('Grant the permission, then tap Test again')));
                         return;
                       }
                       if (await FlutterOverlayWindow.isActive()) {
@@ -453,8 +451,8 @@ class _SettingsPageState extends State<SettingsPage> {
                         return;
                       }
                       await FlutterOverlayWindow.showOverlay(
-                        height: 160,
-                        width: 420,
+                        height: 360,
+                        width: 360,
                         alignment: OverlayAlignment.center,
                         enableDrag: true,
                         positionGravity: PositionGravity.none,
@@ -469,11 +467,13 @@ class _SettingsPageState extends State<SettingsPage> {
                         'tu': s.mph ? 'mi' : 'km',
                         'time': '2m 5s',
                         'paused': false,
+                        // Sample fix so the map renders during a no-trip test.
+                        'lat': 37.7749,
+                        'lng': -122.4194,
+                        'hdg': 45.0,
                       }));
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                            content: Text('Bubble shown — drag it, tap it to return, or tap Test again to close')));
-                      }
+                      messenger.showSnackBar(const SnackBar(
+                          content: Text('Bubble shown — drag it, tap it to return, or tap Test again to close')));
                     },
                   ),
                   Padding(

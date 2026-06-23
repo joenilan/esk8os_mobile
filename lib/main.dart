@@ -266,8 +266,8 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
         !_overlayShown) {
       if (await FlutterOverlayWindow.isPermissionGranted()) {
         await FlutterOverlayWindow.showOverlay(
-          height: 160,
-          width: 420,
+          height: 360,
+          width: 360,
           alignment: OverlayAlignment.center,
           enableDrag: true,
           positionGravity: PositionGravity.none,
@@ -287,6 +287,7 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
     final mph = _boardSettings?.mph ?? true;
     final spd = mph ? rec.gpsSpeedKmh / 1.60934 : rec.gpsSpeedKmh;
     final trip = mph ? rec.gpsDistanceM / 1609.34 : rec.gpsDistanceM / 1000.0;
+    final pos = rec.currentPosition;
     FlutterOverlayWindow.shareData(jsonEncode({
       'spd': spd.toStringAsFixed(0),
       'unit': mph ? 'MPH' : 'KM/H',
@@ -294,6 +295,10 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
       'tu': mph ? 'mi' : 'km',
       'time': _fmtElapsed(rec.elapsed),
       'paused': rec.isPaused,
+      // Map fields — guarded; rider may have no fix yet.
+      if (pos != null) 'lat': pos.latitude,
+      if (pos != null) 'lng': pos.longitude,
+      'hdg': rec.heading,
     }));
   }
 
