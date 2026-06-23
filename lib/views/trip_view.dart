@@ -28,7 +28,7 @@ class TripView extends StatefulWidget {
   State<TripView> createState() => _TripViewState();
 }
 
-class _TripViewState extends State<TripView> {
+class _TripViewState extends State<TripView> with TickerProviderStateMixin {
   final MapController _mapController = MapController();
   final TripRecorder _rec = TripRecorder.instance;
 
@@ -36,7 +36,14 @@ class _TripViewState extends State<TripView> {
   bool _followMode = true;
   double _currentZoom = 16.0;
   bool _showComparison = false;
+  bool _headingUp = false; // rotate map so direction of travel is up
   LatLng? _initialCenter;
+
+  // Smooth camera: tween center/zoom/rotation instead of snapping each GPS fix.
+  late final AnimationController _anim =
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 550))..addListener(_onAnimTick);
+  LatLng _aStart = const LatLng(0, 0), _aEnd = const LatLng(0, 0);
+  double _aStartZoom = 0, _aEndZoom = 0, _aStartRot = 0, _aEndRot = 0;
 
   @override
   void initState() {
@@ -47,16 +54,53 @@ class _TripViewState extends State<TripView> {
 
   @override
   void dispose() {
+    _anim.dispose();
     _rec.removeListener(_onRec);
     // NB: do NOT stop the recorder here — recording must outlive this widget.
     super.dispose();
   }
 
-  /// Recorder ticked (new GPS fix / start / stop): follow the camera and refresh.
+  /// Animate the camera to a target pose (Google-Maps-style glide).
+  void _animateTo(LatLng dest, double zoom, double rotation) {
+    final cam = _mapController.camera;
+    _aStart = cam.center;
+    _aEnd = dest;
+    _aStartZoom = cam.zoom;
+    _aEndZoom = zoom;
+    _aStartRot = cam.rotation;
+    double d = rotation - cam.rotation; // shortest angular path
+    while (d > 180) {
+      d -= 360;
+    }
+    while (d < -180) {
+      d += 360;
+    }
+    _aEndRot = cam.rotation + d;
+    _anim.forward(from: 0);
+  }
+
+  void _onAnimTick() {
+    final t = Curves.easeOut.transform(_anim.value);
+    final lat = _aStart.latitude + (_aEnd.latitude - _aStart.latitude) * t;
+    final lng = _aStart.longitude + (_aEnd.longitude - _aStart.longitude) * t;
+    final z = _aStartZoom + (_aEndZoom - _aStartZoom) * t;
+    final r = _aStartRot + (_aEndRot - _aStartRot) * t;
+    _mapController.moveAndRotate(LatLng(lat, lng), z, r);
+  }
+
+  double get _targetRotation => _headingUp ? -_rec.heading : 0.0;
+
+  void _toggleHeadingUp() {
+    setState(() => _headingUp = !_headingUp);
+    final p = _rec.currentPosition ?? _initialCenter ?? _mapController.camera.center;
+    _animateTo(p, _currentZoom, _targetRotation);
+  }
+
+  /// Recorder ticked (new GPS fix / start / stop): glide the camera and refresh.
   void _onRec() {
     if (!mounted) return;
     if (_followMode && _rec.isRecording && _rec.currentPosition != null) {
-      _mapController.move(_rec.currentPosition!, _currentZoom);
+      _animateTo(_rec.currentPosition!, _currentZoom, _targetRotation);
     }
     setState(() {});
   }
@@ -89,19 +133,19 @@ class _TripViewState extends State<TripView> {
   void _recenter() {
     final p = _rec.currentPosition ?? _initialCenter;
     if (p != null) {
-      _mapController.move(p, _currentZoom);
+      _animateTo(p, _currentZoom, _targetRotation);
       setState(() => _followMode = true);
     }
   }
 
   void _zoomIn() {
     _currentZoom = (_currentZoom + 1).clamp(3.0, 19.0);
-    _mapController.move(_mapController.camera.center, _currentZoom);
+    _animateTo(_mapController.camera.center, _currentZoom, _mapController.camera.rotation);
   }
 
   void _zoomOut() {
     _currentZoom = (_currentZoom - 1).clamp(3.0, 19.0);
-    _mapController.move(_mapController.camera.center, _currentZoom);
+    _animateTo(_mapController.camera.center, _currentZoom, _mapController.camera.rotation);
   }
 
   Future<void> _toggleTracking() async {
@@ -403,6 +447,12 @@ class _TripViewState extends State<TripView> {
                 icon: Icons.my_location,
                 onTap: _recenter,
                 highlighted: !_followMode,
+              ),
+              const SizedBox(height: 8),
+              _MapButton(
+                icon: _headingUp ? Icons.navigation : Icons.explore,
+                onTap: _toggleHeadingUp,
+                highlighted: _headingUp,
               ),
             ],
           ),

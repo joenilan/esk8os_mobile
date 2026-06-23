@@ -38,6 +38,10 @@ class TripRecorder extends ChangeNotifier {
   double get gpsMaxSpeedKmh => _gpsMaxSpeedKmh;
   double _gpsSpeedKmh = 0;
   double get gpsSpeedKmh => _gpsSpeedKmh;
+  // GPS course over ground (degrees, 0 = north). Held at the last good value
+  // when stopped, since heading is meaningless at ~0 speed.
+  double _heading = 0;
+  double get heading => _heading;
 
   // Board-derived stats (from BLE telemetry)
   double _boardStartRange = -1; // sentinel: captured on first sample after start
@@ -117,6 +121,7 @@ class TripRecorder extends ChangeNotifier {
       _currentPosition = p;
       _gpsSpeedKmh = position.speed * 3.6; // m/s -> km/h
       if (_gpsSpeedKmh > _gpsMaxSpeedKmh) _gpsMaxSpeedKmh = _gpsSpeedKmh;
+      if (position.speed > 0.8 && position.heading >= 0) _heading = position.heading;
       notifyListeners();
     });
 

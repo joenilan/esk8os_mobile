@@ -48,3 +48,9 @@ app.*.map.json
 /android/build/
 /android/.gradle/
 **/build/
+
+# Release signing (never commit)
+android/key.properties
+android/key.properties.ready
+*.jks
+*.keystore

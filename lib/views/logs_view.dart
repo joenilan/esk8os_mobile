@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../ble/esk8os_ble.dart';
 import '../database/trip_database.dart';
+import '../services/trip_backup.dart';
 import '../widgets/esk8_theme.dart';
 import '../widgets/esk8_widgets.dart';
 
@@ -32,6 +33,31 @@ class _LogsViewState extends State<LogsView> {
     return '${mon[d.month - 1]} ${d.day}  $hh:$mm';
   }
 
+  void _toast(String m) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  }
+
+  Future<void> _export() async {
+    try {
+      final n = await TripBackup.export();
+      _toast(n == 0 ? 'No rides to back up' : 'Backing up $n ride(s)…');
+    } catch (e) {
+      _toast('Export failed: $e');
+    }
+  }
+
+  Future<void> _import() async {
+    try {
+      final n = await TripBackup.import();
+      if (n > 0) {
+        setState(() => _trips = TripDatabase.instance.getAllTrips());
+        _toast('Restored $n ride(s)');
+      }
+    } catch (e) {
+      _toast('Import failed: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMph = widget.settings?.mph == true;
@@ -40,6 +66,27 @@ class _LogsViewState extends State<LogsView> {
 
     return PageChrome(
       sections: [
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _export,
+                icon: const Icon(Icons.upload, size: 18),
+                style: OutlinedButton.styleFrom(foregroundColor: Esk8Theme.accent, side: const BorderSide(color: Esk8Theme.border)),
+                label: const Text('BACK UP'),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: _import,
+                icon: const Icon(Icons.download, size: 18),
+                style: OutlinedButton.styleFrom(foregroundColor: Esk8Theme.accent, side: const BorderSide(color: Esk8Theme.border)),
+                label: const Text('RESTORE'),
+              ),
+            ),
+          ],
+        ),
         FutureBuilder<List<Map<String, dynamic>>>(
           future: _trips,
           builder: (context, snap) {

@@ -23,7 +23,15 @@ class TripDatabase {
       path,
       version: 1,
       onCreate: _createDB,
+      onUpgrade: _upgradeDB,
     );
+  }
+
+  /// Schema migrations. Bump `version` above and add an `if (oldV < N)` block
+  /// here whenever the schema changes — so existing trips migrate instead of
+  /// getting wiped/corrupted on app update.
+  Future<void> _upgradeDB(Database db, int oldV, int newV) async {
+    // (no migrations yet — v1 is current)
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -92,6 +100,23 @@ class TripDatabase {
     await db.delete('trips', where: 'id = ?', whereArgs: [id]);
     // Cascade delete on telemetry
     await db.delete('telemetry', where: 'tripId = ?', whereArgs: [id]);
+  }
+
+  /// Import a trip + its telemetry under a fresh id (re-links the rows). Used by
+  /// the backup/restore so trips survive a reinstall. Returns the new trip id.
+  Future<int> importTrip(Map<String, dynamic> trip, List<Map<String, dynamic>> telemetry) async {
+    final db = await instance.database;
+    return await db.transaction((txn) async {
+      final t = Map<String, dynamic>.from(trip)..remove('id');
+      final newId = await txn.insert('trips', t);
+      for (final s in telemetry) {
+        final row = Map<String, dynamic>.from(s)
+          ..remove('id')
+          ..['tripId'] = newId;
+        await txn.insert('telemetry', row);
+      }
+      return newId;
+    });
   }
 
   // --- Telemetry ---
