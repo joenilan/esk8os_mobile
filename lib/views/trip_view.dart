@@ -74,7 +74,9 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
   }
 
   void _onCompass(CompassEvent e) {
-    final h = e.heading;
+    // headingForCameraMode is the direction the BACK of the phone faces (correct
+    // when the phone is held upright in front of you); fall back to flat heading.
+    final h = e.headingForCameraMode ?? e.heading;
     if (h == null || !_headingUp || !mounted) return;
     if ((h - _appliedHeading).abs() < 2) return; // throttle jitter
     _appliedHeading = h;
@@ -249,8 +251,10 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
             // Light vs dark basemap (persisted). Dark tiles get a brightness
             // bump; light tiles are used as-is.
             if (_mapLight)
+              // Voyager = normal colours with readable roads/labels (light_all
+              // was too washed-out).
               TileLayer(
-                urlTemplate: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
                 subdomains: const ['a', 'b', 'c', 'd'],
               )
             else
