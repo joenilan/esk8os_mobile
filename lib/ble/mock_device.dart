@@ -67,7 +67,9 @@ class MockDevice implements Esk8Device {
       // Generate some fluctuating sine-wave data
       final time = DateTime.now().millisecondsSinceEpoch / 1000.0;
       
-      _speed = max(0, 15 + 10 * sin(time)); // Fluctuates between 5 and 25
+      // Realistic, varied speed (~2–37) so the readouts move and the max isn't a
+      // misleading constant 25.
+      _speed = max(0, 19 + 13 * sin(time * 0.55) + 5 * sin(time * 2.3));
       _watts = (500 + 400 * sin(time * 2)).toInt(); // can dip negative -> regen
       _volts = 46.0 + 2.0 * cos(time * 0.5); // Voltage sag
 
@@ -100,7 +102,7 @@ class MockDevice implements Esk8Device {
         batteryTempC: 28,
         batteryAmps: batteryAmps,
         motorAmps: motorAmps,
-        duty: (_speed / 25.0 * 90).clamp(0, 100).toInt(),
+        duty: (_speed / 40.0 * 100).clamp(0, 100).toInt(),
         peakWatts: _peakWatts,
         regenWh: _regenWh,
         minVolts: _minVolts,
