@@ -44,6 +44,11 @@ class TripRecorder extends ChangeNotifier {
   int _movingMs = 0;
   int _lastFixMs = 0;
   double get gpsMovingAvgKmh => _movingMs > 1000 ? _gpsDistanceM * 3.6 / (_movingMs / 1000.0) : 0.0;
+  // Elevation. GPS altitude is jittery, so gain uses a 2 m deadband/anchor.
+  double _altitude = 0;
+  bool _haveAlt = false;
+  double _elevGainM = 0;
+  double get elevGainM => _elevGainM;
   // GPS course over ground (degrees, 0 = north). Held at the last good value
   // when stopped, since heading is meaningless at ~0 speed.
   double _heading = 0;
@@ -97,6 +102,8 @@ class TripRecorder extends ChangeNotifier {
     _gpsSpeedKmh = 0;
     _movingMs = 0;
     _lastFixMs = 0;
+    _haveAlt = false;
+    _elevGainM = 0;
     _boardStartRange = -1;
     _boardMaxSpeed = _latestTelemetry?.speed ?? 0;
     _startTime = DateTime.now();
@@ -143,6 +150,17 @@ class TripRecorder extends ChangeNotifier {
         if (dt > 0 && dt < 5000) _movingMs += dt;
       }
       _lastFixMs = nowMs;
+      // Elevation gain with a 2 m anchor/deadband to reject GPS altitude noise.
+      final alt = position.altitude;
+      if (!_haveAlt) {
+        _altitude = alt;
+        _haveAlt = true;
+      } else if (alt - _altitude > 2.0) {
+        _elevGainM += alt - _altitude;
+        _altitude = alt;
+      } else if (alt - _altitude < -2.0) {
+        _altitude = alt;
+      }
       _route.add(p);
       _currentPosition = p;
       _gpsSpeedKmh = position.speed * 3.6; // m/s -> km/h
@@ -167,6 +185,7 @@ class TripRecorder extends ChangeNotifier {
         'battery': t?.battery ?? 0,
         'voltage': t?.volts ?? 0.0,
         'watts': t?.watts ?? 0,
+        'altitude': _altitude,
       });
     });
     return true;
@@ -190,6 +209,7 @@ class TripRecorder extends ChangeNotifier {
         _gpsDistanceM,
         _gpsMaxSpeedKmh,
         _boardMaxSpeed,
+        elevGainM: _elevGainM,
       );
     }
     _isRecording = false;

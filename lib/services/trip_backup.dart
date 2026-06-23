@@ -41,6 +41,31 @@ class TripBackup {
     return trips.length;
   }
 
+  /// Export one trip as a GPX track (lat/lon/ele/time) and share it — drops
+  /// straight into Strava, Google Earth, etc.
+  static Future<void> exportGpx(int tripId, DateTime start) async {
+    final pts = await TripDatabase.instance.getTripTelemetry(tripId);
+    final sb = StringBuffer()
+      ..writeln('<?xml version="1.0" encoding="UTF-8"?>')
+      ..writeln('<gpx version="1.1" creator="ESK8OS" xmlns="http://www.topografix.com/GPX/1/1">')
+      ..writeln('<trk><name>ESK8OS ride ${start.toIso8601String()}</name><trkseg>');
+    for (final p in pts) {
+      final t = DateTime.fromMillisecondsSinceEpoch(p['timestamp'] as int).toUtc().toIso8601String();
+      sb
+        ..writeln('<trkpt lat="${p['lat']}" lon="${p['lng']}">')
+        ..writeln('<ele>${(p['altitude'] as num?)?.toStringAsFixed(1) ?? '0'}</ele>')
+        ..writeln('<time>$t</time></trkpt>');
+    }
+    sb.writeln('</trkseg></trk></gpx>');
+
+    final dir = await getTemporaryDirectory();
+    final file = File('${dir.path}/esk8_ride_$tripId.gpx');
+    await file.writeAsString(sb.toString());
+    await SharePlus.instance.share(
+      ShareParams(files: [XFile(file.path)], subject: 'ESK8OS ride (GPX)'),
+    );
+  }
+
   /// Pick a previously-exported JSON file and import the trips into the DB.
   /// Returns the number of trips imported.
   static Future<int> import() async {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../database/trip_database.dart';
+import '../services/trip_backup.dart';
 import 'trip_playback_page.dart';
 import 'package:intl/intl.dart';
 
@@ -126,9 +127,19 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
                             ],
                           ),
                         ),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.delete, color: Colors.redAccent),
-                          onPressed: () => _deleteTrip(t['id'] as int),
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.ios_share, color: Color(0xFFB950D7)),
+                              tooltip: 'Export GPX',
+                              onPressed: () => TripBackup.exportGpx(t['id'] as int, startTime),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete, color: Colors.redAccent),
+                              onPressed: () => _deleteTrip(t['id'] as int),
+                            ),
+                          ],
                         ),
                       ),
                     );

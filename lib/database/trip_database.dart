@@ -21,17 +21,19 @@ class TripDatabase {
 
     return await openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
   }
 
-  /// Schema migrations. Bump `version` above and add an `if (oldV < N)` block
-  /// here whenever the schema changes — so existing trips migrate instead of
-  /// getting wiped/corrupted on app update.
+  /// Schema migrations — additive ALTERs so existing trips are preserved.
   Future<void> _upgradeDB(Database db, int oldV, int newV) async {
-    // (no migrations yet — v1 is current)
+    if (oldV < 2) {
+      // v2: elevation. Climb on the trip, per-point altitude for GPX export.
+      await db.execute('ALTER TABLE trips ADD COLUMN elevGainM REAL DEFAULT 0');
+      await db.execute('ALTER TABLE telemetry ADD COLUMN altitude REAL DEFAULT 0');
+    }
   }
 
   Future<void> _createDB(Database db, int version) async {
@@ -42,7 +44,8 @@ class TripDatabase {
         endTime INTEGER,
         distance REAL NOT NULL,
         maxSpeed REAL NOT NULL,
-        boardMaxSpeed REAL NOT NULL
+        boardMaxSpeed REAL NOT NULL,
+        elevGainM REAL DEFAULT 0
       )
     ''');
 
@@ -58,6 +61,7 @@ class TripDatabase {
         battery INTEGER NOT NULL,
         voltage REAL NOT NULL,
         watts INTEGER NOT NULL,
+        altitude REAL DEFAULT 0,
         FOREIGN KEY (tripId) REFERENCES trips (id) ON DELETE CASCADE
       )
     ''');
@@ -75,7 +79,8 @@ class TripDatabase {
     });
   }
 
-  Future<void> updateTrip(int id, int endTime, double distance, double maxSpeed, double boardMaxSpeed) async {
+  Future<void> updateTrip(int id, int endTime, double distance, double maxSpeed, double boardMaxSpeed,
+      {double elevGainM = 0}) async {
     final db = await instance.database;
     await db.update(
       'trips',
@@ -84,6 +89,7 @@ class TripDatabase {
         'distance': distance,
         'maxSpeed': maxSpeed,
         'boardMaxSpeed': boardMaxSpeed,
+        'elevGainM': elevGainM,
       },
       where: 'id = ?',
       whereArgs: [id],

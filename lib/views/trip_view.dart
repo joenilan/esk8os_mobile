@@ -228,6 +228,8 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     final gpsAvgKmh = elapsed.inSeconds > 0 ? _rec.gpsDistanceM * 3.6 / elapsed.inSeconds : 0.0;
     final gpsAvgDisplay = isMph ? gpsAvgKmh / 1.60934 : gpsAvgKmh;
     final gpsMovingAvgDisplay = isMph ? _rec.gpsMovingAvgKmh / 1.60934 : _rec.gpsMovingAvgKmh;
+    final climbDisplay = isMph ? _rec.elevGainM * 3.28084 : _rec.elevGainM;
+    final climbUnit = isMph ? 'FT' : 'M';
 
     return Stack(
       children: [
@@ -420,6 +422,8 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
               _CamStatCard(label: 'Avg', value: gpsAvgDisplay.toStringAsFixed(1), unit: speedUnitStr),
               const SizedBox(height: 6),
               _CamStatCard(label: 'Moving', value: gpsMovingAvgDisplay.toStringAsFixed(1), unit: speedUnitStr),
+              const SizedBox(height: 6),
+              _CamStatCard(label: 'Climb', value: climbDisplay.toStringAsFixed(0), unit: climbUnit),
               const SizedBox(height: 6),
               _CamStatCard(label: 'Elapsed', value: _formatDuration(elapsed), unit: ''),
             ],
