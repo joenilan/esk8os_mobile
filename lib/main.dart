@@ -265,11 +265,11 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
         !_overlayShown) {
       if (await FlutterOverlayWindow.isPermissionGranted()) {
         await FlutterOverlayWindow.showOverlay(
-          height: 150,
-          width: 460,
-          alignment: OverlayAlignment.topCenter,
+          height: 160,
+          width: 420,
+          alignment: OverlayAlignment.center,
           enableDrag: true,
-          positionGravity: PositionGravity.auto,
+          positionGravity: PositionGravity.none,
           overlayTitle: 'ESK8OS trip',
           flag: OverlayFlag.defaultFlag,
         );
