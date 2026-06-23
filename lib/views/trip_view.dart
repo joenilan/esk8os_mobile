@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -6,6 +9,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../ble/esk8os_ble.dart';
 import '../pages/trip_history_page.dart';
+import '../services/app_prefs.dart';
 import '../services/trip_recorder.dart';
 import '../widgets/esk8_theme.dart';
 
@@ -36,46 +40,54 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
   bool _followMode = true;
   double _currentZoom = 16.0;
   bool _showComparison = false;
-  bool _headingUp = false; // rotate map so direction of travel is up
+  // Persisted across page swipes / restarts (see AppPrefs).
+  bool _headingUp = AppPrefs.mapHeadingUp;
+  bool _mapLight = AppPrefs.mapLight;
   LatLng? _initialCenter;
 
-  // Smooth camera: tween center/zoom/rotation instead of snapping each GPS fix.
+  // Smooth camera: tween center+zoom only (rotation is owned by the compass).
   late final AnimationController _anim =
       AnimationController(vsync: this, duration: const Duration(milliseconds: 550))..addListener(_onAnimTick);
   LatLng _aStart = const LatLng(0, 0), _aEnd = const LatLng(0, 0);
-  double _aStartZoom = 0, _aEndZoom = 0, _aStartRot = 0, _aEndRot = 0;
+  double _aStartZoom = 0, _aEndZoom = 0;
+
+  // Live compass (magnetometer) — rotates the map in heading-up mode even when
+  // stopped. Throttled so we only rotate on a meaningful heading change.
+  StreamSubscription<CompassEvent>? _compassSub;
+  double _appliedHeading = 0;
 
   @override
   void initState() {
     super.initState();
     _rec.addListener(_onRec);
+    _compassSub = FlutterCompass.events?.listen(_onCompass);
     _initLocation();
   }
 
   @override
   void dispose() {
     _anim.dispose();
+    _compassSub?.cancel();
     _rec.removeListener(_onRec);
     // NB: do NOT stop the recorder here — recording must outlive this widget.
     super.dispose();
   }
 
-  /// Animate the camera to a target pose (Google-Maps-style glide).
-  void _animateTo(LatLng dest, double zoom, double rotation) {
+  void _onCompass(CompassEvent e) {
+    final h = e.heading;
+    if (h == null || !_headingUp || !mounted) return;
+    if ((h - _appliedHeading).abs() < 2) return; // throttle jitter
+    _appliedHeading = h;
+    _mapController.rotate(-h); // map heading-up: rotate opposite the compass
+  }
+
+  /// Animate camera center + zoom (rotation untouched — compass handles it).
+  void _animateTo(LatLng dest, double zoom) {
     final cam = _mapController.camera;
     _aStart = cam.center;
     _aEnd = dest;
     _aStartZoom = cam.zoom;
     _aEndZoom = zoom;
-    _aStartRot = cam.rotation;
-    double d = rotation - cam.rotation; // shortest angular path
-    while (d > 180) {
-      d -= 360;
-    }
-    while (d < -180) {
-      d += 360;
-    }
-    _aEndRot = cam.rotation + d;
     _anim.forward(from: 0);
   }
 
@@ -84,23 +96,29 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     final lat = _aStart.latitude + (_aEnd.latitude - _aStart.latitude) * t;
     final lng = _aStart.longitude + (_aEnd.longitude - _aStart.longitude) * t;
     final z = _aStartZoom + (_aEndZoom - _aStartZoom) * t;
-    final r = _aStartRot + (_aEndRot - _aStartRot) * t;
-    _mapController.moveAndRotate(LatLng(lat, lng), z, r);
+    _mapController.move(LatLng(lat, lng), z);
   }
-
-  double get _targetRotation => _headingUp ? -_rec.heading : 0.0;
 
   void _toggleHeadingUp() {
     setState(() => _headingUp = !_headingUp);
-    final p = _rec.currentPosition ?? _initialCenter ?? _mapController.camera.center;
-    _animateTo(p, _currentZoom, _targetRotation);
+    AppPrefs.mapHeadingUp = _headingUp;
+    if (!_headingUp) {
+      _mapController.rotate(0); // back to north-up
+    } else {
+      _appliedHeading = 9999; // force the next compass event to apply
+    }
+  }
+
+  void _toggleMapLight() {
+    setState(() => _mapLight = !_mapLight);
+    AppPrefs.mapLight = _mapLight;
   }
 
   /// Recorder ticked (new GPS fix / start / stop): glide the camera and refresh.
   void _onRec() {
     if (!mounted) return;
     if (_followMode && _rec.isRecording && _rec.currentPosition != null) {
-      _animateTo(_rec.currentPosition!, _currentZoom, _targetRotation);
+      _animateTo(_rec.currentPosition!, _currentZoom);
     }
     setState(() {});
   }
@@ -133,19 +151,19 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
   void _recenter() {
     final p = _rec.currentPosition ?? _initialCenter;
     if (p != null) {
-      _animateTo(p, _currentZoom, _targetRotation);
+      _animateTo(p, _currentZoom);
       setState(() => _followMode = true);
     }
   }
 
   void _zoomIn() {
     _currentZoom = (_currentZoom + 1).clamp(3.0, 19.0);
-    _animateTo(_mapController.camera.center, _currentZoom, _mapController.camera.rotation);
+    _animateTo(_mapController.camera.center, _currentZoom);
   }
 
   void _zoomOut() {
     _currentZoom = (_currentZoom - 1).clamp(3.0, 19.0);
-    _animateTo(_mapController.camera.center, _currentZoom, _mapController.camera.rotation);
+    _animateTo(_mapController.camera.center, _currentZoom);
   }
 
   Future<void> _toggleTracking() async {
@@ -215,18 +233,26 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
             ),
           ),
           children: [
-            ColorFiltered(
-              colorFilter: const ColorFilter.matrix([
-                1.5, 0, 0, 0, 15,
-                0, 1.5, 0, 0, 15,
-                0, 0, 1.5, 0, 15,
-                0, 0, 0, 1, 0,
-              ]),
-              child: TileLayer(
-                urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+            // Light vs dark basemap (persisted). Dark tiles get a brightness
+            // bump; light tiles are used as-is.
+            if (_mapLight)
+              TileLayer(
+                urlTemplate: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
                 subdomains: const ['a', 'b', 'c', 'd'],
+              )
+            else
+              ColorFiltered(
+                colorFilter: const ColorFilter.matrix([
+                  1.5, 0, 0, 0, 15,
+                  0, 1.5, 0, 0, 15,
+                  0, 0, 1.5, 0, 15,
+                  0, 0, 0, 1, 0,
+                ]),
+                child: TileLayer(
+                  urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                  subdomains: const ['a', 'b', 'c', 'd'],
+                ),
               ),
-            ),
             if (route.length >= 2)
               PolylineLayer(
                 polylines: [
@@ -453,6 +479,12 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                 icon: _headingUp ? Icons.navigation : Icons.explore,
                 onTap: _toggleHeadingUp,
                 highlighted: _headingUp,
+              ),
+              const SizedBox(height: 8),
+              _MapButton(
+                icon: _mapLight ? Icons.dark_mode : Icons.light_mode,
+                onTap: _toggleMapLight,
+                highlighted: _mapLight,
               ),
             ],
           ),

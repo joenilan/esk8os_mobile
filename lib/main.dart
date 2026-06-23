@@ -9,6 +9,7 @@ import 'ble/esk8os_ble.dart';
 import 'ble/mock_device.dart';
 import 'pages/settings_page.dart';
 import 'pages/wifi_export_page.dart';
+import 'services/app_prefs.dart';
 import 'views/dash_view.dart';
 import 'views/graphs_view.dart';
 import 'views/hud_view.dart';
@@ -21,8 +22,9 @@ import 'views/trip_view.dart';
 import 'widgets/esk8_theme.dart';
 import 'widgets/esk8_widgets.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppPrefs.init();
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   runApp(const Esk8App());
 }
