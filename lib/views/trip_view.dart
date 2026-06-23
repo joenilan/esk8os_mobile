@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../ble/esk8os_ble.dart';
@@ -203,6 +202,21 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     if (m > 0) return '${m}m ${s}s';
     return '${s}s';
   }
+
+  Widget _miniStat(String label, String value) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value, style: Esk8Theme.number(17)),
+          Text(label, style: const TextStyle(fontSize: 8, color: Esk8Theme.dim, letterSpacing: 0.5, fontWeight: FontWeight.bold)),
+        ],
+      );
+
+  Widget _miniRow(String l1, String v1, String l2, String v2) => Row(
+        children: [
+          Expanded(child: _miniStat(l1, v1)),
+          Expanded(child: _miniStat(l2, v2)),
+        ],
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -405,28 +419,38 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
           ),
         ),
 
-        // Top-right: THIS TRIP's stats — GPS-measured, reset to 0 each trip.
-        // (Board/lifetime stats live on the HUD/TRIP/SYSTEM pages, not here.)
+        // Top-right: ONE compact card for THIS trip — speed prominent, the rest
+        // as a tight grid only while recording, so the map stays the star.
         Positioned(
           top: 48,
-          right: 16,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              _CamStatCard(label: 'Speed', value: telemetry.speed.toStringAsFixed(1), unit: speedUnitStr),
-              const SizedBox(height: 6),
-              _CamStatCard(label: 'Trip', value: gpsTripDistDisplay.toStringAsFixed(2), unit: unitStr),
-              const SizedBox(height: 6),
-              _CamStatCard(label: 'Max', value: gpsMaxSpeedDisplay.toStringAsFixed(1), unit: speedUnitStr),
-              const SizedBox(height: 6),
-              _CamStatCard(label: 'Avg', value: gpsAvgDisplay.toStringAsFixed(1), unit: speedUnitStr),
-              const SizedBox(height: 6),
-              _CamStatCard(label: 'Moving', value: gpsMovingAvgDisplay.toStringAsFixed(1), unit: speedUnitStr),
-              const SizedBox(height: 6),
-              _CamStatCard(label: 'Climb', value: climbDisplay.toStringAsFixed(0), unit: climbUnit),
-              const SizedBox(height: 6),
-              _CamStatCard(label: 'Elapsed', value: _formatDuration(elapsed), unit: ''),
-            ],
+          right: 12,
+          child: Container(
+            width: 150,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: Esk8Theme.panelBox(),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(telemetry.speed.toStringAsFixed(0), style: Esk8Theme.number(38)),
+                    const SizedBox(width: 3),
+                    Text(speedUnitStr, style: Esk8Theme.labelStyle),
+                  ],
+                ),
+                if (isTracking) ...[
+                  const Divider(color: Esk8Theme.border, height: 14),
+                  _miniRow('TRIP $unitStr', gpsTripDistDisplay.toStringAsFixed(2), 'TIME', _formatDuration(elapsed)),
+                  const SizedBox(height: 8),
+                  _miniRow('MAX', gpsMaxSpeedDisplay.toStringAsFixed(1), 'AVG', gpsAvgDisplay.toStringAsFixed(1)),
+                  const SizedBox(height: 8),
+                  _miniRow('MOVE', gpsMovingAvgDisplay.toStringAsFixed(1), 'CLIMB $climbUnit', climbDisplay.toStringAsFixed(0)),
+                ],
+              ],
+            ),
           ),
         ),
 
@@ -552,61 +576,4 @@ class _MapButton extends StatelessWidget {
   }
 }
 
-class _CamStatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final String unit;
-
-  const _CamStatCard({required this.label, required this.value, required this.unit});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10.0),
-      decoration: BoxDecoration(
-        color: const Color(0xDD1E1E1E),
-        border: Border.all(color: const Color(0xFF333333)),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                value,
-                style: GoogleFonts.bebasNeue(
-                  fontSize: 24,
-                  fontWeight: FontWeight.normal,
-                  color: Colors.white,
-                  letterSpacing: 1.5,
-                ),
-              ),
-              if (unit.isNotEmpty) ...[
-                const SizedBox(width: 4),
-                Text(
-                  unit,
-                  style: const TextStyle(fontSize: 11, color: Colors.grey),
-                ),
-              ],
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
 
