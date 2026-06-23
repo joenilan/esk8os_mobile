@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../ble/esk8os_ble.dart';
 import '../database/trip_database.dart';
+import 'trip_fg_service.dart';
 
 /// App-level trip recorder. Lives OUTSIDE the widget tree (singleton) so a trip
 /// keeps recording when you swipe to another page, the screen sleeps, or the app
@@ -44,6 +46,7 @@ class TripRecorder extends ChangeNotifier {
     _paused = true;
     _pauseStartedMs = DateTime.now().millisecondsSinceEpoch;
     _lastFixMs = 0; // don't count the pause gap as moving time
+    _updateFgNotification();
     notifyListeners();
   }
 
@@ -51,7 +54,78 @@ class TripRecorder extends ChangeNotifier {
     if (!_isRecording || !_paused) return;
     _pausedAccumMs += DateTime.now().millisecondsSinceEpoch - _pauseStartedMs;
     _paused = false;
+    _updateFgNotification();
     notifyListeners();
+  }
+
+  // ── Foreground service (the persistent notification + its buttons) ─────────
+  bool _fgInited = false;
+
+  void _initFg() {
+    if (_fgInited) return;
+    _fgInited = true;
+    FlutterForegroundTask.init(
+      androidNotificationOptions: AndroidNotificationOptions(
+        channelId: 'esk8_trip',
+        channelName: 'Trip recording',
+        channelDescription: 'Shows while a ride is being recorded',
+        onlyAlertOnce: true,
+      ),
+      iosNotificationOptions: const IOSNotificationOptions(),
+      foregroundTaskOptions: ForegroundTaskOptions(
+        eventAction: ForegroundTaskEventAction.nothing(),
+        allowWakeLock: true,
+        allowWifiLock: false,
+      ),
+    );
+  }
+
+  List<NotificationButton> _fgButtons() => [
+        NotificationButton(id: _paused ? 'resume' : 'pause', text: _paused ? 'Resume' : 'Pause'),
+        const NotificationButton(id: 'stop', text: 'Stop'),
+      ];
+
+  Future<void> _startFgService() async {
+    _initFg();
+    await FlutterForegroundTask.requestNotificationPermission();
+    FlutterForegroundTask.addTaskDataCallback(_onFgData);
+    await FlutterForegroundTask.startService(
+      serviceId: 4242,
+      notificationTitle: 'ESK8OS — recording',
+      notificationText: 'Tap to open',
+      notificationButtons: _fgButtons(),
+      callback: startTripTaskCallback,
+    );
+  }
+
+  void _updateFgNotification() {
+    if (!_isRecording) return;
+    FlutterForegroundTask.updateService(
+      notificationTitle: _paused ? 'ESK8OS — paused' : 'ESK8OS — recording',
+      notificationText: 'Tap to open',
+      notificationButtons: _fgButtons(),
+    );
+  }
+
+  Future<void> _stopFgService() async {
+    FlutterForegroundTask.removeTaskDataCallback(_onFgData);
+    await FlutterForegroundTask.stopService();
+  }
+
+  /// Button taps arrive here (relayed from the service isolate).
+  void _onFgData(Object data) {
+    if (data is! Map) return;
+    switch (data['action']) {
+      case 'pause':
+        pause();
+        break;
+      case 'resume':
+        resume();
+        break;
+      case 'stop':
+        stop();
+        break;
+    }
   }
 
   final List<LatLng> _route = [];
@@ -142,6 +216,7 @@ class TripRecorder extends ChangeNotifier {
     // lifetime odometer is untouched). And keep the screen awake while riding.
     device.sendCommand(Esk8Commands.tripReset).catchError((_) {});
     WakelockPlus.enable();
+    await _startFgService(); // persistent notification + buttons + keep-alive
     notifyListeners();
 
     // Board telemetry — kept fresh + max tracked even when no view shows it.
@@ -151,19 +226,11 @@ class TripRecorder extends ChangeNotifier {
       if (t.speed > _boardMaxSpeed) _boardMaxSpeed = t.speed;
     });
 
-    // GPS with a foreground service so location + the app survive backgrounding.
-    final LocationSettings settings = (defaultTargetPlatform == TargetPlatform.android)
-        ? AndroidSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 3,
-            foregroundNotificationConfig: const ForegroundNotificationConfig(
-              notificationTitle: 'ESK8OS — recording trip',
-              notificationText: 'Tracking your ride',
-              enableWakeLock: true,
-              setOngoing: true,
-            ),
-          )
-        : const LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 3);
+    // GPS. The flutter_foreground_task location service (started above) keeps
+    // location + the app alive in the background, so geolocator doesn't run its
+    // own second foreground service/notification here.
+    const LocationSettings settings =
+        LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 3);
 
     _posSub = Geolocator.getPositionStream(locationSettings: settings).listen((position) {
       final p = LatLng(position.latitude, position.longitude);
@@ -238,6 +305,7 @@ class TripRecorder extends ChangeNotifier {
   Future<void> stop() async {
     if (!_isRecording) return;
     WakelockPlus.disable(); // let the screen sleep again
+    await _stopFgService(); // dismiss the notification + stop the service
     await _posSub?.cancel();
     _posSub = null;
     await _telSub?.cancel();

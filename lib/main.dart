@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 
 import 'ble/companion_device.dart';
 import 'ble/esk8os_ble.dart';
@@ -26,6 +27,7 @@ import 'widgets/esk8_widgets.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  FlutterForegroundTask.initCommunicationPort(); // for notification-button relay
   await AppPrefs.init();
   TripDatabase.instance.recoverOrphans(); // finalize any trip left open by a kill
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);

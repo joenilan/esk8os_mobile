@@ -52,6 +52,7 @@ dependencies:
   flutter_compass: ^0.8.1
   shared_preferences: ^2.3.2
   wakelock_plus: ^1.2.8
+  flutter_foreground_task: ^8.17.0
 
 dev_dependencies:
   flutter_test:
