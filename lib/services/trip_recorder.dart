@@ -20,6 +20,7 @@ class TripRecorder extends ChangeNotifier {
 
   bool _isRecording = false;
   bool get isRecording => _isRecording;
+  bool _starting = false; // guard: ignore repeat taps while start() is in flight
 
   int? _tripId;
   DateTime? _startTime;
@@ -72,15 +73,20 @@ class TripRecorder extends ChangeNotifier {
   /// Start recording. [device] supplies board telemetry. Returns false if
   /// location permission/service is unavailable.
   Future<bool> start(Esk8Device device) async {
-    if (_isRecording) return true;
-    if (!await ensurePermission()) return false;
+    if (_isRecording || _starting) return true; // ignore repeat taps
+    _starting = true;
+    if (!await ensurePermission()) {
+      _starting = false;
+      return false;
+    }
 
-    final pos = await Geolocator.getCurrentPosition();
-    final start = LatLng(pos.latitude, pos.longitude);
-    _route
-      ..clear()
-      ..add(start);
-    _currentPosition = start;
+    // Seed from the cached last-known fix (instant) rather than blocking on a
+    // fresh cold GPS fix — the position stream below delivers fresh fixes within
+    // a second, and recording flips on NOW so the button responds immediately.
+    final last = await Geolocator.getLastKnownPosition();
+    _route.clear();
+    _currentPosition = last != null ? LatLng(last.latitude, last.longitude) : null;
+    if (_currentPosition != null) _route.add(_currentPosition!);
     _gpsDistanceM = 0;
     _gpsMaxSpeedKmh = 0;
     _gpsSpeedKmh = 0;
@@ -89,6 +95,7 @@ class TripRecorder extends ChangeNotifier {
     _startTime = DateTime.now();
     _tripId = await TripDatabase.instance.createTrip(_startTime!.millisecondsSinceEpoch);
     _isRecording = true;
+    _starting = false;
     notifyListeners();
 
     // Board telemetry — kept fresh + max tracked even when no view shows it.
