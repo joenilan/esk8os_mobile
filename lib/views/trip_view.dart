@@ -45,11 +45,12 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
   bool _mapLight = AppPrefs.mapLight;
   LatLng? _initialCenter;
 
-  // Smooth camera: tween center+zoom only (rotation is owned by the compass).
+  // Smooth marker: GPS fixes arrive ~every few metres, so we tween the marker
+  // (and the followed camera) between fixes instead of snapping/teleporting.
   late final AnimationController _anim =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 550))..addListener(_onAnimTick);
-  LatLng _aStart = const LatLng(0, 0), _aEnd = const LatLng(0, 0);
-  double _aStartZoom = 0, _aEndZoom = 0;
+      AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..addListener(_onAnimTick);
+  LatLng _mStart = const LatLng(0, 0), _mEnd = const LatLng(0, 0);
+  LatLng? _smoothPos; // interpolated marker position currently displayed
 
   // Live compass (magnetometer) — rotates the map in heading-up mode even when
   // stopped. Throttled so we only rotate on a meaningful heading change.
@@ -84,22 +85,20 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     _mapController.rotate(-h);
   }
 
-  /// Animate camera center + zoom (rotation untouched — compass handles it).
-  void _animateTo(LatLng dest, double zoom) {
-    final cam = _mapController.camera;
-    _aStart = cam.center;
-    _aEnd = dest;
-    _aStartZoom = cam.zoom;
-    _aEndZoom = zoom;
+  /// Glide the marker from its current displayed spot to the new GPS fix.
+  void _animateMarkerTo(LatLng dest) {
+    _mStart = _smoothPos ?? dest;
+    _mEnd = dest;
     _anim.forward(from: 0);
   }
 
   void _onAnimTick() {
-    final t = Curves.easeOut.transform(_anim.value);
-    final lat = _aStart.latitude + (_aEnd.latitude - _aStart.latitude) * t;
-    final lng = _aStart.longitude + (_aEnd.longitude - _aStart.longitude) * t;
-    final z = _aStartZoom + (_aEndZoom - _aStartZoom) * t;
-    _mapController.move(LatLng(lat, lng), z);
+    final t = Curves.linear.transform(_anim.value); // steady glide between fixes
+    final lat = _mStart.latitude + (_mEnd.latitude - _mStart.latitude) * t;
+    final lng = _mStart.longitude + (_mEnd.longitude - _mStart.longitude) * t;
+    _smoothPos = LatLng(lat, lng);
+    if (_followMode) _mapController.move(_smoothPos!, _currentZoom);
+    setState(() {}); // redraw marker at the interpolated position
   }
 
   void _toggleHeadingUp() {
@@ -117,11 +116,12 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     AppPrefs.mapLight = _mapLight;
   }
 
-  /// Recorder ticked (new GPS fix / start / stop): glide the camera and refresh.
+  /// Recorder ticked (new GPS fix / start / stop): glide the marker + refresh.
   void _onRec() {
     if (!mounted) return;
-    if (_followMode && _rec.isRecording && _rec.currentPosition != null) {
-      _animateTo(_rec.currentPosition!, _currentZoom);
+    final fix = _rec.currentPosition;
+    if (fix != null) {
+      _animateMarkerTo(fix); // smooth glide (camera follows in _onAnimTick)
     }
     // While moving, GPS course (direction of travel) drives heading-up — far more
     // reliable than the magnetometer, and orientation-independent.
@@ -161,21 +161,21 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
   }
 
   void _recenter() {
-    final p = _rec.currentPosition ?? _initialCenter;
+    final p = _smoothPos ?? _rec.currentPosition ?? _initialCenter;
     if (p != null) {
-      _animateTo(p, _currentZoom);
+      _mapController.move(p, _currentZoom);
       setState(() => _followMode = true);
     }
   }
 
   void _zoomIn() {
     _currentZoom = (_currentZoom + 1).clamp(3.0, 19.0);
-    _animateTo(_mapController.camera.center, _currentZoom);
+    _mapController.move(_mapController.camera.center, _currentZoom);
   }
 
   void _zoomOut() {
     _currentZoom = (_currentZoom - 1).clamp(3.0, 19.0);
-    _animateTo(_mapController.camera.center, _currentZoom);
+    _mapController.move(_mapController.camera.center, _currentZoom);
   }
 
   Future<void> _toggleTracking() async {
@@ -290,11 +290,11 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                   ),
                 ],
               ),
-            if (pos != null)
+            if ((_smoothPos ?? pos) != null)
               MarkerLayer(
                 markers: [
                   Marker(
-                    point: pos,
+                    point: _smoothPos ?? pos!,
                     width: 20,
                     height: 20,
                     child: Container(
