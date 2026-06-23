@@ -225,6 +225,7 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
   Telemetry? _latestT;
   Timer? _autoTimer;
   DateTime? _stoppedSince;
+  bool _seenStopped = false; // gate: auto-start only after a real standstill
   bool _wasOverSpeed = false;
   bool _overlayShown = false;
   static const _appChannel = MethodChannel('esk8os/app');
@@ -311,9 +312,15 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
     if (t == null) return;
     final rec = TripRecorder.instance;
 
+    if (t.speed < 0.5) _seenStopped = true; // a genuine standstill was observed
     if (AppPrefs.autoTrip) {
       if (!rec.isRecording) {
-        if (t.speed > 5) rec.start(widget.dev); // moving -> begin a trip
+        // Only auto-start after a real stop since the last trip — so a manual
+        // Stop sticks (and the always-moving mock never auto-restarts).
+        if (_seenStopped && t.speed > 5) {
+          _seenStopped = false;
+          rec.start(widget.dev);
+        }
       } else if (!rec.isPaused) {
         if (t.speed < 1) {
           _stoppedSince ??= DateTime.now();
