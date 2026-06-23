@@ -167,16 +167,6 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     }
   }
 
-  void _zoomIn() {
-    _currentZoom = (_currentZoom + 1).clamp(3.0, 19.0);
-    _mapController.move(_mapController.camera.center, _currentZoom);
-  }
-
-  void _zoomOut() {
-    _currentZoom = (_currentZoom - 1).clamp(3.0, 19.0);
-    _mapController.move(_mapController.camera.center, _currentZoom);
-  }
-
   Future<void> _toggleTracking() async {
     if (_rec.isRecording) {
       await _rec.stop();
@@ -492,10 +482,6 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
           left: 16,
           child: Column(
             children: [
-              _MapButton(icon: Icons.add, onTap: _zoomIn),
-              const SizedBox(height: 8),
-              _MapButton(icon: Icons.remove, onTap: _zoomOut),
-              const SizedBox(height: 16),
               _MapButton(
                 icon: Icons.my_location,
                 onTap: _recenter,
