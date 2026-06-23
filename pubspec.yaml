@@ -51,6 +51,7 @@ dependencies:
   share_plus: ^13.1.0
   flutter_compass: ^0.8.1
   shared_preferences: ^2.3.2
+  wakelock_plus: ^1.2.8
 
 dev_dependencies:
   flutter_test:

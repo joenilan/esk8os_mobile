@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../ble/esk8os_ble.dart';
 import '../database/trip_database.dart';
@@ -39,6 +40,10 @@ class TripRecorder extends ChangeNotifier {
   double get gpsMaxSpeedKmh => _gpsMaxSpeedKmh;
   double _gpsSpeedKmh = 0;
   double get gpsSpeedKmh => _gpsSpeedKmh;
+  // Moving-only stats (excludes time spent stopped at lights etc).
+  int _movingMs = 0;
+  int _lastFixMs = 0;
+  double get gpsMovingAvgKmh => _movingMs > 1000 ? _gpsDistanceM * 3.6 / (_movingMs / 1000.0) : 0.0;
   // GPS course over ground (degrees, 0 = north). Held at the last good value
   // when stopped, since heading is meaningless at ~0 speed.
   double _heading = 0;
@@ -90,12 +95,18 @@ class TripRecorder extends ChangeNotifier {
     _gpsDistanceM = 0;
     _gpsMaxSpeedKmh = 0;
     _gpsSpeedKmh = 0;
+    _movingMs = 0;
+    _lastFixMs = 0;
     _boardStartRange = -1;
     _boardMaxSpeed = _latestTelemetry?.speed ?? 0;
     _startTime = DateTime.now();
     _tripId = await TripDatabase.instance.createTrip(_startTime!.millisecondsSinceEpoch);
     _isRecording = true;
     _starting = false;
+    // A new app trip = a new board session: zero the board's trip too (the
+    // lifetime odometer is untouched). And keep the screen awake while riding.
+    device.sendCommand(Esk8Commands.tripReset).catchError((_) {});
+    WakelockPlus.enable();
     notifyListeners();
 
     // Board telemetry — kept fresh + max tracked even when no view shows it.
@@ -124,6 +135,14 @@ class TripRecorder extends ChangeNotifier {
       if (_route.isNotEmpty) {
         _gpsDistanceM += const Distance().as(LengthUnit.Meter, _route.last, p);
       }
+      // Moving-time accumulation (for moving-average): count the gap since the
+      // last fix only while actually rolling (>~3 km/h).
+      final nowMs = DateTime.now().millisecondsSinceEpoch;
+      if (_lastFixMs != 0 && position.speed * 3.6 > 3) {
+        final dt = nowMs - _lastFixMs;
+        if (dt > 0 && dt < 5000) _movingMs += dt;
+      }
+      _lastFixMs = nowMs;
       _route.add(p);
       _currentPosition = p;
       _gpsSpeedKmh = position.speed * 3.6; // m/s -> km/h
@@ -155,6 +174,7 @@ class TripRecorder extends ChangeNotifier {
 
   Future<void> stop() async {
     if (!_isRecording) return;
+    WakelockPlus.disable(); // let the screen sleep again
     await _posSub?.cancel();
     _posSub = null;
     await _telSub?.cancel();
