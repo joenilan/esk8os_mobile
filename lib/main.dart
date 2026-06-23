@@ -227,6 +227,8 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
   DateTime? _stoppedSince;
   bool _wasOverSpeed = false;
   bool _overlayShown = false;
+  StreamSubscription? _overlayDataSub;
+  static const _appChannel = MethodChannel('esk8os/app');
 
   @override
   void initState() {
@@ -236,6 +238,10 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
       if (s == DeviceConnectionState.disconnected && mounted) {
         Navigator.of(context).pop();
       }
+    });
+    // Tapping the floating overlay asks the app to come back to the front.
+    _overlayDataSub = FlutterOverlayWindow.overlayListener.listen((event) {
+      if (event == 'open_app') _appChannel.invokeMethod('bringToFront');
     });
     _autoTimer = Timer.periodic(const Duration(seconds: 1), (_) => _autoTick());
     _fetchSettings();
@@ -332,6 +338,7 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     if (_overlayShown) FlutterOverlayWindow.closeOverlay();
+    _overlayDataSub?.cancel();
     _connSub?.cancel();
     _autoTimer?.cancel();
     _pageCtrl.dispose();

@@ -47,7 +47,9 @@ class _TripOverlayState extends State<TripOverlay> {
     const accent = Color(0xFFB950D7);
     return Material(
       color: Colors.transparent,
-      child: Container(
+      child: GestureDetector(
+        onTap: () => FlutterOverlayWindow.shareData('open_app'),
+        child: Container(
         decoration: BoxDecoration(
           color: const Color(0xF21A1A1A),
           border: Border.all(color: _paused ? const Color(0xFFFFCD00) : accent, width: 1.5),
@@ -79,6 +81,7 @@ class _TripOverlayState extends State<TripOverlay> {
               ],
             ),
           ],
+        ),
         ),
       ),
     );
