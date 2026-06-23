@@ -226,8 +226,13 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     final route = _rec.route;
     final pos = _rec.currentPosition ?? _initialCenter;
 
+    // ── TRIP DISTANCE + TIME come from the BOARD (canonical, matches the board
+    // screen): wheel distance and moving-time, independent of the phone. GPS still
+    // drives MAX/AVG/MOVE/CLIMB/route below. telemetry.trip is already in the
+    // board's display unit; tmov is moving seconds.
+    final boardTripDisplay = telemetry.trip;
+    final boardMovingTime = Duration(seconds: telemetry.tripMovingSeconds);
     // ── TRIP STATS (GPS-measured, per recording) — all 0 until you start ──
-    final gpsTripDistDisplay = isMph ? (_rec.gpsDistanceM / 1609.34) : (_rec.gpsDistanceM / 1000.0);
     final gpsMaxSpeedDisplay = isMph ? (_rec.gpsMaxSpeedKmh / 1.60934) : _rec.gpsMaxSpeedKmh;
     final elapsed = _rec.elapsed;
     final gpsAvgKmh = elapsed.inSeconds > 0 ? _rec.gpsDistanceM * 3.6 / elapsed.inSeconds : 0.0;
@@ -438,7 +443,7 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                   if (_statsExpanded) ...[
                     const Divider(color: Esk8Theme.border, height: 6),
                     const SizedBox(height: 6),
-                    _miniRow('TRIP $unitStr', gpsTripDistDisplay.toStringAsFixed(2), 'TIME', _formatDuration(elapsed)),
+                    _miniRow('TRIP $unitStr', boardTripDisplay.toStringAsFixed(2), 'TIME', _formatDuration(boardMovingTime)),
                     const SizedBox(height: 8),
                     _miniRow('MAX', gpsMaxSpeedDisplay.toStringAsFixed(1), 'AVG', gpsAvgDisplay.toStringAsFixed(1)),
                     const SizedBox(height: 8),

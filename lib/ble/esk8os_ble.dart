@@ -66,7 +66,8 @@ class Telemetry {
   final double estRange; // est (display unit, full charge)
   final int efficiency; // eff (Wh/mi or Wh/km)
   final int fault; // fault (VESC fault code, 0 = none)
-  final int rideSeconds; // rtime (s since power-on)
+  final int rideSeconds; // rtime (board uptime this boot, s)
+  final int tripMovingSeconds; // tmov (trip moving-time, s rolling) — board-authoritative
 
   const Telemetry({
     required this.speed,
@@ -92,6 +93,7 @@ class Telemetry {
     this.efficiency = 0,
     this.fault = 0,
     this.rideSeconds = 0,
+    this.tripMovingSeconds = 0,
   });
 
   factory Telemetry.fromJson(Map<String, dynamic> j) => Telemetry(
@@ -118,6 +120,7 @@ class Telemetry {
         efficiency: _i(j['eff']),
         fault: _i(j['fault']),
         rideSeconds: _i(j['rtime']),
+        tripMovingSeconds: _i(j['tmov']),
       );
 }
 
