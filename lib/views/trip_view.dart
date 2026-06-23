@@ -74,13 +74,14 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
   }
 
   void _onCompass(CompassEvent e) {
-    // headingForCameraMode is the direction the BACK of the phone faces (correct
-    // when the phone is held upright in front of you); fall back to flat heading.
-    final h = e.headingForCameraMode ?? e.heading;
-    if (h == null || !_headingUp || !mounted) return;
+    // Compass drives rotation only when essentially stopped; once moving, GPS
+    // course (in _onRec) takes over — it's unambiguous, unlike a magnetometer.
+    if (!_headingUp || !mounted || _rec.gpsSpeedKmh > 3) return;
+    final h = e.heading;
+    if (h == null) return;
     if ((h - _appliedHeading).abs() < 2) return; // throttle jitter
     _appliedHeading = h;
-    _mapController.rotate(-h); // map heading-up: rotate opposite the compass
+    _mapController.rotate(-h);
   }
 
   /// Animate camera center + zoom (rotation untouched — compass handles it).
@@ -121,6 +122,15 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     if (!mounted) return;
     if (_followMode && _rec.isRecording && _rec.currentPosition != null) {
       _animateTo(_rec.currentPosition!, _currentZoom);
+    }
+    // While moving, GPS course (direction of travel) drives heading-up — far more
+    // reliable than the magnetometer, and orientation-independent.
+    if (_headingUp && _rec.gpsSpeedKmh > 3) {
+      final c = _rec.heading;
+      if ((c - _appliedHeading).abs() >= 2) {
+        _appliedHeading = c;
+        _mapController.rotate(-c);
+      }
     }
     setState(() {});
   }
