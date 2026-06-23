@@ -419,13 +419,14 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
           ),
         ),
 
-        // Top-right: ONE compact card for THIS trip — speed prominent, the rest
-        // as a tight grid only while recording, so the map stays the star.
+        // Top-right: ONE compact card — speed prominent, then ALL trip stats in
+        // a tight grid (always shown; 0s until you record). Replaces the old
+        // 7-card stack that covered the map.
         Positioned(
           top: 48,
           right: 12,
           child: Container(
-            width: 150,
+            width: 156,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: Esk8Theme.panelBox(),
             child: Column(
@@ -441,14 +442,12 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                     Text(speedUnitStr, style: Esk8Theme.labelStyle),
                   ],
                 ),
-                if (isTracking) ...[
-                  const Divider(color: Esk8Theme.border, height: 14),
-                  _miniRow('TRIP $unitStr', gpsTripDistDisplay.toStringAsFixed(2), 'TIME', _formatDuration(elapsed)),
-                  const SizedBox(height: 8),
-                  _miniRow('MAX', gpsMaxSpeedDisplay.toStringAsFixed(1), 'AVG', gpsAvgDisplay.toStringAsFixed(1)),
-                  const SizedBox(height: 8),
-                  _miniRow('MOVE', gpsMovingAvgDisplay.toStringAsFixed(1), 'CLIMB $climbUnit', climbDisplay.toStringAsFixed(0)),
-                ],
+                const Divider(color: Esk8Theme.border, height: 14),
+                _miniRow('TRIP $unitStr', gpsTripDistDisplay.toStringAsFixed(2), 'TIME', _formatDuration(elapsed)),
+                const SizedBox(height: 8),
+                _miniRow('MAX', gpsMaxSpeedDisplay.toStringAsFixed(1), 'AVG', gpsAvgDisplay.toStringAsFixed(1)),
+                const SizedBox(height: 8),
+                _miniRow('MOVE', gpsMovingAvgDisplay.toStringAsFixed(1), 'CLIMB $climbUnit', climbDisplay.toStringAsFixed(0)),
               ],
             ),
           ),
