@@ -228,9 +228,22 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
           options: MapOptions(
             initialCenter: pos ?? const LatLng(37.7749, -122.4194),
             initialZoom: _currentZoom,
+            // Free look-around: pan, pinch-zoom and rotate are all enabled now
+            // (page navigation moves to the on-map prev/next buttons).
             interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.none,
+              flags: InteractiveFlag.drag |
+                  InteractiveFlag.pinchZoom |
+                  InteractiveFlag.pinchMove |
+                  InteractiveFlag.rotate |
+                  InteractiveFlag.doubleTapZoom |
+                  InteractiveFlag.flingAnimation,
             ),
+            onPositionChanged: (camera, hasGesture) {
+              if (hasGesture) {
+                _currentZoom = camera.zoom;
+                if (_followMode) setState(() => _followMode = false);
+              }
+            },
           ),
           children: [
             // Light vs dark basemap (persisted). Dark tiles get a brightness

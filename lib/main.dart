@@ -345,6 +345,29 @@ class _DashboardPageState extends State<DashboardPage> {
                           ),
                         ),
                       ),
+
+                      // On the MAP page swipes are consumed by the map (so you
+                      // can pan/rotate), so give explicit prev/next page buttons.
+                      if (_pageName(_currentPage) == 'MAP') ...[
+                        Positioned(
+                          left: 6,
+                          top: 0,
+                          bottom: 0,
+                          child: Center(
+                            child: _NavButton(Icons.chevron_left, () => _pageCtrl.previousPage(
+                                duration: const Duration(milliseconds: 280), curve: Curves.easeOut)),
+                          ),
+                        ),
+                        Positioned(
+                          right: 6,
+                          top: 0,
+                          bottom: 0,
+                          child: Center(
+                            child: _NavButton(Icons.chevron_right, () => _pageCtrl.nextPage(
+                                duration: const Duration(milliseconds: 280), curve: Curves.easeOut)),
+                          ),
+                        ),
+                      ],
                       if (_showControls)
                         Positioned(
                           top: 8,
@@ -444,4 +467,26 @@ class _CmdButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) =>
       OutlinedButton(onPressed: onTap, child: Text(label));
+}
+
+/// Round translucent page-nav button (used on the map page where swipe pans).
+class _NavButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _NavButton(this.icon, this.onTap);
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+        onTap: onTap,
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: const Color(0xDD1A1A1A),
+            shape: BoxShape.circle,
+            border: Border.all(color: Esk8Theme.border),
+          ),
+          child: Icon(icon, color: Colors.white, size: 28),
+        ),
+      );
 }
