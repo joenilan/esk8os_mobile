@@ -228,7 +228,9 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     final gpsCurrentSpeedDisplay = isMph ? (_rec.gpsSpeedKmh / 1.60934) : _rec.gpsSpeedKmh;
 
     // ── BOARD DISPLAY STATS ── (already unit-correct from firmware)
-    final boardTripDist = isTracking ? (telemetry.range - _rec.boardStartRange) : telemetry.range;
+    // Board's own trip distance (positive) — the old (range - startRange) went
+    // negative because remaining range *drops* as you ride.
+    final boardTripDist = telemetry.trip;
     final boardMaxSpeed = isTracking ? _rec.boardMaxSpeed : telemetry.maxSpeed;
     final elapsed = _rec.elapsed;
 
@@ -443,18 +445,23 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                   const SizedBox(height: 6),
                   _CompareStatCard(label: 'Max Speed ($speedUnitStr)', boardVal: boardMaxSpeed.toStringAsFixed(1), gpsVal: gpsMaxSpeedDisplay.toStringAsFixed(1)),
                 ] else ...[
+                  // This recording's own (GPS) stats — trip-specific, so distance
+                  // and max aren't the board's stuck session values.
                   _CamStatCard(label: 'Speed', value: telemetry.speed.toStringAsFixed(1), unit: speedUnitStr),
                   const SizedBox(height: 6),
-                  _CamStatCard(label: 'Trip Dist', value: boardTripDist.toStringAsFixed(2), unit: unitStr),
+                  _CamStatCard(label: 'Trip Dist', value: gpsTripDistDisplay.toStringAsFixed(2), unit: unitStr),
                   const SizedBox(height: 6),
-                  _CamStatCard(label: 'Max Speed', value: boardMaxSpeed.toStringAsFixed(1), unit: speedUnitStr),
+                  _CamStatCard(label: 'Max Speed', value: gpsMaxSpeedDisplay.toStringAsFixed(1), unit: speedUnitStr),
                 ],
                 const SizedBox(height: 6),
                 _CamStatCard(label: 'Elapsed', value: _formatDuration(elapsed), unit: ''),
               ] else ...[
-                _CamStatCard(label: 'Board Dist', value: telemetry.range.toStringAsFixed(1), unit: unitStr),
+                // Not recording: show the board's live overview.
+                _CamStatCard(label: 'Range', value: telemetry.range.toStringAsFixed(1), unit: unitStr),
                 const SizedBox(height: 6),
-                _CamStatCard(label: 'Board Max', value: telemetry.maxSpeed.toStringAsFixed(1), unit: speedUnitStr),
+                _CamStatCard(label: 'Odometer', value: telemetry.odometer.toStringAsFixed(0), unit: unitStr),
+                const SizedBox(height: 6),
+                _CamStatCard(label: 'Session Max', value: telemetry.maxSpeed.toStringAsFixed(1), unit: speedUnitStr),
               ],
             ],
           ),
