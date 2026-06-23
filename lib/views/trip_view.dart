@@ -487,18 +487,33 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
           ),
         ),
 
-        // FAB — Start/Stop Trip (bottom right)
+        // FAB — Start/Stop (+ Pause/Resume while recording), bottom right
         Positioned(
           bottom: 48,
           right: 16,
-          child: FloatingActionButton.extended(
-            backgroundColor: isTracking ? const Color(0xFFEF4444) : Esk8Theme.accent,
-            onPressed: _toggleTracking,
-            icon: Icon(isTracking ? Icons.stop : Icons.play_arrow, color: Colors.white),
-            label: Text(
-              isTracking ? 'STOP' : 'START TRIP',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isTracking) ...[
+                FloatingActionButton(
+                  heroTag: 'pause',
+                  backgroundColor: const Color(0xDD1A1A1A),
+                  onPressed: () => _rec.isPaused ? _rec.resume() : _rec.pause(),
+                  child: Icon(_rec.isPaused ? Icons.play_arrow : Icons.pause, color: Esk8Theme.accent),
+                ),
+                const SizedBox(width: 12),
+              ],
+              FloatingActionButton.extended(
+                heroTag: 'startstop',
+                backgroundColor: isTracking ? const Color(0xFFEF4444) : Esk8Theme.accent,
+                onPressed: _toggleTracking,
+                icon: Icon(isTracking ? Icons.stop : Icons.play_arrow, color: Colors.white),
+                label: Text(
+                  isTracking ? (_rec.isPaused ? 'PAUSED' : 'STOP') : 'START TRIP',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
+                ),
+              ),
+            ],
           ),
         ),
       ],

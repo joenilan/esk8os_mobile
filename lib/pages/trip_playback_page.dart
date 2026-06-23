@@ -1,8 +1,13 @@
+import 'dart:math';
+
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:intl/intl.dart';
 import '../database/trip_database.dart';
+import '../services/trip_share.dart';
+import '../widgets/esk8_theme.dart';
 
 class TripPlaybackPage extends StatefulWidget {
   final int tripId;
@@ -23,6 +28,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
 
   int _currentIndex = 0;
   bool _isPlaying = false;
+  bool _showGraphs = false;
 
   @override
   void initState() {
@@ -94,6 +100,76 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
     super.dispose();
   }
 
+  /// Per-metric charts across the whole trip, with a marker at the scrubber.
+  Widget _buildGraphs() {
+    final isMph = widget.isMph;
+    final spdUnit = isMph ? 'mph' : 'km/h';
+    final climbUnit = isMph ? 'ft' : 'm';
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(12, 12, 12, 190), // room for scrubber
+      children: [
+        _metricChart('Speed', spdUnit, Esk8Theme.accent, (r) => (r['boardSpeed'] as num).toDouble()),
+        _metricChart('Elevation', climbUnit, const Color(0xFF4FC3F7),
+            (r) => ((r['altitude'] as num?)?.toDouble() ?? 0) * (isMph ? 3.28084 : 1)),
+        _metricChart('Power', 'W', const Color(0xFF66BB6A), (r) => (r['watts'] as num).toDouble()),
+        _metricChart('Voltage', 'V', Esk8Theme.yellow, (r) => (r['voltage'] as num).toDouble()),
+        _metricChart('Battery', '%', const Color(0xFFEF5350), (r) => (r['battery'] as num).toDouble()),
+      ],
+    );
+  }
+
+  Widget _metricChart(String label, String unit, Color color, double Function(Map<String, dynamic>) valueOf) {
+    final vals = [for (final r in _telemetry) valueOf(r)];
+    final spots = [for (var i = 0; i < vals.length; i++) FlSpot(i.toDouble(), vals[i])];
+    double minY = vals.reduce(min), maxY = vals.reduce(max);
+    if (maxY - minY < 1) maxY = minY + 1;
+    final pad = (maxY - minY) * 0.1;
+    final cur = vals[_currentIndex.clamp(0, vals.length - 1)];
+    return Container(
+      height: 170,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: Esk8Theme.panelBox(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(label.toUpperCase(), style: Esk8Theme.labelStyle),
+              Text('${cur.toStringAsFixed(1)} $unit', style: Esk8Theme.number(20, color: color)),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Expanded(
+            child: LineChart(LineChartData(
+              gridData: const FlGridData(show: true, drawVerticalLine: false),
+              titlesData: const FlTitlesData(show: false),
+              borderData: FlBorderData(show: false),
+              minX: 0,
+              maxX: (vals.length - 1).toDouble().clamp(1, double.infinity),
+              minY: minY - pad,
+              maxY: maxY + pad,
+              lineBarsData: [
+                LineChartBarData(
+                  spots: spots,
+                  isCurved: false,
+                  color: color,
+                  barWidth: 2,
+                  dotData: const FlDotData(show: false),
+                  belowBarData: BarAreaData(show: true, color: color.withValues(alpha: 0.15)),
+                ),
+              ],
+              extraLinesData: ExtraLinesData(
+                verticalLines: [VerticalLine(x: _currentIndex.toDouble(), color: Colors.white54, strokeWidth: 1)],
+              ),
+            )),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -126,10 +202,22 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E1E1E),
         title: const Text('Trip Playback', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+        actions: [
+          IconButton(
+            icon: Icon(_showGraphs ? Icons.map : Icons.show_chart, color: const Color(0xFFB950D7)),
+            tooltip: _showGraphs ? 'Map' : 'Graphs',
+            onPressed: () => setState(() => _showGraphs = !_showGraphs),
+          ),
+          IconButton(
+            icon: const Icon(Icons.ios_share, color: Color(0xFFB950D7)),
+            tooltip: 'Share trip card',
+            onPressed: () => TripShare.shareSummary(context, widget.tripData, widget.isMph),
+          ),
+        ],
       ),
       body: Stack(
         children: [
-          FlutterMap(
+          if (_showGraphs) _buildGraphs() else FlutterMap(
             mapController: _mapController,
             options: MapOptions(
               initialCenter: _route.isNotEmpty ? _route.first : const LatLng(0, 0),

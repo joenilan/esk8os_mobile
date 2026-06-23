@@ -25,8 +25,34 @@ class TripRecorder extends ChangeNotifier {
 
   int? _tripId;
   DateTime? _startTime;
-  Duration get elapsed =>
-      _startTime == null ? Duration.zero : DateTime.now().difference(_startTime!);
+
+  // Pause/resume — elapsed and all trip stats freeze while paused.
+  bool _paused = false;
+  bool get isPaused => _paused;
+  int _pausedAccumMs = 0;
+  int _pauseStartedMs = 0;
+
+  Duration get elapsed {
+    if (_startTime == null) return Duration.zero;
+    var ms = DateTime.now().difference(_startTime!).inMilliseconds - _pausedAccumMs;
+    if (_paused) ms -= DateTime.now().millisecondsSinceEpoch - _pauseStartedMs;
+    return Duration(milliseconds: ms < 0 ? 0 : ms);
+  }
+
+  void pause() {
+    if (!_isRecording || _paused) return;
+    _paused = true;
+    _pauseStartedMs = DateTime.now().millisecondsSinceEpoch;
+    _lastFixMs = 0; // don't count the pause gap as moving time
+    notifyListeners();
+  }
+
+  void resume() {
+    if (!_isRecording || !_paused) return;
+    _pausedAccumMs += DateTime.now().millisecondsSinceEpoch - _pauseStartedMs;
+    _paused = false;
+    notifyListeners();
+  }
 
   final List<LatLng> _route = [];
   List<LatLng> get route => List.unmodifiable(_route);
@@ -104,6 +130,8 @@ class TripRecorder extends ChangeNotifier {
     _lastFixMs = 0;
     _haveAlt = false;
     _elevGainM = 0;
+    _paused = false;
+    _pausedAccumMs = 0;
     _boardStartRange = -1;
     _boardMaxSpeed = _latestTelemetry?.speed ?? 0;
     _startTime = DateTime.now();
@@ -139,6 +167,14 @@ class TripRecorder extends ChangeNotifier {
 
     _posSub = Geolocator.getPositionStream(locationSettings: settings).listen((position) {
       final p = LatLng(position.latitude, position.longitude);
+      // Paused: keep the marker live but freeze all trip accumulation.
+      if (_paused) {
+        _currentPosition = p;
+        _gpsSpeedKmh = position.speed * 3.6;
+        _lastFixMs = 0;
+        notifyListeners();
+        return;
+      }
       if (_route.isNotEmpty) {
         _gpsDistanceM += const Distance().as(LengthUnit.Meter, _route.last, p);
       }
@@ -173,7 +209,7 @@ class TripRecorder extends ChangeNotifier {
     _logTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       final id = _tripId;
       final p = _currentPosition;
-      if (id == null || p == null) return;
+      if (id == null || p == null || _paused) return;
       final t = _latestTelemetry;
       TripDatabase.instance.insertTelemetry({
         'tripId': id,

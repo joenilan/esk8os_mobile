@@ -15,4 +15,12 @@ class AppPrefs {
 
   static bool get mapLight => _p.getBool('mapLight') ?? false;
   static set mapLight(bool v) => _p.setBool('mapLight', v);
+
+  /// Auto start/stop a trip from movement.
+  static bool get autoTrip => _p.getBool('autoTrip') ?? false;
+  static set autoTrip(bool v) => _p.setBool('autoTrip', v);
+
+  /// Over-speed alert threshold in the board's display unit (0 = off).
+  static double get speedAlert => _p.getDouble('speedAlert') ?? 0;
+  static set speedAlert(double v) => _p.setDouble('speedAlert', v);
 }

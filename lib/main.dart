@@ -10,6 +10,7 @@ import 'ble/mock_device.dart';
 import 'pages/settings_page.dart';
 import 'pages/wifi_export_page.dart';
 import 'services/app_prefs.dart';
+import 'services/trip_recorder.dart';
 import 'views/dash_view.dart';
 import 'views/graphs_view.dart';
 import 'views/hud_view.dart';
@@ -206,6 +207,12 @@ class _DashboardPageState extends State<DashboardPage> {
   int _currentPage = 0;
   bool _showControls = false;
 
+  // Auto start/stop + over-speed alert run off the latest telemetry frame.
+  Telemetry? _latestT;
+  Timer? _autoTimer;
+  DateTime? _stoppedSince;
+  bool _wasOverSpeed = false;
+
   @override
   void initState() {
     super.initState();
@@ -214,7 +221,39 @@ class _DashboardPageState extends State<DashboardPage> {
         Navigator.of(context).pop();
       }
     });
+    _autoTimer = Timer.periodic(const Duration(seconds: 1), (_) => _autoTick());
     _fetchSettings();
+  }
+
+  /// Once a second: auto start/stop a trip from movement, and fire the
+  /// over-speed haptic when crossing the alert threshold.
+  void _autoTick() {
+    final t = _latestT;
+    if (t == null) return;
+    final rec = TripRecorder.instance;
+
+    if (AppPrefs.autoTrip) {
+      if (!rec.isRecording) {
+        if (t.speed > 5) rec.start(widget.dev); // moving -> begin a trip
+      } else if (!rec.isPaused) {
+        if (t.speed < 1) {
+          _stoppedSince ??= DateTime.now();
+          if (DateTime.now().difference(_stoppedSince!).inMinutes >= 3) {
+            rec.stop(); // parked a while -> end the trip
+            _stoppedSince = null;
+          }
+        } else {
+          _stoppedSince = null;
+        }
+      }
+    }
+
+    final alert = AppPrefs.speedAlert;
+    if (alert > 0) {
+      final over = t.speed >= alert;
+      if (over && !_wasOverSpeed) HapticFeedback.heavyImpact();
+      _wasOverSpeed = over;
+    }
   }
 
   Future<void> _fetchSettings() async {
@@ -227,6 +266,7 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void dispose() {
     _connSub?.cancel();
+    _autoTimer?.cancel();
     _pageCtrl.dispose();
     widget.dev.disconnect();
     super.dispose();
@@ -274,6 +314,7 @@ class _DashboardPageState extends State<DashboardPage> {
         stream: _telemetry,
         builder: (_, snap) {
           final t = snap.data;
+          _latestT = t; // feed the auto-trip / alert tick
           final du = _boardSettings?.mph == true ? 'mi' : 'km';
           final rider = (_boardSettings?.rider ?? '').trim().toUpperCase();
           return SafeArea(

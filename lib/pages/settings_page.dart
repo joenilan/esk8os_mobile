@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../ble/esk8os_ble.dart';
+import '../services/app_prefs.dart';
 
 /// Board theme names — the firmware recognises these (case-insensitive).
 const _themeNames = [
@@ -393,6 +394,36 @@ class _SettingsPageState extends State<SettingsPage> {
                         value: s.gear.toStringAsFixed(2)),
                   ],
                 ),
+              ),
+            ),
+
+            const SizedBox(height: 16),
+
+            // ── Ride tracking (app-local prefs) ────────────────────────
+            _SectionHeader('RIDE TRACKING'),
+            Card(
+              child: Column(
+                children: [
+                  SwitchListTile(
+                    title: const Text('Auto record', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Start/stop a trip automatically from movement'),
+                    secondary: Icon(Icons.fiber_manual_record, color: _accent),
+                    value: AppPrefs.autoTrip,
+                    activeThumbColor: _accent,
+                    onChanged: (v) => setState(() => AppPrefs.autoTrip = v),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: _SliderRow(
+                      icon: Icons.notifications_active,
+                      label: 'Over-speed alert',
+                      value: AppPrefs.speedAlert.clamp(0, 50),
+                      min: 0, max: 50, divisions: 50,
+                      display: AppPrefs.speedAlert <= 0 ? 'Off' : '${AppPrefs.speedAlert.toStringAsFixed(0)} ${s.mph ? 'mph' : 'km/h'}',
+                      onEnd: (v) => setState(() => AppPrefs.speedAlert = v.roundToDouble()),
+                    ),
+                  ),
+                ],
               ),
             ),
 
