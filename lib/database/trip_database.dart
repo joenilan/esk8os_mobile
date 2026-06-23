@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:latlong2/latlong.dart';
 
 class TripDatabase {
   static final TripDatabase instance = TripDatabase._init();
@@ -99,6 +100,32 @@ class TripDatabase {
   Future<List<Map<String, dynamic>>> getAllTrips() async {
     final db = await instance.database;
     return await db.query('trips', orderBy: 'startTime DESC');
+  }
+
+  /// Finalize any trip left un-ended by a crash/kill (before its first 10 s
+  /// checkpoint): derive end-time/distance/max from its telemetry, or drop it if
+  /// it has no points. Run once on app start.
+  Future<void> recoverOrphans() async {
+    final db = await instance.database;
+    final orphans = await db.query('trips', where: 'endTime IS NULL');
+    for (final o in orphans) {
+      final id = o['id'] as int;
+      final tel = await db.query('telemetry', where: 'tripId = ?', whereArgs: [id], orderBy: 'timestamp ASC');
+      if (tel.isEmpty) {
+        await deleteTrip(id);
+        continue;
+      }
+      double dist = 0, maxSpd = 0;
+      LatLng? prev;
+      for (final r in tel) {
+        final pt = LatLng(r['lat'] as double, r['lng'] as double);
+        if (prev != null) dist += const Distance().as(LengthUnit.Meter, prev, pt);
+        prev = pt;
+        final s = (r['gpsSpeed'] as num).toDouble();
+        if (s > maxSpd) maxSpd = s;
+      }
+      await updateTrip(id, tel.last['timestamp'] as int, dist, maxSpd, maxSpd);
+    }
   }
 
   Future<void> deleteTrip(int id) async {

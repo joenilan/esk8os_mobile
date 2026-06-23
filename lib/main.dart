@@ -7,6 +7,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'ble/companion_device.dart';
 import 'ble/esk8os_ble.dart';
 import 'ble/mock_device.dart';
+import 'database/trip_database.dart';
 import 'pages/settings_page.dart';
 import 'pages/wifi_export_page.dart';
 import 'services/app_prefs.dart';
@@ -26,6 +27,7 @@ import 'widgets/esk8_widgets.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppPrefs.init();
+  TripDatabase.instance.recoverOrphans(); // finalize any trip left open by a kill
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   runApp(const Esk8App());
 }

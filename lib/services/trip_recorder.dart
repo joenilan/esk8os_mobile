@@ -206,6 +206,7 @@ class TripRecorder extends ChangeNotifier {
     });
 
     // Log one row per second regardless of motion.
+    var tick = 0;
     _logTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       final id = _tripId;
       final p = _currentPosition;
@@ -223,6 +224,13 @@ class TripRecorder extends ChangeNotifier {
         'watts': t?.watts ?? 0,
         'altitude': _altitude,
       });
+      // Checkpoint the trip summary every ~10 s so a hard kill (OS, crash, swipe)
+      // still leaves a complete, up-to-date trip — never lose more than ~10 s.
+      if (++tick % 10 == 0) {
+        TripDatabase.instance.updateTrip(
+            id, DateTime.now().millisecondsSinceEpoch, _gpsDistanceM, _gpsMaxSpeedKmh, _boardMaxSpeed,
+            elevGainM: _elevGainM);
+      }
     });
     return true;
   }
