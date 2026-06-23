@@ -23,4 +23,8 @@ class AppPrefs {
   /// Over-speed alert threshold in the board's display unit (0 = off).
   static double get speedAlert => _p.getDouble('speedAlert') ?? 0;
   static set speedAlert(double v) => _p.setDouble('speedAlert', v);
+
+  /// Floating window over other apps when a recording trip is backgrounded.
+  static bool get overlayEnabled => _p.getBool('overlayEnabled') ?? false;
+  static set overlayEnabled(bool v) => _p.setBool('overlayEnabled', v);
 }

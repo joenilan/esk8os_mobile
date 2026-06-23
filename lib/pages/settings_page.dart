@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 import '../ble/esk8os_ble.dart';
 import '../services/app_prefs.dart';
@@ -411,6 +412,19 @@ class _SettingsPageState extends State<SettingsPage> {
                     value: AppPrefs.autoTrip,
                     activeThumbColor: _accent,
                     onChanged: (v) => setState(() => AppPrefs.autoTrip = v),
+                  ),
+                  SwitchListTile(
+                    title: const Text('Floating window', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    subtitle: const Text('Stats bubble over other apps when a recording trip is backgrounded'),
+                    secondary: Icon(Icons.picture_in_picture_alt, color: _accent),
+                    value: AppPrefs.overlayEnabled,
+                    activeThumbColor: _accent,
+                    onChanged: (v) async {
+                      if (v && !await FlutterOverlayWindow.isPermissionGranted()) {
+                        await FlutterOverlayWindow.requestPermission();
+                      }
+                      setState(() => AppPrefs.overlayEnabled = v);
+                    },
                   ),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

@@ -1,9 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+
+import 'overlay/trip_overlay.dart';
 
 import 'ble/companion_device.dart';
 import 'ble/esk8os_ble.dart';
@@ -32,6 +36,12 @@ void main() async {
   TripDatabase.instance.recoverOrphans(); // finalize any trip left open by a kill
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   runApp(const Esk8App());
+}
+
+/// Entry point for the floating-overlay engine (kept by the tree-shaker).
+@pragma('vm:entry-point')
+void overlayMain() {
+  runApp(const MaterialApp(debugShowCheckedModeBanner: false, home: TripOverlay()));
 }
 
 const _accent = Color(0xFFB950D7); // matches the board's CAM accent
@@ -198,7 +208,7 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> {
+class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserver {
   late final Stream<Telemetry> _telemetry = widget.dev.telemetry();
   StreamSubscription<DeviceConnectionState>? _connSub;
   BoardSettings? _boardSettings;
@@ -216,10 +226,12 @@ class _DashboardPageState extends State<DashboardPage> {
   Timer? _autoTimer;
   DateTime? _stoppedSince;
   bool _wasOverSpeed = false;
+  bool _overlayShown = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _connSub = widget.dev.connectionState.listen((s) {
       if (s == DeviceConnectionState.disconnected && mounted) {
         Navigator.of(context).pop();
@@ -229,9 +241,58 @@ class _DashboardPageState extends State<DashboardPage> {
     _fetchSettings();
   }
 
+  /// Pop the floating window when a recording trip is backgrounded; dismiss it
+  /// when the app comes back to the foreground.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    if (state == AppLifecycleState.paused &&
+        AppPrefs.overlayEnabled &&
+        TripRecorder.instance.isRecording &&
+        !_overlayShown) {
+      if (await FlutterOverlayWindow.isPermissionGranted()) {
+        await FlutterOverlayWindow.showOverlay(
+          height: 150,
+          width: 460,
+          alignment: OverlayAlignment.topCenter,
+          enableDrag: true,
+          positionGravity: PositionGravity.auto,
+          overlayTitle: 'ESK8OS trip',
+          flag: OverlayFlag.defaultFlag,
+        );
+        _overlayShown = true;
+      }
+    } else if (state == AppLifecycleState.resumed && _overlayShown) {
+      await FlutterOverlayWindow.closeOverlay();
+      _overlayShown = false;
+    }
+  }
+
+  void _pushOverlay() {
+    final rec = TripRecorder.instance;
+    final mph = _boardSettings?.mph ?? true;
+    final spd = mph ? rec.gpsSpeedKmh / 1.60934 : rec.gpsSpeedKmh;
+    final trip = mph ? rec.gpsDistanceM / 1609.34 : rec.gpsDistanceM / 1000.0;
+    FlutterOverlayWindow.shareData(jsonEncode({
+      'spd': spd.toStringAsFixed(0),
+      'unit': mph ? 'MPH' : 'KM/H',
+      'trip': trip.toStringAsFixed(2),
+      'tu': mph ? 'mi' : 'km',
+      'time': _fmtElapsed(rec.elapsed),
+      'paused': rec.isPaused,
+    }));
+  }
+
+  String _fmtElapsed(Duration d) {
+    final h = d.inHours, m = d.inMinutes.remainder(60), s = d.inSeconds.remainder(60);
+    if (h > 0) return '${h}h ${m}m';
+    if (m > 0) return '${m}m ${s}s';
+    return '${s}s';
+  }
+
   /// Once a second: auto start/stop a trip from movement, and fire the
   /// over-speed haptic when crossing the alert threshold.
   void _autoTick() {
+    if (_overlayShown) _pushOverlay(); // feed the floating window live stats
     final t = _latestT;
     if (t == null) return;
     final rec = TripRecorder.instance;
@@ -269,6 +330,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    if (_overlayShown) FlutterOverlayWindow.closeOverlay();
     _connSub?.cancel();
     _autoTimer?.cancel();
     _pageCtrl.dispose();
