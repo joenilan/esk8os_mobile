@@ -39,7 +39,6 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
   bool _locationReady = false;
   bool _followMode = true;
   double _currentZoom = 16.0;
-  bool _showComparison = false;
   // Persisted across page swipes / restarts (see AppPrefs).
   bool _headingUp = AppPrefs.mapHeadingUp;
   bool _mapLight = AppPrefs.mapLight;
@@ -222,17 +221,12 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     final route = _rec.route;
     final pos = _rec.currentPosition ?? _initialCenter;
 
-    // ── GPS DISPLAY STATS ──
+    // ── TRIP STATS (GPS-measured, per recording) — all 0 until you start ──
     final gpsTripDistDisplay = isMph ? (_rec.gpsDistanceM / 1609.34) : (_rec.gpsDistanceM / 1000.0);
     final gpsMaxSpeedDisplay = isMph ? (_rec.gpsMaxSpeedKmh / 1.60934) : _rec.gpsMaxSpeedKmh;
-    final gpsCurrentSpeedDisplay = isMph ? (_rec.gpsSpeedKmh / 1.60934) : _rec.gpsSpeedKmh;
-
-    // ── BOARD DISPLAY STATS ── (already unit-correct from firmware)
-    // Board's own trip distance (positive) — the old (range - startRange) went
-    // negative because remaining range *drops* as you ride.
-    final boardTripDist = telemetry.trip;
-    final boardMaxSpeed = isTracking ? _rec.boardMaxSpeed : telemetry.maxSpeed;
     final elapsed = _rec.elapsed;
+    final gpsAvgKmh = elapsed.inSeconds > 0 ? _rec.gpsDistanceM * 3.6 / elapsed.inSeconds : 0.0;
+    final gpsAvgDisplay = isMph ? gpsAvgKmh / 1.60934 : gpsAvgKmh;
 
     return Stack(
       children: [
@@ -408,61 +402,23 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
           ),
         ),
 
-        // Top-right: Stats panel
+        // Top-right: THIS TRIP's stats — GPS-measured, reset to 0 each trip.
+        // (Board/lifetime stats live on the HUD/TRIP/SYSTEM pages, not here.)
         Positioned(
           top: 48,
           right: 16,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              if (isTracking)
-                GestureDetector(
-                  onTap: () => setState(() => _showComparison = !_showComparison),
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: _showComparison ? Esk8Theme.accent : const Color(0xDD1E1E1E),
-                      border: Border.all(color: _showComparison ? Esk8Theme.accent : const Color(0xFF333333)),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      'COMPARE GPS',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                        color: _showComparison ? Colors.white : Colors.grey,
-                      ),
-                    ),
-                  ),
-                ),
-              if (isTracking) ...[
-                if (_showComparison) ...[
-                  _CompareStatCard(label: 'Speed ($speedUnitStr)', boardVal: telemetry.speed.toStringAsFixed(1), gpsVal: gpsCurrentSpeedDisplay.toStringAsFixed(1)),
-                  const SizedBox(height: 6),
-                  _CompareStatCard(label: 'Trip Dist ($unitStr)', boardVal: boardTripDist.toStringAsFixed(2), gpsVal: gpsTripDistDisplay.toStringAsFixed(2)),
-                  const SizedBox(height: 6),
-                  _CompareStatCard(label: 'Max Speed ($speedUnitStr)', boardVal: boardMaxSpeed.toStringAsFixed(1), gpsVal: gpsMaxSpeedDisplay.toStringAsFixed(1)),
-                ] else ...[
-                  // This recording's own (GPS) stats — trip-specific, so distance
-                  // and max aren't the board's stuck session values.
-                  _CamStatCard(label: 'Speed', value: telemetry.speed.toStringAsFixed(1), unit: speedUnitStr),
-                  const SizedBox(height: 6),
-                  _CamStatCard(label: 'Trip Dist', value: gpsTripDistDisplay.toStringAsFixed(2), unit: unitStr),
-                  const SizedBox(height: 6),
-                  _CamStatCard(label: 'Max Speed', value: gpsMaxSpeedDisplay.toStringAsFixed(1), unit: speedUnitStr),
-                ],
-                const SizedBox(height: 6),
-                _CamStatCard(label: 'Elapsed', value: _formatDuration(elapsed), unit: ''),
-              ] else ...[
-                // Not recording: show the board's live overview.
-                _CamStatCard(label: 'Range', value: telemetry.range.toStringAsFixed(1), unit: unitStr),
-                const SizedBox(height: 6),
-                _CamStatCard(label: 'Odometer', value: telemetry.odometer.toStringAsFixed(0), unit: unitStr),
-                const SizedBox(height: 6),
-                _CamStatCard(label: 'Session Max', value: telemetry.maxSpeed.toStringAsFixed(1), unit: speedUnitStr),
-              ],
+              _CamStatCard(label: 'Speed', value: telemetry.speed.toStringAsFixed(1), unit: speedUnitStr),
+              const SizedBox(height: 6),
+              _CamStatCard(label: 'Trip', value: gpsTripDistDisplay.toStringAsFixed(2), unit: unitStr),
+              const SizedBox(height: 6),
+              _CamStatCard(label: 'Max', value: gpsMaxSpeedDisplay.toStringAsFixed(1), unit: speedUnitStr),
+              const SizedBox(height: 6),
+              _CamStatCard(label: 'Avg', value: gpsAvgDisplay.toStringAsFixed(1), unit: speedUnitStr),
+              const SizedBox(height: 6),
+              _CamStatCard(label: 'Elapsed', value: _formatDuration(elapsed), unit: ''),
             ],
           ),
         ),
@@ -632,59 +588,3 @@ class _CamStatCard extends StatelessWidget {
   }
 }
 
-class _CompareStatCard extends StatelessWidget {
-  final String label;
-  final String boardVal;
-  final String gpsVal;
-
-  const _CompareStatCard({required this.label, required this.boardVal, required this.gpsVal});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(10.0),
-      decoration: BoxDecoration(
-        color: const Color(0xDD1E1E1E),
-        border: Border.all(color: Esk8Theme.accent),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.bold,
-              color: Colors.grey,
-              letterSpacing: 1,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(boardVal, style: GoogleFonts.bebasNeue(fontSize: 22, fontWeight: FontWeight.normal, color: Colors.white, letterSpacing: 1.5)),
-                  const Text('BOARD', style: TextStyle(fontSize: 9, color: Colors.grey)),
-                ],
-              ),
-              const SizedBox(width: 12),
-              Container(width: 1, height: 24, color: const Color(0xFF333333)),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(gpsVal, style: GoogleFonts.bebasNeue(fontSize: 22, fontWeight: FontWeight.normal, color: Esk8Theme.accent, letterSpacing: 1.5)),
-                  const Text('GPS', style: TextStyle(fontSize: 9, color: Colors.grey)),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
