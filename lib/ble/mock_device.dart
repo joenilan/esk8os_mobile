@@ -116,6 +116,16 @@ class MockDevice implements Esk8Device {
         efficiency: eff,
         fault: 0,
         rideSeconds: (DateTime.now().millisecondsSinceEpoch - _startMs) ~/ 1000,
+        // Remote + diagnostics so DIAG / the HUD throttle bar animate in mock mode:
+        // throttle tracks power (accel when drawing, brake when regen).
+        throttle: (_watts / 900.0).clamp(-1.0, 1.0),
+        remoteConnected: true,
+        lastFault: 0,
+        slaveOnline: true,
+        masterMotorAmps: motorAmps / 2,
+        slaveMotorAmps: motorAmps / 2,
+        vescFw: '6.2',
+        maxWattsSession: _peakWatts,
       ));
     });
   }
