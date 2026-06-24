@@ -210,8 +210,13 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserver {
-  late final Stream<Telemetry> _telemetry = widget.dev.telemetry();
+  // Telemetry is re-piped through a controller we own so the UI's StreamBuilder
+  // survives a BLE drop + reconnect (the underlying characteristic stream is
+  // replaced on reconnect via _subscribeTelemetry).
+  final StreamController<Telemetry> _telCtrl = StreamController<Telemetry>.broadcast();
+  StreamSubscription<Telemetry>? _telSub;
   StreamSubscription<DeviceConnectionState>? _connSub;
+  bool _reconnecting = false;
   BoardSettings? _boardSettings;
 
   // Start deep in a large virtual range so the deck wraps both ways (last page
@@ -238,9 +243,10 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _subscribeTelemetry();
     _connSub = widget.dev.connectionState.listen((s) {
-      if (s == DeviceConnectionState.disconnected && mounted) {
-        Navigator.of(context).pop();
+      if (s == DeviceConnectionState.disconnected && mounted && !_reconnecting) {
+        _handleReconnect();
       }
     });
     // Tapping the floating overlay asks the app to come back to the front.
@@ -355,10 +361,48 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
     } catch (_) {}
   }
 
+  /// (Re)subscribe to the device's telemetry stream and forward into _telCtrl.
+  /// Called on init and after every successful reconnect (the characteristic
+  /// object is replaced on reconnect, so the old subscription is dead).
+  void _subscribeTelemetry() {
+    _telSub?.cancel();
+    _telSub = widget.dev.telemetry().listen(
+      (t) {
+        if (!_telCtrl.isClosed) _telCtrl.add(t);
+      },
+      onError: (_) {},
+    );
+  }
+
+  /// On a BLE drop, retry connect() with backoff (the board is usually still
+  /// nearby — range blip, or a reboot taking a few seconds) before giving up and
+  /// returning to the scan screen. The last telemetry frame stays on screen.
+  Future<void> _handleReconnect() async {
+    if (_reconnecting || !mounted) return;
+    setState(() => _reconnecting = true);
+    for (int attempt = 1; attempt <= 6 && mounted; attempt++) {
+      await Future.delayed(Duration(seconds: (attempt * 2).clamp(2, 8)));
+      if (!mounted) return;
+      try {
+        await widget.dev.connect();
+        _subscribeTelemetry();
+        await _fetchSettings();
+        if (mounted) setState(() => _reconnecting = false);
+        return; // recovered
+      } catch (_) {/* keep retrying */}
+    }
+    if (mounted) {
+      setState(() => _reconnecting = false);
+      Navigator.of(context).pop(); // gave up — back to scan
+    }
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     if (_overlayShown) FlutterOverlayWindow.closeOverlay();
+    _telSub?.cancel();
+    _telCtrl.close();
     _connSub?.cancel();
     _autoTimer?.cancel();
     _pageCtrl.dispose();
@@ -418,7 +462,7 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
   Widget build(BuildContext context) {
     return Scaffold(
       body: StreamBuilder<Telemetry>(
-        stream: _telemetry,
+        stream: _telCtrl.stream,
         builder: (_, snap) {
           final t = snap.data;
           _latestT = t; // feed the auto-trip / alert tick
@@ -442,6 +486,32 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
                     right: _clock(),
                   ),
                 ),
+
+                // Connection-lost banner: shown while we retry in the background.
+                // The dashboard keeps the last telemetry frame underneath.
+                if (_reconnecting)
+                  Container(
+                    width: double.infinity,
+                    color: const Color(0x26FFCD00), // yellow @ ~15%
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Esk8Theme.yellow)),
+                        SizedBox(width: 8),
+                        Text('Reconnecting to board…',
+                            style: TextStyle(
+                                color: Esk8Theme.yellow,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.5)),
+                      ],
+                    ),
+                  ),
 
                 // PAGES — double-tap toggles the controls overlay
                 Expanded(
