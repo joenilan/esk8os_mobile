@@ -46,7 +46,7 @@ class DashView extends StatelessWidget {
             SpeedHero(value: t.speed.toStringAsFixed(0), unit: speedUnit, maxSize: 92),
             const SizedBox(height: 10),
             StatRow([
-              StatTile(label: 'Volts', value: t.volts.toStringAsFixed(0), unit: 'V', valueSize: 40, valueColor: Esk8Theme.green),
+              StatTile(label: 'Volts', value: t.volts.toStringAsFixed(1), unit: 'V', valueSize: 40, valueColor: Esk8Theme.green),
               StatTile(label: 'Watts', value: '${t.watts}', unit: 'W', valueSize: 40, valueColor: Esk8Theme.wattsColor(t.watts)),
             ]),
           ],

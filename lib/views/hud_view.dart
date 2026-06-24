@@ -60,7 +60,7 @@ class HudView extends StatelessWidget {
           const SizedBox(height: 10),
           StatRow([
             StatTile(label: 'Watts', value: '${t.watts}', unit: 'W', valueSize: cellSize, padding: cellPad, valueColor: Esk8Theme.wattsColor(t.watts)),
-            StatTile(label: 'Volts', value: t.volts.toStringAsFixed(0), unit: 'V', valueSize: cellSize, padding: cellPad, valueColor: Esk8Theme.green),
+            StatTile(label: 'Volts', value: t.volts.toStringAsFixed(1), unit: 'V', valueSize: cellSize, padding: cellPad, valueColor: Esk8Theme.green),
           ]),
           const SizedBox(height: 8),
           StatRow([
