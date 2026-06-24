@@ -389,7 +389,10 @@ class PageChrome extends StatelessWidget {
         child: ConstrainedBox(
           constraints: BoxConstraints(minHeight: c.maxHeight - 40),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            // Top-aligned, not centered — content sits under the title and grows
+            // downward; dense pages fill, sparse ones leave the gap at the bottom
+            // (never floating in the middle).
+            mainAxisAlignment: MainAxisAlignment.start,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: spaced,
           ),
