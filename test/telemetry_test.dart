@@ -32,6 +32,13 @@ void main() {
         'fault': 0,
         'rtime': 1843,
         'tmov': 1290,
+        'ppm': 0.42,
+        'ppmok': true,
+        'lfault': 5,
+        'slave': true,
+        'm1a': 18.3,
+        'm2a': 17.9,
+        'fw': '6.2',
       });
 
       expect(t.speed, 24.5);
@@ -44,6 +51,22 @@ void main() {
       expect(t.rideSeconds, 1843);
       // The field this whole task hinged on:
       expect(t.tripMovingSeconds, 1290);
+      // Remote + diagnostics fields:
+      expect(t.throttle, 0.42);
+      expect(t.remoteConnected, true);
+      expect(t.lastFault, 5);
+      expect(t.slaveOnline, true);
+      expect(t.masterMotorAmps, 18.3);
+      expect(t.slaveMotorAmps, 17.9);
+      expect(t.vescFw, '6.2');
+    });
+
+    test('remote/diagnostics fields default safely when absent', () {
+      final t = Telemetry.fromJson({'spd': 10});
+      expect(t.throttle, 0.0);
+      expect(t.remoteConnected, false);
+      expect(t.slaveOnline, false);
+      expect(t.vescFw, '');
     });
 
     test('tmov defaults to 0 when absent (older firmware)', () {

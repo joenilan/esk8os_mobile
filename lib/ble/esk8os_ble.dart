@@ -68,6 +68,14 @@ class Telemetry {
   final int fault; // fault (VESC fault code, 0 = none)
   final int rideSeconds; // rtime (board uptime this boot, s)
   final int tripMovingSeconds; // tmov (trip moving-time, s rolling) — board-authoritative
+  // --- remote input + diagnostics ---
+  final double throttle; // ppm: decoded remote throttle -1..1 (<0 brake, >0 accel)
+  final bool remoteConnected; // ppmok: valid remote signal present
+  final int lastFault; // lfault: most recent VESC fault, latched
+  final bool slaveOnline; // slave: 2nd motor responding over CAN
+  final double masterMotorAmps; // m1a
+  final double slaveMotorAmps; // m2a
+  final String vescFw; // fw: VESC firmware version "major.minor"
 
   const Telemetry({
     required this.speed,
@@ -94,6 +102,13 @@ class Telemetry {
     this.fault = 0,
     this.rideSeconds = 0,
     this.tripMovingSeconds = 0,
+    this.throttle = 0.0,
+    this.remoteConnected = false,
+    this.lastFault = 0,
+    this.slaveOnline = false,
+    this.masterMotorAmps = 0.0,
+    this.slaveMotorAmps = 0.0,
+    this.vescFw = '',
   });
 
   factory Telemetry.fromJson(Map<String, dynamic> j) => Telemetry(
@@ -121,6 +136,13 @@ class Telemetry {
         fault: _i(j['fault']),
         rideSeconds: _i(j['rtime']),
         tripMovingSeconds: _i(j['tmov']),
+        throttle: _d(j['ppm']),
+        remoteConnected: j['ppmok'] == true,
+        lastFault: _i(j['lfault']),
+        slaveOnline: j['slave'] == true,
+        masterMotorAmps: _d(j['m1a']),
+        slaveMotorAmps: _d(j['m2a']),
+        vescFw: (j['fw'] ?? '').toString(),
       );
 }
 

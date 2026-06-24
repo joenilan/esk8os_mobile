@@ -18,6 +18,7 @@ import 'pages/wifi_export_page.dart';
 import 'services/app_prefs.dart';
 import 'services/trip_recorder.dart';
 import 'views/dash_view.dart';
+import 'views/diag_view.dart';
 import 'views/graphs_view.dart';
 import 'views/hud_view.dart';
 import 'views/logs_view.dart';
@@ -440,8 +441,8 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
 
   // App page -> board PageId. Mirrors the board's 8-page deck, plus the GPS MAP
   // which is app-only (-1 = no board sync; it leaves the board where it is).
-  static const _pageNames = ['HUD', 'DASH', 'POWER', 'TRIP', 'MAP', 'SETTINGS', 'SYSTEM', 'GRAPHS', 'LOGS'];
-  static const _boardPage = [0, 1, 2, 3, -1, 4, 5, 6, 7];
+  static const _pageNames = ['HUD', 'DASH', 'POWER', 'TRIP', 'MAP', 'SETTINGS', 'SYSTEM', 'GRAPHS', 'LOGS', 'DIAG'];
+  static const _boardPage = [0, 1, 2, 3, -1, 4, 5, 6, 7, -1]; // DIAG is app-only (no board page yet)
 
   void _onPageChanged(int index) {
     setState(() => _currentPage = index);
@@ -540,8 +541,10 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
                                 return SystemView(telemetry: t, settings: _boardSettings);
                               case 7:
                                 return GraphsView(telemetry: t, settings: _boardSettings);
-                              default:
+                              case 8:
                                 return LogsView(settings: _boardSettings);
+                              default:
+                                return DiagView(telemetry: t, settings: _boardSettings);
                             }
                           },
                         ),
