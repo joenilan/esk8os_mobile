@@ -31,15 +31,16 @@ class HudView extends StatelessWidget {
     // Display values are whole numbers (precision lives in the logs); dropping
     // the decimals frees width so the cell numbers can be big and glanceable.
     const cellSize = 56.0;
-    const cellPad = EdgeInsets.symmetric(horizontal: 12, vertical: 18);
+    const cellPad = EdgeInsets.symmetric(horizontal: 12, vertical: 14);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
       child: Column(
         children: [
-          // Speed — big but not overpowering, MPH snug underneath.
+          // Speed — the hero. Given as much room as the layout allows (the
+          // surrounding gaps are tight) so the FittedBox scales it up large.
           Expanded(child: Center(child: SpeedHero(value: t.speed.toStringAsFixed(0), unit: speedUnit))),
           const Divider(height: 1, thickness: 1, color: Esk8Theme.border),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           // Remote throttle/brake + signal-present icon (decoded PPM from the VESC).
           Row(
             children: [
@@ -52,16 +53,16 @@ class HudView extends StatelessWidget {
               Expanded(child: ThrottleBar(throttle: t.remoteConnected ? t.throttle : 0, height: 14)),
             ],
           ),
-          const SizedBox(height: 10),
+          const SizedBox(height: 8),
           SegmentedBattery(percent: t.battery, cells: cells),
           const SizedBox(height: 2),
           Text('${t.battery}%', style: Esk8Theme.number(38)),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
           StatRow([
             StatTile(label: 'Watts', value: '${t.watts}', unit: 'W', valueSize: cellSize, padding: cellPad, valueColor: Esk8Theme.wattsColor(t.watts)),
             StatTile(label: 'Volts', value: t.volts.toStringAsFixed(0), unit: 'V', valueSize: cellSize, padding: cellPad, valueColor: Esk8Theme.green),
           ]),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
           StatRow([
             StatTile(label: 'Range', value: t.range.toStringAsFixed(0), unit: distUnit, valueSize: cellSize, padding: cellPad),
             StatTile(label: 'Temp', value: '${t.motorTempC}', unit: '°C', valueSize: cellSize, padding: cellPad, valueColor: _tempColor(t.motorTempC)),

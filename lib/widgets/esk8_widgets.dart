@@ -383,9 +383,11 @@ class PageChrome extends StatelessWidget {
     ];
     return LayoutBuilder(
       builder: (context, c) => SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+        // Top pad clears the floating page-title that the dashboard draws over
+        // every page (otherwise it collides with a top-of-page section).
+        padding: const EdgeInsets.fromLTRB(12, 30, 12, 10),
         child: ConstrainedBox(
-          constraints: BoxConstraints(minHeight: c.maxHeight - 16),
+          constraints: BoxConstraints(minHeight: c.maxHeight - 40),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,

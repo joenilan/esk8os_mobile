@@ -442,14 +442,12 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
   // App page -> board PageId. Mirrors the board's 8-page deck, plus the GPS MAP
   // which is app-only (-1 = no board sync; it leaves the board where it is).
   static const _pageNames = ['HUD', 'DASH', 'POWER', 'TRIP', 'MAP', 'SETTINGS', 'SYSTEM', 'GRAPHS', 'LOGS', 'DIAG'];
-  static const _boardPage = [0, 1, 2, 3, -1, 4, 5, 6, 7, -1]; // DIAG is app-only (no board page yet)
 
   void _onPageChanged(int index) {
+    // App pages independently of the board now — the board self-navigates with its
+    // LEFT button. (PAGE_SET is still available as a command if we ever want an
+    // explicit remote-control toggle; we just don't fire it on every swipe.)
     setState(() => _currentPage = index);
-    final bp = (index >= 0 && index < _boardPage.length) ? _boardPage[index] : -1;
-    if (bp >= 0) {
-      widget.dev.sendCommand(Esk8Commands.pageSet(bp)).catchError((_) {});
-    }
   }
 
   String _pageName(int i) => (i >= 0 && i < _pageNames.length) ? _pageNames[i] : '';

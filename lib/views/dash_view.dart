@@ -3,8 +3,9 @@ import '../ble/esk8os_ble.dart';
 import '../widgets/esk8_theme.dart';
 import '../widgets/esk8_widgets.dart';
 
-/// DASH — mirrors the board's Dash page: TEMPS and RANGE as "fieldset" sections
-/// with label-left / value-right rows.
+/// DASH — the detailed "is my board safe?" page: live per-motor + battery current
+/// (so you can see you're under the configured motor limits), duty, voltage/watts,
+/// temps, and range. The denser companion to the glanceable HUD.
 class DashView extends StatelessWidget {
   final Telemetry? telemetry;
   final BoardSettings? settings;
@@ -14,6 +15,16 @@ class DashView extends StatelessWidget {
   static Color _temp(int c) {
     if (c >= 70) return Esk8Theme.danger;
     if (c >= 55) return Esk8Theme.yellow;
+    return Esk8Theme.green;
+  }
+
+  // Motor current vs the per-VESC limit (default 18 A): green safe, escalating to
+  // red as it approaches/exceeds. Uses abs() so braking (negative) colours too.
+  static Color _amp(double a, {double limit = 18}) {
+    final m = a.abs();
+    if (m >= limit) return Esk8Theme.danger;
+    if (m >= limit * 0.85) return Esk8Theme.orange;
+    if (m >= limit * 0.65) return Esk8Theme.yellow;
     return Esk8Theme.green;
   }
 
@@ -32,23 +43,33 @@ class DashView extends StatelessWidget {
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SpeedHero(value: t.speed.toStringAsFixed(0), unit: speedUnit, maxSize: 104),
+            SpeedHero(value: t.speed.toStringAsFixed(0), unit: speedUnit, maxSize: 92),
             const SizedBox(height: 10),
             StatRow([
-              StatTile(label: 'Volts', value: t.volts.toStringAsFixed(0), unit: 'V', valueSize: 44, valueColor: Esk8Theme.green),
-              StatTile(label: 'Watts', value: '${t.watts}', unit: 'W', valueSize: 44, valueColor: Esk8Theme.wattsColor(t.watts)),
+              StatTile(label: 'Volts', value: t.volts.toStringAsFixed(0), unit: 'V', valueSize: 40, valueColor: Esk8Theme.green),
+              StatTile(label: 'Watts', value: '${t.watts}', unit: 'W', valueSize: 40, valueColor: Esk8Theme.wattsColor(t.watts)),
             ]),
+          ],
+        ),
+        // CURRENT — the safety read. Per-motor so each can be checked against the
+        // VESC's motor-current limit; battery amps + duty alongside.
+        FieldSection(
+          title: 'Current',
+          rows: [
+            FieldRow(label: 'Motor 1', value: t.masterMotorAmps.toStringAsFixed(1), unit: 'A', valueColor: _amp(t.masterMotorAmps)),
+            FieldRow(label: 'Motor 2', value: t.slaveMotorAmps.toStringAsFixed(1), unit: 'A', valueColor: _amp(t.slaveMotorAmps)),
+            FieldRow(label: 'Battery', value: t.batteryAmps.toStringAsFixed(1), unit: 'A'),
+            FieldRow(label: 'Duty', value: '${t.duty}', unit: '%', valueColor: Esk8Theme.dutyColor(t.duty)),
           ],
         ),
         FieldSection(
           title: 'Temps',
           rows: [
             FieldRow(label: 'Motor', value: '${t.motorTempC}', unit: '°C', valueColor: _temp(t.motorTempC)),
-            FieldRow(label: 'Battery', value: '${t.batteryTempC}', unit: '°C', valueColor: _temp(t.batteryTempC)),
             FieldRow(label: 'ESC', value: '${t.escTempC}', unit: '°C', valueColor: _temp(t.escTempC)),
+            FieldRow(label: 'Battery', value: '${t.batteryTempC}', unit: '°C', valueColor: _temp(t.batteryTempC)),
           ],
         ),
-        // Avg wh/dist (efficiency) lives on TRIP (deduped); keep Est/Remaining here.
         FieldSection(
           title: 'Range',
           rows: [
