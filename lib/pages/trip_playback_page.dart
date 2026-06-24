@@ -46,6 +46,11 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   );
   List<Map<String, dynamic>> _telemetry = [];
   List<LatLng> _route = [];
+  // Keyframes = (pointIndex, position) only where the position actually CHANGED.
+  // The GPS updates ~every 5s but we log 1 Hz, so ~80% of points are duplicates;
+  // the marker must glide between distinct fixes (spread over the duplicate span),
+  // not interpolate between identical points (which looks like stop-go-stop-go).
+  final List<(double, LatLng)> _keyframes = [];
   bool _isLoading = true;
   bool _mapReady = false;
 
@@ -93,6 +98,20 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
       if (_telemetry.length > 1) {
         _playCtrl.duration = Duration(milliseconds: (_maxPos * 80).round());
       }
+      // Build keyframes at the indices where the position actually moved (>0.5 m
+      // from the last keyframe), so the marker glides between real GPS fixes.
+      _keyframes.clear();
+      if (_route.isNotEmpty) {
+        _keyframes.add((0, _route.first));
+        for (var i = 1; i < _route.length; i++) {
+          if (_dist(_route[i], _keyframes.last.$2) > 0.5) {
+            _keyframes.add((i.toDouble(), _route[i]));
+          }
+        }
+        // Ensure the marker reaches the very end.
+        final lastIdx = (_route.length - 1).toDouble();
+        if (_keyframes.last.$1 != lastIdx) _keyframes.add((lastIdx, _route.last));
+      }
       // Cache the static full-route line once (identical instance => Flutter skips
       // rebuilding it each frame).
       if (_route.length >= 2) {
@@ -120,17 +139,35 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     }
   }
 
-  /// Marker position interpolated between the two bracketing route points.
+  static double _dist(LatLng a, LatLng b) {
+    final dLat = (a.latitude - b.latitude) * 111320;
+    final dLng = (a.longitude - b.longitude) * 111320 * cos(a.latitude * pi / 180);
+    return sqrt(dLat * dLat + dLng * dLng);
+  }
+
+  /// Marker position at the current scrub time, interpolated between the two
+  /// bracketing KEYFRAMES (distinct GPS fixes) — so it glides continuously across
+  /// the duplicate-point stretches instead of stopping at each logged point.
   LatLng _markerPos() {
-    if (_route.isEmpty) return const LatLng(0, 0);
-    if (_route.length == 1) return _route.first;
-    final lo = _pos.floor().clamp(0, _route.length - 1);
-    final hi = (lo + 1).clamp(0, _route.length - 1);
-    final frac = _pos - lo;
-    final a = _route[lo], b = _route[hi];
+    if (_keyframes.isEmpty) return _route.isEmpty ? const LatLng(0, 0) : _route.first;
+    final p = _pos;
+    // Last keyframe whose index <= p (binary search).
+    int lo = 0, hi = _keyframes.length - 1;
+    while (lo < hi) {
+      final mid = (lo + hi + 1) >> 1;
+      if (_keyframes[mid].$1 <= p) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
+      }
+    }
+    final a = _keyframes[lo];
+    if (lo >= _keyframes.length - 1) return a.$2;
+    final b = _keyframes[lo + 1];
+    final frac = ((p - a.$1) / (b.$1 - a.$1)).clamp(0.0, 1.0);
     return LatLng(
-      a.latitude + (b.latitude - a.latitude) * frac,
-      a.longitude + (b.longitude - a.longitude) * frac,
+      a.$2.latitude + (b.$2.latitude - a.$2.latitude) * frac,
+      a.$2.longitude + (b.$2.longitude - a.$2.longitude) * frac,
     );
   }
 
