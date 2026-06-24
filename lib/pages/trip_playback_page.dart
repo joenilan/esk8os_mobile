@@ -6,6 +6,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:intl/intl.dart';
 import '../database/trip_database.dart';
+import '../services/app_prefs.dart';
 import '../services/trip_share.dart';
 import '../widgets/esk8_theme.dart';
 
@@ -25,10 +26,19 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
   List<Map<String, dynamic>> _telemetry = [];
   List<LatLng> _route = [];
   bool _isLoading = true;
+  bool _mapReady = false;
 
-  int _currentIndex = 0;
+  // Fractional scrub position (0..len-1) so the marker can sit *between* points
+  // and glide smoothly instead of teleporting from corner to corner.
+  double _pos = 0;
   bool _isPlaying = false;
   bool _showGraphs = false;
+  // Map style is shared with the live trip map (AppPrefs.mapLight) so playback
+  // matches what you ride with; the toggle here flips that same pref.
+  bool _mapLight = AppPrefs.mapLight;
+  bool _follow = false; // recenter the camera on the marker as it moves
+
+  int get _idx => _pos.round().clamp(0, _telemetry.isEmpty ? 0 : _telemetry.length - 1);
 
   @override
   void initState() {
@@ -50,7 +60,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
         Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted) {
             final bounds = LatLngBounds.fromPoints(_route);
-            if (bounds.southWest.latitude == bounds.northEast.latitude && 
+            if (bounds.southWest.latitude == bounds.northEast.latitude &&
                 bounds.southWest.longitude == bounds.northEast.longitude) {
               _mapController.move(_route.first, 16.0);
             } else {
@@ -62,36 +72,47 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
     }
   }
 
+  /// Marker position interpolated between the two bracketing route points.
+  LatLng _markerPos() {
+    if (_route.isEmpty) return const LatLng(0, 0);
+    if (_route.length == 1) return _route.first;
+    final lo = _pos.floor().clamp(0, _route.length - 1);
+    final hi = (lo + 1).clamp(0, _route.length - 1);
+    final frac = _pos - lo;
+    final a = _route[lo], b = _route[hi];
+    return LatLng(
+      a.latitude + (b.latitude - a.latitude) * frac,
+      a.longitude + (b.longitude - a.longitude) * frac,
+    );
+  }
+
+  void _recenterIfFollow() {
+    if (!_follow || !_mapReady || _route.isEmpty) return;
+    try {
+      _mapController.move(_markerPos(), _mapController.camera.zoom);
+    } catch (_) {}
+  }
+
   void _togglePlayback() {
     if (_telemetry.isEmpty) return;
-    setState(() {
-      _isPlaying = !_isPlaying;
-    });
+    setState(() => _isPlaying = !_isPlaying);
     if (_isPlaying) {
-      if (_currentIndex >= _telemetry.length - 1) {
-        _currentIndex = 0;
-      }
+      if (_pos >= _telemetry.length - 1) _pos = 0;
       _playLoop();
     }
   }
 
   Future<void> _playLoop() async {
-    while (_isPlaying && _currentIndex < _telemetry.length - 1) {
-      // In a real app we'd interpolate smoothly based on timestamp differences,
-      // but to keep it simple and responsive we'll just step through points.
-      // We can step faster than real-time to watch a long trip quickly.
-      await Future.delayed(const Duration(milliseconds: 100));
+    final maxPos = (_telemetry.length - 1).toDouble();
+    // Step the fractional position in small increments at ~20 fps so the marker
+    // glides between points (faster than real-time to watch a long trip quickly).
+    while (_isPlaying && _pos < maxPos) {
+      await Future.delayed(const Duration(milliseconds: 50));
       if (!mounted || !_isPlaying) break;
-      
-      setState(() {
-        _currentIndex++;
-        // Optional: Follow the marker during playback
-        // _mapController.move(_route[_currentIndex], _mapController.camera.zoom);
-      });
+      setState(() => _pos = (_pos + 0.3).clamp(0, maxPos));
+      _recenterIfFollow();
     }
-    if (_currentIndex >= _telemetry.length - 1) {
-      if (mounted) setState(() => _isPlaying = false);
-    }
+    if (_pos >= maxPos && mounted) setState(() => _isPlaying = false);
   }
 
   @override
@@ -124,7 +145,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
     double minY = vals.reduce(min), maxY = vals.reduce(max);
     if (maxY - minY < 1) maxY = minY + 1;
     final pad = (maxY - minY) * 0.1;
-    final cur = vals[_currentIndex.clamp(0, vals.length - 1)];
+    final cur = vals[_idx.clamp(0, vals.length - 1)];
     return Container(
       height: 170,
       margin: const EdgeInsets.only(bottom: 12),
@@ -161,11 +182,34 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
                 ),
               ],
               extraLinesData: ExtraLinesData(
-                verticalLines: [VerticalLine(x: _currentIndex.toDouble(), color: Colors.white54, strokeWidth: 1)],
+                verticalLines: [VerticalLine(x: _idx.toDouble(), color: Colors.white54, strokeWidth: 1)],
               ),
             )),
           ),
         ],
+      ),
+    );
+  }
+
+  /// The base tile layer — matches the live map's light/dark preference. Dark
+  /// tiles get the same brightness bump used on the trip view.
+  Widget _tileLayer() {
+    if (_mapLight) {
+      return TileLayer(
+        urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+        subdomains: const ['a', 'b', 'c', 'd'],
+      );
+    }
+    return ColorFiltered(
+      colorFilter: const ColorFilter.matrix([
+        1.5, 0, 0, 0, 15, //
+        0, 1.5, 0, 0, 15, //
+        0, 0, 1.5, 0, 15, //
+        0, 0, 0, 1, 0, //
+      ]),
+      child: TileLayer(
+        urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        subdomains: const ['a', 'b', 'c', 'd'],
       ),
     );
   }
@@ -187,8 +231,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
       );
     }
 
-    final currentData = _telemetry[_currentIndex];
-    final currentPos = _route[_currentIndex];
+    final currentData = _telemetry[_idx];
     final timestamp = DateTime.fromMillisecondsSinceEpoch(currentData['timestamp'] as int);
 
     final speedUnitStr = widget.isMph ? 'mph' : 'km/h';
@@ -197,19 +240,38 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
 
     final gpsSpeedDisplay = widget.isMph ? (rawGpsSpeed / 1.60934) : rawGpsSpeed;
 
+    const accent = Color(0xFFB950D7);
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E1E1E),
         title: const Text('Trip Playback', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
         actions: [
+          if (!_showGraphs) ...[
+            IconButton(
+              icon: Icon(_mapLight ? Icons.light_mode : Icons.dark_mode, color: accent),
+              tooltip: _mapLight ? 'Light map' : 'Dark map',
+              onPressed: () => setState(() {
+                _mapLight = !_mapLight;
+                AppPrefs.mapLight = _mapLight; // share with the live map
+              }),
+            ),
+            IconButton(
+              icon: Icon(_follow ? Icons.my_location : Icons.location_searching, color: accent),
+              tooltip: _follow ? 'Following marker' : 'Free look',
+              onPressed: () => setState(() {
+                _follow = !_follow;
+                if (_follow) _recenterIfFollow();
+              }),
+            ),
+          ],
           IconButton(
-            icon: Icon(_showGraphs ? Icons.map : Icons.show_chart, color: const Color(0xFFB950D7)),
+            icon: Icon(_showGraphs ? Icons.map : Icons.show_chart, color: accent),
             tooltip: _showGraphs ? 'Map' : 'Graphs',
             onPressed: () => setState(() => _showGraphs = !_showGraphs),
           ),
           IconButton(
-            icon: const Icon(Icons.ios_share, color: Color(0xFFB950D7)),
+            icon: const Icon(Icons.ios_share, color: accent),
             tooltip: 'Share trip card',
             onPressed: () => TripShare.shareSummary(context, widget.tripData, widget.isMph),
           ),
@@ -222,20 +284,13 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
             options: MapOptions(
               initialCenter: _route.isNotEmpty ? _route.first : const LatLng(0, 0),
               initialZoom: 16,
+              onMapReady: () => _mapReady = true,
+              onPositionChanged: (camera, hasGesture) {
+                if (hasGesture && _follow) setState(() => _follow = false); // a manual pan drops follow
+              },
             ),
             children: [
-              ColorFiltered(
-                colorFilter: const ColorFilter.matrix([
-                  1.5, 0, 0, 0, 15,
-                  0, 1.5, 0, 0, 15,
-                  0, 0, 1.5, 0, 15,
-                  0, 0, 0, 1, 0,
-                ]),
-                child: TileLayer(
-                  urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                  subdomains: const ['a', 'b', 'c', 'd'],
-                ),
-              ),
+              _tileLayer(),
               PolylineLayer(
                 polylines: [
                   Polyline(
@@ -244,7 +299,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
                     color: const Color(0xFF8B5CF6).withValues(alpha: 0.5),
                   ),
                   Polyline(
-                    points: _route.sublist(0, _currentIndex + 1),
+                    points: _route.sublist(0, _idx + 1),
                     strokeWidth: 4.0,
                     color: const Color(0xFF8B5CF6),
                   ),
@@ -253,7 +308,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
               MarkerLayer(
                 markers: [
                   Marker(
-                    point: currentPos,
+                    point: _markerPos(),
                     width: 20,
                     height: 20,
                     child: Container(
@@ -316,14 +371,15 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
                             overlayColor: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
                           ),
                           child: Slider(
-                            value: _currentIndex.toDouble(),
+                            value: _pos.clamp(0, (_telemetry.length - 1).toDouble()),
                             min: 0,
                             max: (_telemetry.length - 1).toDouble(),
                             onChanged: (val) {
                               setState(() {
-                                _currentIndex = val.toInt();
+                                _pos = val;
                                 _isPlaying = false;
                               });
+                              _recenterIfFollow();
                             },
                           ),
                         ),
