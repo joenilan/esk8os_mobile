@@ -1,0 +1,78 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:esk8os_mobile/ble/esk8os_ble.dart';
+
+/// Tests for the BLE telemetry contract (spec §3). The board sends display-ready
+/// JSON numbers; these lock in the field mapping, defaults, and type coercion so
+/// a renamed/missing field (like the recently-added `tmov`) can't regress silently.
+void main() {
+  group('Telemetry.fromJson', () {
+    test('maps a full payload to the right fields', () {
+      final t = Telemetry.fromJson({
+        'spd': 24.5,
+        'bat': 73,
+        'v': 41.2,
+        'w': 850,
+        'mtr_t': 48,
+        'esc_t': 39,
+        'btemp': 31,
+        'rng': 18.4,
+        'max_s': 31.2,
+        'wh': 120,
+        'bata': 22.8,
+        'mota': 30.1,
+        'duty': 35,
+        'pkw': 1850,
+        'whr': 6,
+        'minv': 40.1,
+        'avs': 18.3,
+        'trip': 6.2,
+        'odo': 412.5,
+        'est': 21.7,
+        'eff': 22,
+        'fault': 0,
+        'rtime': 1843,
+        'tmov': 1290,
+      });
+
+      expect(t.speed, 24.5);
+      expect(t.battery, 73);
+      expect(t.volts, 41.2);
+      expect(t.watts, 850);
+      expect(t.trip, 6.2);
+      expect(t.odometer, 412.5);
+      expect(t.avgSpeed, 18.3);
+      expect(t.rideSeconds, 1843);
+      // The field this whole task hinged on:
+      expect(t.tripMovingSeconds, 1290);
+    });
+
+    test('tmov defaults to 0 when absent (older firmware)', () {
+      final t = Telemetry.fromJson({'spd': 10});
+      expect(t.tripMovingSeconds, 0);
+      expect(t.rideSeconds, 0);
+    });
+
+    test('missing numeric fields default to 0', () {
+      final t = Telemetry.fromJson({});
+      expect(t.speed, 0.0);
+      expect(t.battery, 0);
+      expect(t.trip, 0.0);
+      expect(t.fault, 0);
+    });
+
+    test('coerces int->double and double->int across the num/int split', () {
+      // spd is a double field, w is an int field. JSON may carry either.
+      final t = Telemetry.fromJson({'spd': 24, 'w': 850.0});
+      expect(t.speed, 24.0);
+      expect(t.speed, isA<double>());
+      expect(t.watts, 850);
+      expect(t.watts, isA<int>());
+    });
+
+    test('non-numeric values fall back to 0 rather than throwing', () {
+      final t = Telemetry.fromJson({'spd': 'fast', 'bat': null});
+      expect(t.speed, 0.0);
+      expect(t.battery, 0);
+    });
+  });
+}
