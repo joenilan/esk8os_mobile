@@ -50,7 +50,10 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   // The GPS updates ~every 5s but we log 1 Hz, so ~80% of points are duplicates;
   // the marker must glide between distinct fixes (spread over the duplicate span),
   // not interpolate between identical points (which looks like stop-go-stop-go).
-  final List<(double, LatLng)> _keyframes = [];
+  final List<(double, LatLng)> _keyframes = []; // (cumulativeDistance, position)
+  // Speed-integrated distance per point: lets the marker hold still at real stops
+  // (speed ~0) and glide while moving, instead of drifting across stopped time.
+  List<double> _cumDist = [];
   bool _isLoading = true;
   bool _mapReady = false;
 
@@ -98,19 +101,33 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
       if (_telemetry.length > 1) {
         _playCtrl.duration = Duration(milliseconds: (_maxPos * 80).round());
       }
-      // Build keyframes at the indices where the position actually moved (>0.5 m
-      // from the last keyframe), so the marker glides between real GPS fixes.
+      // Cumulative distance from speed (1 Hz log => +speed m each point). Deadband
+      // tiny speeds to 0 so stops are crisp (no drift). If there's no usable speed
+      // data, fall back to index so it still plays (just without true stops).
+      _cumDist = List<double>.filled(_telemetry.length, 0);
+      for (var i = 1; i < _telemetry.length; i++) {
+        final v = (_telemetry[i]['gpsSpeed'] as num?)?.toDouble() ?? 0.0; // m/s
+        _cumDist[i] = _cumDist[i - 1] + (v < 0.4 ? 0.0 : v);
+      }
+      if (_cumDist.isEmpty || _cumDist.last < 1.0) {
+        for (var i = 0; i < _cumDist.length; i++) {
+          _cumDist[i] = i.toDouble();
+        }
+      }
+      // Keyframes at distinct GPS positions, keyed by cumulative distance (must
+      // strictly increase — ignores GPS jitter while stopped).
       _keyframes.clear();
       if (_route.isNotEmpty) {
         _keyframes.add((0, _route.first));
         for (var i = 1; i < _route.length; i++) {
-          if (_dist(_route[i], _keyframes.last.$2) > 0.5) {
-            _keyframes.add((i.toDouble(), _route[i]));
+          if (_dist(_route[i], _keyframes.last.$2) > 0.5 && _cumDist[i] > _keyframes.last.$1) {
+            _keyframes.add((_cumDist[i], _route[i]));
           }
         }
-        // Ensure the marker reaches the very end.
-        final lastIdx = (_route.length - 1).toDouble();
-        if (_keyframes.last.$1 != lastIdx) _keyframes.add((lastIdx, _route.last));
+        final lastD = _cumDist[_route.length - 1];
+        if (_keyframes.last.$2 != _route.last && lastD > _keyframes.last.$1) {
+          _keyframes.add((lastD, _route.last));
+        }
       }
       // Cache the static full-route line once (identical instance => Flutter skips
       // rebuilding it each frame).
@@ -145,17 +162,20 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     return sqrt(dLat * dLat + dLng * dLng);
   }
 
-  /// Marker position at the current scrub time, interpolated between the two
-  /// bracketing KEYFRAMES (distinct GPS fixes) — so it glides continuously across
-  /// the duplicate-point stretches instead of stopping at each logged point.
+  /// Marker position at the current scrub time. Advances by speed-integrated
+  /// distance (so it HOLDS at real stops and glides while moving), mapped onto the
+  /// distinct-GPS-fix keyframes (so it glides across duplicate logged points).
   LatLng _markerPos() {
     if (_keyframes.isEmpty) return _route.isEmpty ? const LatLng(0, 0) : _route.first;
-    final p = _pos;
-    // Last keyframe whose index <= p (binary search).
+    // Traveled distance at the current playback time (interpolate cumDist by _pos).
+    final lo0 = _pos.floor().clamp(0, _cumDist.length - 1);
+    final hi0 = (lo0 + 1).clamp(0, _cumDist.length - 1);
+    final d = _cumDist[lo0] + (_cumDist[hi0] - _cumDist[lo0]) * (_pos - lo0);
+    // Keyframe segment containing distance d (binary search).
     int lo = 0, hi = _keyframes.length - 1;
     while (lo < hi) {
       final mid = (lo + hi + 1) >> 1;
-      if (_keyframes[mid].$1 <= p) {
+      if (_keyframes[mid].$1 <= d) {
         lo = mid;
       } else {
         hi = mid - 1;
@@ -164,7 +184,8 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     final a = _keyframes[lo];
     if (lo >= _keyframes.length - 1) return a.$2;
     final b = _keyframes[lo + 1];
-    final frac = ((p - a.$1) / (b.$1 - a.$1)).clamp(0.0, 1.0);
+    final span = b.$1 - a.$1;
+    final frac = span <= 0 ? 0.0 : ((d - a.$1) / span).clamp(0.0, 1.0);
     return LatLng(
       a.$2.latitude + (b.$2.latitude - a.$2.latitude) * frac,
       a.$2.longitude + (b.$2.longitude - a.$2.longitude) * frac,
