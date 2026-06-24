@@ -39,6 +39,19 @@ class HudView extends StatelessWidget {
           // Speed — big but not overpowering, MPH snug underneath.
           Expanded(child: Center(child: SpeedHero(value: t.speed.toStringAsFixed(0), unit: speedUnit))),
           const Divider(height: 1, thickness: 1, color: Esk8Theme.border),
+          const SizedBox(height: 8),
+          // Remote throttle/brake + signal-present icon (decoded PPM from the VESC).
+          Row(
+            children: [
+              Icon(
+                t.remoteConnected ? Icons.sports_esports : Icons.sports_esports_outlined,
+                size: 20,
+                color: t.remoteConnected ? Esk8Theme.green : Esk8Theme.dim,
+              ),
+              const SizedBox(width: 8),
+              Expanded(child: ThrottleBar(throttle: t.remoteConnected ? t.throttle : 0, height: 14)),
+            ],
+          ),
           const SizedBox(height: 10),
           SegmentedBattery(percent: t.battery, cells: cells),
           const SizedBox(height: 2),

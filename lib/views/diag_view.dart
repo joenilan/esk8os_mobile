@@ -90,7 +90,7 @@ class DiagView extends StatelessWidget {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  _ThrottleBar(throttle: connected ? t.throttle : 0),
+                  ThrottleBar(throttle: connected ? t.throttle : 0),
                   const SizedBox(height: 6),
                   Text(throttleLabel,
                       style: TextStyle(
@@ -143,48 +143,6 @@ class DiagView extends StatelessWidget {
           ],
         ),
       ],
-    );
-  }
-}
-
-/// Center-zero throttle bar: fills right (green) on accel, left (red) on brake.
-class _ThrottleBar extends StatelessWidget {
-  final double throttle; // -1..1
-  const _ThrottleBar({required this.throttle});
-
-  @override
-  Widget build(BuildContext context) {
-    final accel = throttle.clamp(0.0, 1.0).toDouble();
-    final brake = (-throttle).clamp(0.0, 1.0).toDouble();
-    return Container(
-      height: 30,
-      decoration: BoxDecoration(
-        color: Esk8Theme.scaffold,
-        border: Border.all(color: Esk8Theme.border),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerRight,
-              child: FractionallySizedBox(
-                widthFactor: brake,
-                child: Container(color: Esk8Theme.danger),
-              ),
-            ),
-          ),
-          Container(width: 2, color: Esk8Theme.label),
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: FractionallySizedBox(
-                widthFactor: accel,
-                child: Container(color: Esk8Theme.green),
-              ),
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

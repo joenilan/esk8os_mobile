@@ -397,6 +397,46 @@ class PageChrome extends StatelessWidget {
   }
 }
 
+/// Center-zero throttle bar: fills right (green) on accel, left (red) on brake.
+/// [throttle] is -1..1 (the VESC's decoded remote input).
+class ThrottleBar extends StatelessWidget {
+  final double throttle;
+  final double height;
+  const ThrottleBar({super.key, required this.throttle, this.height = 30});
+
+  @override
+  Widget build(BuildContext context) {
+    final accel = throttle.clamp(0.0, 1.0).toDouble();
+    final brake = (-throttle).clamp(0.0, 1.0).toDouble();
+    return Container(
+      height: height,
+      decoration: BoxDecoration(
+        color: Esk8Theme.scaffold,
+        border: Border.all(color: Esk8Theme.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerRight,
+              child: FractionallySizedBox(
+                  widthFactor: brake, child: Container(color: Esk8Theme.danger)),
+            ),
+          ),
+          Container(width: 2, color: Esk8Theme.label),
+          Expanded(
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: FractionallySizedBox(
+                  widthFactor: accel, child: Container(color: Esk8Theme.green)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// A row of equal-width tiles with consistent gaps. Tiles share width via
 /// [Expanded]; top-aligned (never stretch — that forces infinite height in the
 /// unbounded page columns).
