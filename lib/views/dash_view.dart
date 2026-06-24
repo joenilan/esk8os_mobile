@@ -43,7 +43,7 @@ class DashView extends StatelessWidget {
         Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SpeedHero(value: t.speed.toStringAsFixed(0), unit: speedUnit, maxSize: 92),
+            SpeedHero(value: '${t.speed.toInt()}', unit: speedUnit, maxSize: 92),
             const SizedBox(height: 10),
             StatRow([
               StatTile(label: 'Volts', value: t.volts.toStringAsFixed(1), unit: 'V', valueSize: 40, valueColor: Esk8Theme.green),

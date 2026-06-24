@@ -459,7 +459,7 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      Text(telemetry.speed.toStringAsFixed(0), style: Esk8Theme.number(38)),
+                      Text('${telemetry.speed.toInt()}', style: Esk8Theme.number(38)),
                       const SizedBox(width: 3),
                       Text(speedUnitStr, style: Esk8Theme.labelStyle),
                     ],
