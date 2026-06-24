@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart'; // Ticker for smooth map rotation
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
@@ -51,26 +52,41 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
   LatLng _mStart = const LatLng(0, 0), _mEnd = const LatLng(0, 0);
   LatLng? _smoothPos; // interpolated marker position currently displayed
 
-  // Live compass (magnetometer) — rotates the map in heading-up mode even when
-  // stopped. Throttled so we only rotate on a meaningful heading change.
+  // Heading-up rotation: sensor handlers just set _targetHeading; a Ticker eases
+  // the actually-rendered map rotation (_displayHeading) toward it every frame so
+  // the map glides instead of snapping in discrete steps (the old jitter).
   StreamSubscription<CompassEvent>? _compassSub;
-  double _appliedHeading = 0;
+  double _targetHeading = 0;   // desired heading (low-passed sensor input)
+  double _displayHeading = 0;  // currently-rendered map rotation
+  Ticker? _rotTicker;
 
   @override
   void initState() {
     super.initState();
     _rec.addListener(_onRec);
     _compassSub = FlutterCompass.events?.listen(_onCompass);
+    _rotTicker = createTicker(_onRotTick);
+    if (_headingUp) _rotTicker!.start();
     _initLocation();
   }
 
   @override
   void dispose() {
     _anim.dispose();
+    _rotTicker?.dispose();
     _compassSub?.cancel();
     _rec.removeListener(_onRec);
     // NB: do NOT stop the recorder here — recording must outlive this widget.
     super.dispose();
+  }
+
+  /// Each frame: ease the rendered map rotation toward the target heading so the
+  /// map turns smoothly. Idles (no redraw) once it's essentially aligned.
+  void _onRotTick(Duration _) {
+    if (!_headingUp || !mounted) return;
+    if (_angleDiff(_targetHeading, _displayHeading).abs() < 0.25) return;
+    _displayHeading = _smoothAngle(_displayHeading, _targetHeading, 0.18);
+    _mapController.rotate(-_displayHeading);
   }
 
   // Shortest signed difference a-b in [-180,180]; smooth a circular heading.
@@ -84,20 +100,15 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
   static double _smoothAngle(double cur, double target, double alpha) =>
       (cur + _angleDiff(target, cur) * alpha + 360) % 360;
 
-  double _hdgFilt = 0; // low-pass filtered magnetometer heading
-
   void _onCompass(CompassEvent e) {
     // Compass drives rotation only when essentially stopped; once moving, GPS
     // course (in _onRec) takes over — it's unambiguous, unlike a magnetometer.
+    // Just set the TARGET (low-passed to reject mag spikes); the ticker eases the
+    // map toward it smoothly.
     if (!_headingUp || !mounted || _rec.gpsSpeedKmh > 3) return;
     final h = e.heading;
     if (h == null) return;
-    // Low-pass the noisy magnetometer, and only re-rotate past a wider deadband,
-    // so the map doesn't micro-jitter/stutter on sensor noise.
-    _hdgFilt = _smoothAngle(_hdgFilt, h, 0.15);
-    if (_angleDiff(_hdgFilt, _appliedHeading).abs() < 4) return;
-    _appliedHeading = _hdgFilt;
-    _mapController.rotate(-_hdgFilt);
+    _targetHeading = _smoothAngle(_targetHeading, h, 0.3);
   }
 
   /// Glide the marker from its current displayed spot to the new GPS fix.
@@ -119,10 +130,13 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
   void _toggleHeadingUp() {
     setState(() => _headingUp = !_headingUp);
     AppPrefs.mapHeadingUp = _headingUp;
-    if (!_headingUp) {
-      _mapController.rotate(0); // back to north-up
+    if (_headingUp) {
+      _rotTicker?.start();
     } else {
-      _appliedHeading = 9999; // force the next compass event to apply
+      _rotTicker?.stop();
+      _displayHeading = 0;
+      _targetHeading = 0;
+      _mapController.rotate(0); // back to north-up
     }
   }
 
@@ -139,14 +153,10 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
       _animateMarkerTo(fix); // smooth glide (camera follows in _onAnimTick)
     }
     // While moving, GPS course (direction of travel) drives heading-up — far more
-    // reliable than the magnetometer, and orientation-independent.
+    // reliable than the magnetometer, and orientation-independent. Set the target;
+    // the ticker eases the map toward it.
     if (_headingUp && _rec.gpsSpeedKmh > 3) {
-      final c = _rec.heading;
-      if (_angleDiff(c, _appliedHeading).abs() >= 3) {   // wrap-safe deadband
-        _appliedHeading = c;
-        _hdgFilt = c;                                    // keep the filter in sync
-        _mapController.rotate(-c);
-      }
+      _targetHeading = _rec.heading;
     }
     setState(() {});
   }
