@@ -22,6 +22,7 @@ void main() {
         'mota': 30.1,
         'duty': 35,
         'pkw': 1850,
+        'mpw': 2100,
         'whr': 6,
         'minv': 40.1,
         'avs': 18.3,
@@ -45,6 +46,8 @@ void main() {
       expect(t.battery, 73);
       expect(t.volts, 41.2);
       expect(t.watts, 850);
+      expect(t.peakWatts, 1850);
+      expect(t.maxWattsSession, 2100);
       expect(t.trip, 6.2);
       expect(t.odometer, 412.5);
       expect(t.avgSpeed, 18.3);

@@ -17,9 +17,6 @@ class PowerView extends StatelessWidget {
     final t = telemetry;
     if (t == null) return const WaitingForTelemetry();
 
-    final isMph = settings?.mph == true;
-    final speedUnit = isMph ? 'mph' : 'km/h';
-
     return PageChrome(
       sections: [
         FieldSection(
@@ -28,7 +25,7 @@ class PowerView extends StatelessWidget {
             FieldRow(label: 'Motor', value: t.motorAmps.toStringAsFixed(1), unit: 'A'),
             FieldRow(label: 'Battery', value: t.batteryAmps.toStringAsFixed(1), unit: 'A'),
             FieldRow(label: 'Duty', value: '${t.duty}', unit: '%', valueColor: Esk8Theme.dutyColor(t.duty)),
-            FieldRow(label: 'Peak', value: '${t.peakWatts}', unit: 'W', valueColor: Esk8Theme.wattsColor(t.peakWatts)),
+            FieldRow(label: 'Peak (now)', value: '${t.peakWatts}', unit: 'W', valueColor: Esk8Theme.wattsColor(t.peakWatts)),
           ],
         ),
         FieldSection(
@@ -38,29 +35,16 @@ class PowerView extends StatelessWidget {
             FieldRow(label: 'Regen', value: '+${t.regenWh}', unit: 'Wh', valueColor: Esk8Theme.green),
           ],
         ),
-        FieldSection(
-          title: 'Speed',
-          rows: [
-            FieldRow(label: 'Max', value: t.maxSpeed.toStringAsFixed(1), unit: speedUnit),
-            FieldRow(label: 'Avg', value: t.avgSpeed.toStringAsFixed(1), unit: speedUnit),
-          ],
-        ),
+        // Speed max/avg lives on the TRIP page (deduped). Session mirrors the board:
+        // session-max power + session-min voltage. (Uptime lives on SYSTEM.)
         FieldSection(
           title: 'Session',
           rows: [
+            FieldRow(label: 'Max (ride)', value: '${t.maxWattsSession}', unit: 'W', valueColor: Esk8Theme.wattsColor(t.maxWattsSession)),
             FieldRow(label: 'Min Volt', value: t.minVolts.toStringAsFixed(1), unit: 'V'),
-            FieldRow(label: 'Ride', value: _hms(t.rideSeconds)),
           ],
         ),
       ],
     );
-  }
-
-  String _hms(int s) {
-    final h = s ~/ 3600;
-    final m = (s % 3600) ~/ 60;
-    final sec = s % 60;
-    if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
-    return '$m:${sec.toString().padLeft(2, '0')}';
   }
 }

@@ -57,7 +57,8 @@ class Telemetry {
   final double batteryAmps; // bata
   final double motorAmps; // mota
   final int duty; // duty (%)
-  final int peakWatts; // pkw
+  final int peakWatts; // pkw (live peak-hold W — "peak now")
+  final int maxWattsSession; // mpw (session max W — "max ride")
   final int regenWh; // whr
   final double minVolts; // minv
   final double avgSpeed; // avs
@@ -92,6 +93,7 @@ class Telemetry {
     this.motorAmps = 0.0,
     this.duty = 0,
     this.peakWatts = 0,
+    this.maxWattsSession = 0,
     this.regenWh = 0,
     this.minVolts = 0.0,
     this.avgSpeed = 0.0,
@@ -126,6 +128,7 @@ class Telemetry {
         motorAmps: _d(j['mota']),
         duty: _i(j['duty']),
         peakWatts: _i(j['pkw']),
+        maxWattsSession: _i(j['mpw']),
         regenWh: _i(j['whr']),
         minVolts: _d(j['minv']),
         avgSpeed: _d(j['avs']),

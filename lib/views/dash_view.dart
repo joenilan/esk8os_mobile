@@ -25,7 +25,6 @@ class DashView extends StatelessWidget {
     final isMph = settings?.mph == true;
     final speedUnit = isMph ? 'MPH' : 'KM/H';
     final distUnit = isMph ? 'mi' : 'km';
-    final effUnit = isMph ? 'wh/mi' : 'wh/km';
 
     return PageChrome(
       sections: [
@@ -49,12 +48,12 @@ class DashView extends StatelessWidget {
             FieldRow(label: 'ESC', value: '${t.escTempC}', unit: '°C', valueColor: _temp(t.escTempC)),
           ],
         ),
+        // Avg wh/dist (efficiency) lives on TRIP (deduped); keep Est/Remaining here.
         FieldSection(
           title: 'Range',
           rows: [
             FieldRow(label: 'Estimated', value: t.estRange.toStringAsFixed(1), unit: distUnit),
             FieldRow(label: 'Remaining', value: t.range.toStringAsFixed(1), unit: distUnit),
-            FieldRow(label: 'Avg', value: '${t.efficiency}', unit: effUnit),
           ],
         ),
       ],

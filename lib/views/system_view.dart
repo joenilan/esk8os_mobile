@@ -24,19 +24,13 @@ class SystemView extends StatelessWidget {
     if (t == null) return const WaitingForTelemetry();
     final s = settings;
 
-    final faultOk = t.fault == 0;
-
     return PageChrome(
       sections: [
+        // Fault detail lives on the DIAG page (deduped); SYSTEM is device/runtime.
         FieldSection(
           title: 'System',
           rows: [
             FieldRow(label: 'Runtime', value: _hms(t.rideSeconds)),
-            FieldRow(
-              label: 'Fault',
-              value: faultOk ? 'OK' : '${t.fault}',
-              valueColor: faultOk ? Esk8Theme.green : Esk8Theme.danger,
-            ),
             FieldRow(label: 'Link', value: 'BLE', valueColor: Esk8Theme.green),
           ],
         ),
