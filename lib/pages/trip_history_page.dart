@@ -51,6 +51,31 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
     _loadData();
   }
 
+  void _toast(String m) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  }
+
+  Future<void> _export() async {
+    try {
+      final n = await TripBackup.export();
+      _toast(n == 0 ? 'No rides to back up' : 'Backing up $n ride(s)…');
+    } catch (e) {
+      _toast('Export failed: $e');
+    }
+  }
+
+  Future<void> _import() async {
+    try {
+      final n = await TripBackup.import();
+      if (n > 0) {
+        _loadData();
+        _toast('Restored $n ride(s)');
+      }
+    } catch (e) {
+      _toast('Import failed: $e');
+    }
+  }
+
   String _formatDuration(int? startMs, int? endMs) {
     if (startMs == null || endMs == null) return 'Ongoing';
     final diff = Duration(milliseconds: endMs - startMs);
@@ -71,6 +96,16 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
         backgroundColor: const Color(0xFF1E1E1E),
         title: const Text('Trip History', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.upload, color: Color(0xFFB950D7)),
+            tooltip: 'Back up rides',
+            onPressed: _export,
+          ),
+          IconButton(
+            icon: const Icon(Icons.download, color: Color(0xFFB950D7)),
+            tooltip: 'Restore rides',
+            onPressed: _import,
+          ),
           Center(
             child: Padding(
               padding: const EdgeInsets.only(right: 16.0),

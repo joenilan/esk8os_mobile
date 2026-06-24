@@ -142,7 +142,20 @@ class DiagView extends StatelessWidget {
             FieldRow(label: 'Slave current', value: t.slaveMotorAmps.toStringAsFixed(1), unit: 'A'),
           ],
         ),
+        FieldSection(
+          title: 'System',
+          rows: [
+            FieldRow(label: 'Runtime', value: _hms(t.rideSeconds), valueSize: 22),
+            FieldRow(label: 'Link', value: 'BLE', valueColor: Esk8Theme.green, valueSize: 20),
+          ],
+        ),
       ],
     );
+  }
+
+  static String _hms(int s) {
+    final h = s ~/ 3600, m = (s % 3600) ~/ 60, sec = s % 60;
+    if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+    return '$m:${sec.toString().padLeft(2, '0')}';
   }
 }

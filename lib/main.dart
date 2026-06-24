@@ -21,11 +21,7 @@ import 'views/dash_view.dart';
 import 'views/diag_view.dart';
 import 'views/graphs_view.dart';
 import 'views/hud_view.dart';
-import 'views/logs_view.dart';
-import 'views/power_view.dart';
 import 'views/settings_summary_view.dart';
-import 'views/system_view.dart';
-import 'views/trip_stats_view.dart';
 import 'views/trip_view.dart';
 import 'widgets/confirm_dialog.dart';
 import 'widgets/esk8_theme.dart';
@@ -222,8 +218,8 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
 
   // Start deep in a large virtual range so the deck wraps both ways (last page
   // swipes back to the first, and vice-versa). _kLoopBase is a multiple of the
-  // page count so the initial page is HUD (index 0).
-  static const int _kLoopBase = 10000;
+  // page count so the initial page is HUD (index 0). 6006 % 6 == 0.
+  static const int _kLoopBase = 6006;
   final PageController _pageCtrl = PageController(initialPage: _kLoopBase);
   int _currentPage = 0;
   bool _showControls = false;
@@ -441,7 +437,10 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
 
   // App page -> board PageId. Mirrors the board's 8-page deck, plus the GPS MAP
   // which is app-only (-1 = no board sync; it leaves the board where it is).
-  static const _pageNames = ['HUD', 'DASH', 'POWER', 'TRIP', 'MAP', 'SETTINGS', 'SYSTEM', 'GRAPHS', 'LOGS', 'DIAG'];
+  // Consolidated phone deck (the board keeps its own 8 pages; the app no longer
+  // mirrors them 1:1). DASH absorbed POWER; TRIP is the map + stats + history;
+  // DIAG absorbed SYSTEM.
+  static const _pageNames = ['HUD', 'DASH', 'TRIP', 'GRAPHS', 'DIAG', 'SETTINGS'];
 
   void _onPageChanged(int index) {
     // App pages independently of the board now — the board self-navigates with its
@@ -528,21 +527,13 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
                               case 1:
                                 return DashView(telemetry: t, settings: _boardSettings);
                               case 2:
-                                return PowerView(telemetry: t, settings: _boardSettings);
-                              case 3:
-                                return TripStatsView(telemetry: t, settings: _boardSettings);
-                              case 4:
                                 return TripView(dev: widget.dev, telemetry: t, settings: _boardSettings);
-                              case 5:
-                                return SettingsSummaryView(dev: widget.dev, settings: _boardSettings, onEdited: _fetchSettings);
-                              case 6:
-                                return SystemView(telemetry: t, settings: _boardSettings);
-                              case 7:
+                              case 3:
                                 return GraphsView(telemetry: t, settings: _boardSettings);
-                              case 8:
-                                return LogsView(settings: _boardSettings);
-                              default:
+                              case 4:
                                 return DiagView(telemetry: t, settings: _boardSettings);
+                              default:
+                                return SettingsSummaryView(dev: widget.dev, settings: _boardSettings, onEdited: _fetchSettings);
                             }
                           },
                         ),
@@ -565,9 +556,9 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
                         ),
                       ),
 
-                      // On the MAP page swipes are consumed by the map (so you
-                      // can pan/rotate), so give explicit prev/next page buttons.
-                      if (_pageName(_currentPage) == 'MAP') ...[
+                      // On the TRIP (map) page swipes are consumed by the map (so
+                      // you can pan/rotate), so give explicit prev/next page buttons.
+                      if (_pageName(_currentPage) == 'TRIP') ...[
                         Positioned(
                           left: 6,
                           top: 0,
