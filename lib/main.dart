@@ -26,6 +26,7 @@ import 'views/settings_summary_view.dart';
 import 'views/system_view.dart';
 import 'views/trip_stats_view.dart';
 import 'views/trip_view.dart';
+import 'widgets/confirm_dialog.dart';
 import 'widgets/esk8_theme.dart';
 import 'widgets/esk8_widgets.dart';
 
@@ -374,6 +375,19 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
     }
   }
 
+  /// Confirm before a disruptive board command, then send it.
+  Future<void> _cmdConfirm(String command, String label, String message,
+      {String? confirmLabel}) async {
+    final ok = await confirmAction(
+      context,
+      title: '$label?',
+      message: message,
+      confirmLabel: confirmLabel ?? label,
+    );
+    if (!ok) return;
+    await _cmd(command, label);
+  }
+
   void _toast(String msg) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -535,14 +549,21 @@ class _DashboardPageState extends State<DashboardPage> with WidgetsBindingObserv
                                   spacing: 8,
                                   runSpacing: 8,
                                   children: [
-                                    _CmdButton('Trip Reset', () => _cmd(Esk8Commands.tripReset, 'Trip reset')),
+                                    _CmdButton('Trip Reset', () => _cmdConfirm(
+                                        Esk8Commands.tripReset, 'Trip Reset',
+                                        'Zeros the board\'s trip distance and moving-time. The lifetime odometer is unaffected.')),
                                     _CmdButton('WiFi Export / OTA', () {
                                       Navigator.of(context).push(
                                         MaterialPageRoute(builder: (_) => WifiExportPage(dev: widget.dev)),
                                       );
                                     }),
-                                    _CmdButton('Bridge Mode', () => _cmd(Esk8Commands.bridgeMode, 'Bridge mode')),
-                                    _CmdButton('Reboot', () => _cmd(Esk8Commands.reboot, 'Reboot')),
+                                    _CmdButton('Bridge Mode', () => _cmdConfirm(
+                                        Esk8Commands.bridgeMode, 'Bridge Mode',
+                                        'Puts the board into VESC passthrough — the dashboard stops until you exit bridge mode on the board.',
+                                        confirmLabel: 'Enter')),
+                                    _CmdButton('Reboot', () => _cmdConfirm(
+                                        Esk8Commands.reboot, 'Reboot',
+                                        'Restarts the board now. Telemetry will drop for a few seconds.')),
                                   ],
                                 ),
                               ],

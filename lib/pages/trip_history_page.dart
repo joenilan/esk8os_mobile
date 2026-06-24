@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../database/trip_database.dart';
 import '../services/trip_backup.dart';
+import '../widgets/confirm_dialog.dart';
 import 'trip_playback_page.dart';
 import 'package:intl/intl.dart';
 
@@ -38,6 +39,14 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
   }
 
   Future<void> _deleteTrip(int id) async {
+    final ok = await confirmAction(
+      context,
+      title: 'Delete trip?',
+      message: 'This permanently deletes the trip and its recorded telemetry. '
+          'This can\'t be undone.',
+      confirmLabel: 'Delete',
+    );
+    if (!ok) return;
     await TripDatabase.instance.deleteTrip(id);
     _loadData();
   }
