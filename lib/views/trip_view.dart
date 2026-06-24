@@ -73,15 +73,31 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  // Shortest signed difference a-b in [-180,180]; smooth a circular heading.
+  static double _angleDiff(double a, double b) {
+    var d = (a - b) % 360;
+    if (d > 180) d -= 360;
+    if (d < -180) d += 360;
+    return d;
+  }
+
+  static double _smoothAngle(double cur, double target, double alpha) =>
+      (cur + _angleDiff(target, cur) * alpha + 360) % 360;
+
+  double _hdgFilt = 0; // low-pass filtered magnetometer heading
+
   void _onCompass(CompassEvent e) {
     // Compass drives rotation only when essentially stopped; once moving, GPS
     // course (in _onRec) takes over — it's unambiguous, unlike a magnetometer.
     if (!_headingUp || !mounted || _rec.gpsSpeedKmh > 3) return;
     final h = e.heading;
     if (h == null) return;
-    if ((h - _appliedHeading).abs() < 2) return; // throttle jitter
-    _appliedHeading = h;
-    _mapController.rotate(-h);
+    // Low-pass the noisy magnetometer, and only re-rotate past a wider deadband,
+    // so the map doesn't micro-jitter/stutter on sensor noise.
+    _hdgFilt = _smoothAngle(_hdgFilt, h, 0.15);
+    if (_angleDiff(_hdgFilt, _appliedHeading).abs() < 4) return;
+    _appliedHeading = _hdgFilt;
+    _mapController.rotate(-_hdgFilt);
   }
 
   /// Glide the marker from its current displayed spot to the new GPS fix.
@@ -126,8 +142,9 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     // reliable than the magnetometer, and orientation-independent.
     if (_headingUp && _rec.gpsSpeedKmh > 3) {
       final c = _rec.heading;
-      if ((c - _appliedHeading).abs() >= 2) {
+      if (_angleDiff(c, _appliedHeading).abs() >= 3) {   // wrap-safe deadband
         _appliedHeading = c;
+        _hdgFilt = c;                                    // keep the filter in sync
         _mapController.rotate(-c);
       }
     }
@@ -225,6 +242,12 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     final isTracking = _rec.isRecording;
     final route = _rec.route;
     final pos = _rec.currentPosition ?? _initialCenter;
+    // Draw the traveled line ENDING at the smoothed marker (not the raw latest
+    // fix), so the line tip and the marker glide together instead of the line
+    // snapping ahead and the marker visibly chasing it.
+    final linePoints = (_smoothPos != null && route.length >= 2)
+        ? [...route.sublist(0, route.length - 1), _smoothPos!]
+        : route;
 
     // ── TRIP DISTANCE + TIME come from the BOARD (canonical, matches the board
     // screen): wheel distance and moving-time, independent of the phone. GPS still
@@ -291,11 +314,11 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                   subdomains: const ['a', 'b', 'c', 'd'],
                 ),
               ),
-            if (route.length >= 2)
+            if (linePoints.length >= 2)
               PolylineLayer(
                 polylines: [
                   Polyline(
-                    points: route,
+                    points: linePoints,
                     strokeWidth: 4.0,
                     color: Esk8Theme.accent,
                   ),

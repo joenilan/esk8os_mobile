@@ -21,8 +21,12 @@ class TripPlaybackPage extends StatefulWidget {
   State<TripPlaybackPage> createState() => _TripPlaybackPageState();
 }
 
-class _TripPlaybackPageState extends State<TripPlaybackPage> {
+class _TripPlaybackPageState extends State<TripPlaybackPage>
+    with SingleTickerProviderStateMixin {
   final MapController _mapController = MapController();
+  // Drives playback at vsync (60 fps) so the marker glides continuously instead
+  // of stepping; value 0..1 maps to the fractional scrub position _pos.
+  late final AnimationController _playCtrl;
   List<Map<String, dynamic>> _telemetry = [];
   List<LatLng> _route = [];
   bool _isLoading = true;
@@ -43,8 +47,19 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
   @override
   void initState() {
     super.initState();
+    _playCtrl = AnimationController(vsync: this)
+      ..addListener(() {
+        if (!mounted) return;
+        setState(() => _pos = _playCtrl.value * _maxPos);
+        _recenterIfFollow();
+      })
+      ..addStatusListener((s) {
+        if (s == AnimationStatus.completed && mounted) setState(() => _isPlaying = false);
+      });
     _loadTelemetry();
   }
+
+  double get _maxPos => (_telemetry.length - 1).clamp(1, 1 << 30).toDouble();
 
   Future<void> _loadTelemetry() async {
     final data = await TripDatabase.instance.getTripTelemetry(widget.tripId);
@@ -54,6 +69,10 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
         _route = data.map((t) => LatLng(t['lat'] as double, t['lng'] as double)).toList();
         _isLoading = false;
       });
+      // ~50 ms per recorded point (~20x for 1 Hz fixes); scrubbable either way.
+      if (_telemetry.length > 1) {
+        _playCtrl.duration = Duration(milliseconds: (_maxPos * 50).round());
+      }
 
       if (_route.isNotEmpty) {
         // Delay map fit bounds slightly so map is ready
@@ -94,30 +113,21 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
   }
 
   void _togglePlayback() {
-    if (_telemetry.isEmpty) return;
-    setState(() => _isPlaying = !_isPlaying);
+    if (_telemetry.length < 2) return;
     if (_isPlaying) {
-      if (_pos >= _telemetry.length - 1) _pos = 0;
-      _playLoop();
+      _playCtrl.stop();
+      setState(() => _isPlaying = false);
+    } else {
+      // Resume from the current scrub spot (or restart if at the end).
+      final from = (_pos >= _maxPos) ? 0.0 : _pos / _maxPos;
+      _playCtrl.forward(from: from);
+      setState(() => _isPlaying = true);
     }
-  }
-
-  Future<void> _playLoop() async {
-    final maxPos = (_telemetry.length - 1).toDouble();
-    // Step the fractional position in small increments at ~20 fps so the marker
-    // glides between points (faster than real-time to watch a long trip quickly).
-    while (_isPlaying && _pos < maxPos) {
-      await Future.delayed(const Duration(milliseconds: 50));
-      if (!mounted || !_isPlaying) break;
-      setState(() => _pos = (_pos + 0.3).clamp(0, maxPos));
-      _recenterIfFollow();
-    }
-    if (_pos >= maxPos && mounted) setState(() => _isPlaying = false);
   }
 
   @override
   void dispose() {
-    _isPlaying = false;
+    _playCtrl.dispose();
     super.dispose();
   }
 
@@ -375,10 +385,12 @@ class _TripPlaybackPageState extends State<TripPlaybackPage> {
                             min: 0,
                             max: (_telemetry.length - 1).toDouble(),
                             onChanged: (val) {
+                              _playCtrl.stop();
                               setState(() {
                                 _pos = val;
                                 _isPlaying = false;
                               });
+                              _playCtrl.value = (val / _maxPos).clamp(0.0, 1.0);
                               _recenterIfFollow();
                             },
                           ),
