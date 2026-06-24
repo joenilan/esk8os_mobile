@@ -35,14 +35,25 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   int _trailForIdx = -1;
 
   static const _routeColor = Color(0xFF8B5CF6);
+  // Static marker dot (const) — only its position changes, so it never rebuilds.
+  static const Widget _markerDot = DecoratedBox(
+    decoration: BoxDecoration(
+      color: Colors.white,
+      shape: BoxShape.circle,
+      border: Border.fromBorderSide(BorderSide(color: _routeColor, width: 3)),
+      boxShadow: [BoxShadow(color: Color(0xCC8B5CF6), blurRadius: 10, spreadRadius: 2)],
+    ),
+  );
   List<Map<String, dynamic>> _telemetry = [];
   List<LatLng> _route = [];
   bool _isLoading = true;
   bool _mapReady = false;
 
-  // Fractional scrub position (0..len-1) so the marker can sit *between* points
-  // and glide smoothly instead of teleporting from corner to corner.
-  double _pos = 0;
+  // Fractional scrub position (0..len-1), DERIVED from the controller so the
+  // marker can sit between points and glide. Reading it from the controller (not
+  // a setState-updated field) lets us animate the marker via AnimatedBuilder
+  // WITHOUT rebuilding the whole map every frame (that was the real stutter).
+  double get _pos => _telemetry.length < 2 ? 0.0 : _playCtrl.value * _maxPos;
   bool _isPlaying = false;
   bool _showGraphs = false;
   // Map style is shared with the live trip map (AppPrefs.mapLight) so playback
@@ -57,9 +68,10 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     super.initState();
     _playCtrl = AnimationController(vsync: this)
       ..addListener(() {
-        if (!mounted) return;
-        setState(() => _pos = _playCtrl.value * _maxPos);
-        _recenterIfFollow();
+        // No setState here — the marker/trail/stats/slider are AnimatedBuilders on
+        // this controller, so they repaint WITHOUT rebuilding the map (the cause of
+        // the pulsing). Only follow-mode needs to move the camera per frame.
+        if (mounted && _follow) _recenterIfFollow();
       })
       ..addStatusListener((s) {
         if (s == AnimationStatus.completed && mounted) setState(() => _isPlaying = false);
@@ -272,15 +284,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
       );
     }
 
-    final currentData = _telemetry[_idx];
-    final timestamp = DateTime.fromMillisecondsSinceEpoch(currentData['timestamp'] as int);
-
     final speedUnitStr = widget.isMph ? 'mph' : 'km/h';
-    final rawGpsSpeed = currentData['gpsSpeed'] as double;
-    final rawBoardSpeed = currentData['boardSpeed'] as double;
-
-    final gpsSpeedDisplay = widget.isMph ? (rawGpsSpeed / 1.60934) : rawGpsSpeed;
-
     const accent = Color(0xFFB950D7);
     return Scaffold(
       backgroundColor: Colors.black,
@@ -333,29 +337,17 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
             children: [
               _tileLayer(),
               ?_routeLayer, // cached static full route (skipped while still loading)
-              _buildTrailLayer(),                       // memoized on _idx
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: _markerPos(),
-                    width: 20,
-                    height: 20,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: const Color(0xFF8B5CF6), width: 3),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF8B5CF6).withValues(alpha: 0.8),
-                            blurRadius: 10,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+              // The trail + marker animate on the controller WITHOUT rebuilding the
+              // map (tiles/route stay put), so the marker glides at vsync. No page
+              // setState happens during playback.
+              AnimatedBuilder(animation: _playCtrl, builder: (_, _) => _buildTrailLayer()),
+              AnimatedBuilder(
+                animation: _playCtrl,
+                builder: (_, _) => MarkerLayer(
+                  markers: [
+                    Marker(point: _markerPos(), width: 20, height: 20, child: _markerDot),
+                  ],
+                ),
               ),
             ],
           ),
@@ -371,53 +363,60 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
                 color: Color(0xDD1E1E1E),
                 border: Border(top: BorderSide(color: Color(0xFF333333))),
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  // Stats row
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              // Stats + slider update on the controller (no page rebuild), so they
+              // track playback in sync with the gliding marker.
+              child: AnimatedBuilder(
+                animation: _playCtrl,
+                builder: (context, _) {
+                  final data = _telemetry[_idx];
+                  final ts = DateTime.fromMillisecondsSinceEpoch(data['timestamp'] as int);
+                  final gps = widget.isMph ? (data['gpsSpeed'] as double) / 1.60934 : data['gpsSpeed'] as double;
+                  final board = data['boardSpeed'] as double;
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      _StatColumn('Time', DateFormat('h:mm:ss a').format(timestamp)),
-                      _StatColumn('GPS Speed', '${gpsSpeedDisplay.toStringAsFixed(1)} $speedUnitStr'),
-                      _StatColumn('Board Speed', '${rawBoardSpeed.toStringAsFixed(1)} $speedUnitStr'),
-                      _StatColumn('Battery', '${currentData['battery']}%'),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: const Color(0xFF8B5CF6), size: 32),
-                        onPressed: _togglePlayback,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _StatColumn('Time', DateFormat('h:mm:ss a').format(ts)),
+                          _StatColumn('GPS Speed', '${gps.toStringAsFixed(1)} $speedUnitStr'),
+                          _StatColumn('Board Speed', '${board.toStringAsFixed(1)} $speedUnitStr'),
+                          _StatColumn('Battery', '${data['battery']}%'),
+                        ],
                       ),
-                      Expanded(
-                        child: SliderTheme(
-                          data: SliderThemeData(
-                            activeTrackColor: const Color(0xFF8B5CF6),
-                            inactiveTrackColor: const Color(0xFF333333),
-                            thumbColor: Colors.white,
-                            overlayColor: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          IconButton(
+                            icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: const Color(0xFF8B5CF6), size: 32),
+                            onPressed: _togglePlayback,
                           ),
-                          child: Slider(
-                            value: _pos.clamp(0, (_telemetry.length - 1).toDouble()),
-                            min: 0,
-                            max: (_telemetry.length - 1).toDouble(),
-                            onChanged: (val) {
-                              _playCtrl.stop();
-                              setState(() {
-                                _pos = val;
-                                _isPlaying = false;
-                              });
-                              _playCtrl.value = (val / _maxPos).clamp(0.0, 1.0);
-                              _recenterIfFollow();
-                            },
+                          Expanded(
+                            child: SliderTheme(
+                              data: SliderThemeData(
+                                activeTrackColor: const Color(0xFF8B5CF6),
+                                inactiveTrackColor: const Color(0xFF333333),
+                                thumbColor: Colors.white,
+                                overlayColor: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                              ),
+                              child: Slider(
+                                value: _pos.clamp(0, (_telemetry.length - 1).toDouble()),
+                                min: 0,
+                                max: (_telemetry.length - 1).toDouble(),
+                                onChanged: (val) {
+                                  _playCtrl.stop();
+                                  _playCtrl.value = (val / _maxPos).clamp(0.0, 1.0);
+                                  if (_isPlaying) setState(() => _isPlaying = false);
+                                  _recenterIfFollow();
+                                },
+                              ),
+                            ),
                           ),
-                        ),
+                        ],
                       ),
                     ],
-                  ),
-                ],
+                  );
+                },
               ),
             ),
           ),
