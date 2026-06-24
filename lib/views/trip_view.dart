@@ -456,7 +456,7 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                     _miniRow('MOVE', gpsMovingAvgDisplay.toStringAsFixed(1), 'CLIMB $climbUnit', climbDisplay.toStringAsFixed(0)),
                     const SizedBox(height: 8),
                     // Board-canonical efficiency + lifetime odometer.
-                    _miniRow('EFF wh/${isMph ? 'mi' : 'km'}', '${telemetry.efficiency}', 'ODO $unitStr', telemetry.odometer.toStringAsFixed(0)),
+                    _miniRow('EFF wh/${isMph ? 'mi' : 'km'}', '${telemetry.efficiency}', 'ODO $unitStr', telemetry.odometer.toStringAsFixed(1)),
                   ],
                 ],
               ),

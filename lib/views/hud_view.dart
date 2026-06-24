@@ -27,6 +27,7 @@ class HudView extends StatelessWidget {
     final speedUnit = isMph ? 'MPH' : 'KM/H';
     final distUnit = isMph ? 'MI' : 'KM';
     final cells = settings?.batterySeries ?? 12;
+    final hottestTemp = [t.motorTempC, t.escTempC, t.batteryTempC].reduce((a, b) => a > b ? a : b);
 
     // Display values are whole numbers (precision lives in the logs); dropping
     // the decimals frees width so the cell numbers can be big and glanceable.
@@ -64,8 +65,10 @@ class HudView extends StatelessWidget {
           ]),
           const SizedBox(height: 8),
           StatRow([
-            StatTile(label: 'Range', value: t.range.toStringAsFixed(0), unit: distUnit, valueSize: cellSize, padding: cellPad),
-            StatTile(label: 'Temp', value: '${t.motorTempC}', unit: '°C', valueSize: cellSize, padding: cellPad, valueColor: _tempColor(t.motorTempC)),
+            StatTile(label: 'Range', value: t.range.toStringAsFixed(1), unit: distUnit, valueSize: cellSize, padding: cellPad),
+            // Hottest of the three sensors — motor/battery often have no thermistor
+            // (read 0), so showing motor alone misleads; surface the real worst temp.
+            StatTile(label: 'Temp', value: '$hottestTemp', unit: '°C', valueSize: cellSize, padding: cellPad, valueColor: _tempColor(hottestTemp)),
           ]),
         ],
       ),
