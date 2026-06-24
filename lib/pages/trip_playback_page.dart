@@ -27,6 +27,14 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   // Drives playback at vsync (60 fps) so the marker glides continuously instead
   // of stepping; value 0..1 maps to the fractional scrub position _pos.
   late final AnimationController _playCtrl;
+  // Cached map layers so the heavy 1578-pt route line isn't rebuilt/re-simplified
+  // every animation frame (that was dropping frames -> the marker "pulsed"). The
+  // full route is fully static; the trail only changes when _idx crosses a point.
+  Widget? _routeLayer;
+  Widget? _trailLayer;
+  int _trailForIdx = -1;
+
+  static const _routeColor = Color(0xFF8B5CF6);
   List<Map<String, dynamic>> _telemetry = [];
   List<LatLng> _route = [];
   bool _isLoading = true;
@@ -69,9 +77,18 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
         _route = data.map((t) => LatLng(t['lat'] as double, t['lng'] as double)).toList();
         _isLoading = false;
       });
-      // ~50 ms per recorded point (~20x for 1 Hz fixes); scrubbable either way.
+      // ~80 ms per recorded point; scrubbable either way.
       if (_telemetry.length > 1) {
-        _playCtrl.duration = Duration(milliseconds: (_maxPos * 50).round());
+        _playCtrl.duration = Duration(milliseconds: (_maxPos * 80).round());
+      }
+      // Cache the static full-route line once (identical instance => Flutter skips
+      // rebuilding it each frame).
+      if (_route.length >= 2) {
+        _routeLayer = PolylineLayer(
+          polylines: [
+            Polyline(points: _route, strokeWidth: 4.0, color: _routeColor.withValues(alpha: 0.5)),
+          ],
+        );
       }
 
       if (_route.isNotEmpty) {
@@ -103,6 +120,20 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
       a.latitude + (b.latitude - a.latitude) * frac,
       a.longitude + (b.longitude - a.longitude) * frac,
     );
+  }
+
+  /// Traveled-trail line — rebuilt only when the integer point index changes
+  /// (not every frame), so it doesn't re-simplify the growing path 60x/sec.
+  Widget _buildTrailLayer() {
+    if (_trailLayer == null || _trailForIdx != _idx) {
+      _trailForIdx = _idx;
+      _trailLayer = PolylineLayer(
+        polylines: [
+          Polyline(points: _route.sublist(0, _idx + 1), strokeWidth: 4.0, color: _routeColor),
+        ],
+      );
+    }
+    return _trailLayer!;
   }
 
   void _recenterIfFollow() {
@@ -301,20 +332,8 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
             ),
             children: [
               _tileLayer(),
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: _route,
-                    strokeWidth: 4.0,
-                    color: const Color(0xFF8B5CF6).withValues(alpha: 0.5),
-                  ),
-                  Polyline(
-                    points: _route.sublist(0, _idx + 1),
-                    strokeWidth: 4.0,
-                    color: const Color(0xFF8B5CF6),
-                  ),
-                ],
-              ),
+              ?_routeLayer, // cached static full route (skipped while still loading)
+              _buildTrailLayer(),                       // memoized on _idx
               MarkerLayer(
                 markers: [
                   Marker(
