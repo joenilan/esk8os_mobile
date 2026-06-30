@@ -5,8 +5,9 @@ import 'package:file_selector/file_selector.dart';
 
 import '../ble/esk8os_ble.dart';
 import '../wifi/wifi_service.dart';
+import '../widgets/esk8_theme.dart';
 
-const _accent = Color(0xFFB950D7);
+Color get _accent => Esk8Theme.accent; // follows the board's selected theme
 
 class WifiExportPage extends StatefulWidget {
   final Esk8Device dev;
@@ -20,7 +21,7 @@ class _WifiExportPageState extends State<WifiExportPage> {
   int _step = 0; // 0: Start, 1: Connect, 2: Action
   bool _loading = false;
   String? _error;
-  
+
   List<String>? _logs;
   bool _uploading = false;
 
@@ -80,7 +81,8 @@ class _WifiExportPageState extends State<WifiExportPage> {
       });
     } catch (e) {
       setState(() {
-        _error = 'Failed to connect to board WiFi. Are you connected to ESK8-BRIDGE?';
+        _error =
+            'Failed to connect to board WiFi. Are you connected to ESK8-BRIDGE?';
         _loading = false;
       });
     }
@@ -101,14 +103,16 @@ class _WifiExportPageState extends State<WifiExportPage> {
   Future<void> _pickAndUploadOta() async {
     try {
       const XTypeGroup typeGroup = XTypeGroup(extensions: <String>['bin']);
-      final XFile? result = await openFile(acceptedTypeGroups: <XTypeGroup>[typeGroup]);
+      final XFile? result = await openFile(
+        acceptedTypeGroups: <XTypeGroup>[typeGroup],
+      );
 
       if (result != null) {
         final file = File(result.path);
         setState(() => _uploading = true);
-        
+
         await WifiService.uploadOta(file);
-        
+
         _toast('OTA Success! Board will restart.');
         // After OTA, board restarts, so we drop out.
         if (mounted) Navigator.of(context).pop();
@@ -123,16 +127,14 @@ class _WifiExportPageState extends State<WifiExportPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('WiFi Export & OTA'),
-      ),
+      appBar: AppBar(title: const Text('WiFi Export & OTA')),
       body: _buildBody(),
     );
   }
 
   Widget _buildBody() {
     if (_uploading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -140,7 +142,10 @@ class _WifiExportPageState extends State<WifiExportPage> {
             SizedBox(height: 16),
             Text('Uploading Firmware...', style: TextStyle(fontSize: 18)),
             SizedBox(height: 8),
-            Text('Do not close the app or turn off the board.', style: TextStyle(color: Colors.grey)),
+            Text(
+              'Do not close the app or turn off the board.',
+              style: TextStyle(color: Colors.grey),
+            ),
           ],
         ),
       );
@@ -148,7 +153,8 @@ class _WifiExportPageState extends State<WifiExportPage> {
 
     return Stepper(
       currentStep: _step,
-      controlsBuilder: (context, details) => const SizedBox.shrink(), // Custom controls inside steps
+      controlsBuilder: (context, details) =>
+          const SizedBox.shrink(), // Custom controls inside steps
       steps: [
         Step(
           title: const Text('Enable Board WiFi'),
@@ -157,12 +163,21 @@ class _WifiExportPageState extends State<WifiExportPage> {
           content: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('This will command the board to raise its high-speed WiFi network for file transfers.'),
+              const Text(
+                'This will command the board to raise its high-speed WiFi network for file transfers.',
+              ),
               const SizedBox(height: 16),
-              if (_error != null && _step == 0) Text(_error!, style: const TextStyle(color: Colors.redAccent)),
+              if (_error != null && _step == 0)
+                Text(_error!, style: const TextStyle(color: Colors.redAccent)),
               FilledButton(
                 onPressed: _loading ? null : _startExport,
-                child: _loading ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Start WiFi Export'),
+                child: _loading
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Start WiFi Export'),
               ),
             ],
           ),
@@ -174,10 +189,12 @@ class _WifiExportPageState extends State<WifiExportPage> {
           content: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('1. Open your phone\'s WiFi settings.\n'
-                         '2. Connect to the network: ESK8-BRIDGE\n'
-                         '3. Password: esk8bridge\n\n'
-                         'IMPORTANT: If Android asks if you want to stay connected to a network with no internet, tap YES.'),
+              const Text(
+                '1. Open your phone\'s WiFi settings.\n'
+                '2. Connect to the network: ESK8-BRIDGE\n'
+                '3. Password: esk8bridge\n\n'
+                'IMPORTANT: If Android asks if you want to stay connected to a network with no internet, tap YES.',
+              ),
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: _confirmConnected,
@@ -196,36 +213,55 @@ class _WifiExportPageState extends State<WifiExportPage> {
               if (_error != null && _step == 2) ...[
                 Text(_error!, style: const TextStyle(color: Colors.redAccent)),
                 const SizedBox(height: 12),
-                OutlinedButton(onPressed: _fetchLogs, child: const Text('Retry Connection')),
+                OutlinedButton(
+                  onPressed: _fetchLogs,
+                  child: const Text('Retry Connection'),
+                ),
                 const Divider(height: 32),
               ],
-              
-              const Text('Ride Logs', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+
+              const Text(
+                'Board Session Logs',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               if (_loading && _logs == null)
                 const Center(child: CircularProgressIndicator())
               else if (_logs == null || _logs!.isEmpty)
-                const Text('No logs found.', style: TextStyle(color: Colors.grey))
+                const Text(
+                  'No logs found.',
+                  style: TextStyle(color: Colors.grey),
+                )
               else
-                ..._logs!.map((log) => ListTile(
-                  title: Text(log),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.download, color: _accent),
-                    onPressed: _loading ? null : () => _downloadLog(log),
+                ..._logs!.map(
+                  (log) => ListTile(
+                    title: Text(log),
+                    trailing: IconButton(
+                      icon: Icon(Icons.download, color: _accent),
+                      onPressed: _loading ? null : () => _downloadLog(log),
+                    ),
                   ),
-                )),
+                ),
 
               const Divider(height: 32),
 
-              const Text('Firmware Update (OTA)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const Text(
+                'Firmware Update (OTA)',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
-              const Text('Select a .bin file to update the board firmware.', style: TextStyle(color: Colors.grey)),
+              const Text(
+                'Select a .bin file to update the board firmware.',
+                style: TextStyle(color: Colors.grey),
+              ),
               const SizedBox(height: 16),
               FilledButton.icon(
                 onPressed: _pickAndUploadOta,
                 icon: const Icon(Icons.system_update_alt),
                 label: const Text('Select Firmware & Update'),
-                style: FilledButton.styleFrom(backgroundColor: Colors.orange.shade800),
+                style: FilledButton.styleFrom(
+                  backgroundColor: Colors.orange.shade800,
+                ),
               ),
             ],
           ),

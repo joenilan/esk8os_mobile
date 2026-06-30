@@ -32,7 +32,8 @@ class TripView extends StatefulWidget {
   State<TripView> createState() => _TripViewState();
 }
 
-class _TripViewState extends State<TripView> with TickerProviderStateMixin {
+class _TripViewState extends State<TripView>
+    with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   final MapController _mapController = MapController();
   final TripRecorder _rec = TripRecorder.instance;
 
@@ -47,17 +48,20 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
 
   // Smooth marker: GPS fixes arrive ~every few metres, so we tween the marker
   // (and the followed camera) between fixes instead of snapping/teleporting.
-  late final AnimationController _anim =
-      AnimationController(vsync: this, duration: const Duration(milliseconds: 900))..addListener(_onAnimTick);
+  late final AnimationController _anim = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 900),
+  )..addListener(_onAnimTick);
   LatLng _mStart = const LatLng(0, 0), _mEnd = const LatLng(0, 0);
   LatLng? _smoothPos; // interpolated marker position currently displayed
+  DateTime? _lastFixAt; // arrival time of the previous fix — paces the glide
 
   // Heading-up rotation: sensor handlers just set _targetHeading; a Ticker eases
   // the actually-rendered map rotation (_displayHeading) toward it every frame so
   // the map glides instead of snapping in discrete steps (the old jitter).
   StreamSubscription<CompassEvent>? _compassSub;
-  double _targetHeading = 0;   // desired heading (low-passed sensor input)
-  double _displayHeading = 0;  // currently-rendered map rotation
+  double _targetHeading = 0; // desired heading (low-passed sensor input)
+  double _displayHeading = 0; // currently-rendered map rotation
   Ticker? _rotTicker;
 
   @override
@@ -111,15 +115,36 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     _targetHeading = _smoothAngle(_targetHeading, h, 0.3);
   }
 
-  /// Glide the marker from its current displayed spot to the new GPS fix.
+  /// Glide the marker from its current displayed spot to the new GPS fix, paced to
+  /// the MEASURED gap between fixes. A fixed-duration tween teleports: when fixes
+  /// outrun it (fast riding, distanceFilter 3 m → a fix every ~0.3 s) the marker
+  /// rides a constant lag that snaps forward whenever fixes pause (a stop, tree
+  /// cover, a GPS gap). Tweening over ~the last interval makes the marker arrive
+  /// about when the next fix lands, so there's no accumulated lag left to snap.
   void _animateMarkerTo(LatLng dest) {
+    // Ignore repeat notifications that don't move the target (pause/resume/stop):
+    // re-tweening to the same point would corrupt the interval pacing below.
+    if (dest.latitude == _mEnd.latitude && dest.longitude == _mEnd.longitude) {
+      return;
+    }
+    final now = DateTime.now();
+    final gapMs = _lastFixAt == null
+        ? 900
+        : now.difference(_lastFixAt!).inMilliseconds;
+    _lastFixAt = now;
+    // Clamp: the floor stops very frequent fixes from a frantic glide; the ceiling
+    // keeps a post-gap catch-up brisk (not a slow multi-second crawl) yet still a
+    // glide rather than a teleport.
+    _anim.duration = Duration(milliseconds: gapMs.clamp(250, 1500));
     _mStart = _smoothPos ?? dest;
     _mEnd = dest;
     _anim.forward(from: 0);
   }
 
   void _onAnimTick() {
-    final t = Curves.linear.transform(_anim.value); // steady glide between fixes
+    final t = Curves.linear.transform(
+      _anim.value,
+    ); // steady glide between fixes
     final lat = _mStart.latitude + (_mEnd.latitude - _mStart.latitude) * t;
     final lng = _mStart.longitude + (_mEnd.longitude - _mStart.longitude) * t;
     _smoothPos = LatLng(lat, lng);
@@ -198,11 +223,16 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     if (_rec.isRecording) {
       await _rec.stop();
     } else {
-      final ok = await _rec.start(widget.dev);
+      final ok = await _rec.start(
+        widget.dev,
+        isMph: widget.settings?.mph ?? true,
+      );
       if (!ok && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Location permission/service required to record'),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Location permission/service required to record'),
+          ),
+        );
         return;
       }
       if (_rec.currentPosition != null) {
@@ -222,27 +252,41 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
   }
 
   Widget _miniStat(String label, String value) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(value, style: Esk8Theme.number(17)),
-          Text(label, style: const TextStyle(fontSize: 8, color: Esk8Theme.dim, letterSpacing: 0.5, fontWeight: FontWeight.bold)),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(value, style: Esk8Theme.number(17)),
+      Text(
+        label,
+        style: TextStyle(
+          fontSize: 8,
+          color: Esk8Theme.dim,
+          letterSpacing: 0.5,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    ],
+  );
 
   Widget _miniRow(String l1, String v1, String l2, String v2) => Row(
-        children: [
-          Expanded(child: _miniStat(l1, v1)),
-          Expanded(child: _miniStat(l2, v2)),
-        ],
-      );
+    children: [
+      Expanded(child: _miniStat(l1, v1)),
+      Expanded(child: _miniStat(l2, v2)),
+    ],
+  );
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     final telemetry = widget.telemetry;
     final settings = widget.settings;
 
     if (telemetry == null) {
-      return const Center(child: Text('Waiting for telemetry…', style: TextStyle(color: Colors.white)));
+      return const Center(
+        child: Text(
+          'Waiting for telemetry…',
+          style: TextStyle(color: Colors.white),
+        ),
+      );
     }
 
     final isMph = settings?.mph == true;
@@ -267,12 +311,20 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
     final boardMovingTime = Duration(seconds: telemetry.tripMovingSeconds);
     // ── TRIP STATS (GPS-measured, per recording) — all 0 until you start ──
     // GPS trip distance is shown as a compare against the board's wheel distance.
-    final gpsTripDistDisplay = isMph ? (_rec.gpsDistanceM / 1609.34) : (_rec.gpsDistanceM / 1000.0);
-    final gpsMaxSpeedDisplay = isMph ? (_rec.gpsMaxSpeedKmh / 1.60934) : _rec.gpsMaxSpeedKmh;
+    final gpsTripDistDisplay = isMph
+        ? (_rec.gpsDistanceM / 1609.34)
+        : (_rec.gpsDistanceM / 1000.0);
+    final gpsMaxSpeedDisplay = isMph
+        ? (_rec.gpsMaxSpeedKmh / 1.60934)
+        : _rec.gpsMaxSpeedKmh;
     final elapsed = _rec.elapsed;
-    final gpsAvgKmh = elapsed.inSeconds > 0 ? _rec.gpsDistanceM * 3.6 / elapsed.inSeconds : 0.0;
+    final gpsAvgKmh = elapsed.inSeconds > 0
+        ? _rec.gpsDistanceM * 3.6 / elapsed.inSeconds
+        : 0.0;
     final gpsAvgDisplay = isMph ? gpsAvgKmh / 1.60934 : gpsAvgKmh;
-    final gpsMovingAvgDisplay = isMph ? _rec.gpsMovingAvgKmh / 1.60934 : _rec.gpsMovingAvgKmh;
+    final gpsMovingAvgDisplay = isMph
+        ? _rec.gpsMovingAvgKmh / 1.60934
+        : _rec.gpsMovingAvgKmh;
     final climbDisplay = isMph ? _rec.elevGainM * 3.28084 : _rec.elevGainM;
     final climbUnit = isMph ? 'FT' : 'M';
 
@@ -287,7 +339,8 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
             // Free look-around: pan, pinch-zoom and rotate are all enabled now
             // (page navigation moves to the on-map prev/next buttons).
             interactionOptions: const InteractionOptions(
-              flags: InteractiveFlag.drag |
+              flags:
+                  InteractiveFlag.drag |
                   InteractiveFlag.pinchZoom |
                   InteractiveFlag.pinchMove |
                   InteractiveFlag.rotate |
@@ -308,19 +361,37 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
               // Voyager = normal colours with readable roads/labels (light_all
               // was too washed-out).
               TileLayer(
-                urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+                urlTemplate:
+                    'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
                 subdomains: const ['a', 'b', 'c', 'd'],
               )
             else
               ColorFiltered(
                 colorFilter: const ColorFilter.matrix([
-                  1.5, 0, 0, 0, 15,
-                  0, 1.5, 0, 0, 15,
-                  0, 0, 1.5, 0, 15,
-                  0, 0, 0, 1, 0,
+                  1.5,
+                  0,
+                  0,
+                  0,
+                  15,
+                  0,
+                  1.5,
+                  0,
+                  0,
+                  15,
+                  0,
+                  0,
+                  1.5,
+                  0,
+                  15,
+                  0,
+                  0,
+                  0,
+                  1,
+                  0,
                 ]),
                 child: TileLayer(
-                  urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                  urlTemplate:
+                      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
                   subdomains: const ['a', 'b', 'c', 'd'],
                 ),
               ),
@@ -369,7 +440,10 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xDD1E1E1E),
                   border: Border.all(color: const Color(0xFF333333)),
@@ -381,16 +455,22 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                     Icon(
                       Icons.gps_fixed,
                       size: 14,
-                      color: (_locationReady || isTracking) ? Esk8Theme.accent : Colors.grey,
+                      color: (_locationReady || isTracking)
+                          ? Esk8Theme.accent
+                          : Colors.grey,
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      (_locationReady || isTracking) ? 'GPS LOCKED' : 'ACQUIRING GPS…',
+                      (_locationReady || isTracking)
+                          ? 'GPS LOCKED'
+                          : 'ACQUIRING GPS…',
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1,
-                        color: (_locationReady || isTracking) ? Colors.white : Colors.grey,
+                        color: (_locationReady || isTracking)
+                            ? Colors.white
+                            : Colors.grey,
                       ),
                     ),
                   ],
@@ -399,7 +479,10 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
               if (pos != null) ...[
                 const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xDD1E1E1E),
                     border: Border.all(color: const Color(0xFF333333)),
@@ -407,7 +490,11 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                   ),
                   child: Text(
                     '${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}',
-                    style: const TextStyle(fontSize: 10, color: Colors.grey, fontFamily: 'monospace'),
+                    style: const TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey,
+                      fontFamily: 'monospace',
+                    ),
                   ),
                 ),
               ],
@@ -422,7 +509,10 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                   );
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xDD1E1E1E),
                     border: Border.all(color: const Color(0xFF333333)),
@@ -469,27 +559,59 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      Text('${telemetry.speed.toInt()}', style: Esk8Theme.number(38)),
+                      Text(
+                        '${telemetry.speed.toInt()}',
+                        style: Esk8Theme.number(38),
+                      ),
                       const SizedBox(width: 3),
                       Text(speedUnitStr, style: Esk8Theme.labelStyle),
                     ],
                   ),
-                  Icon(_statsExpanded ? Icons.expand_less : Icons.expand_more, size: 16, color: Esk8Theme.dim),
+                  Icon(
+                    _statsExpanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: Esk8Theme.dim,
+                  ),
                   if (_statsExpanded) ...[
-                    const Divider(color: Esk8Theme.border, height: 6),
+                    Divider(color: Esk8Theme.border, height: 6),
                     const SizedBox(height: 6),
-                    _miniRow('TRIP $unitStr', boardTripDisplay.toStringAsFixed(2), 'TIME', _formatDuration(boardMovingTime)),
+                    _miniRow(
+                      'TRIP $unitStr',
+                      boardTripDisplay.toStringAsFixed(2),
+                      'TIME',
+                      _formatDuration(boardMovingTime),
+                    ),
                     const SizedBox(height: 8),
                     // GPS compare (board wheel distance is canonical above; GPS may
                     // differ — different sensor). GPS TIME is wall-clock elapsed.
-                    _miniRow('GPS $unitStr', gpsTripDistDisplay.toStringAsFixed(2), 'GPS TIME', _formatDuration(elapsed)),
+                    _miniRow(
+                      'GPS $unitStr',
+                      gpsTripDistDisplay.toStringAsFixed(2),
+                      'GPS TIME',
+                      _formatDuration(elapsed),
+                    ),
                     const SizedBox(height: 8),
-                    _miniRow('MAX', gpsMaxSpeedDisplay.toStringAsFixed(1), 'AVG', gpsAvgDisplay.toStringAsFixed(1)),
+                    _miniRow(
+                      'MAX',
+                      gpsMaxSpeedDisplay.toStringAsFixed(1),
+                      'AVG',
+                      gpsAvgDisplay.toStringAsFixed(1),
+                    ),
                     const SizedBox(height: 8),
-                    _miniRow('MOVE', gpsMovingAvgDisplay.toStringAsFixed(1), 'CLIMB $climbUnit', climbDisplay.toStringAsFixed(0)),
+                    _miniRow(
+                      'MOVE',
+                      gpsMovingAvgDisplay.toStringAsFixed(1),
+                      'CLIMB $climbUnit',
+                      climbDisplay.toStringAsFixed(0),
+                    ),
                     const SizedBox(height: 8),
                     // Board-canonical efficiency + lifetime odometer.
-                    _miniRow('EFF wh/${isMph ? 'mi' : 'km'}', '${telemetry.efficiency}', 'ODO $unitStr', telemetry.odometer.toStringAsFixed(1)),
+                    _miniRow(
+                      'EFF wh/${isMph ? 'mi' : 'km'}',
+                      telemetry.efficiency.toStringAsFixed(1),
+                      'ODO $unitStr',
+                      telemetry.odometer.toStringAsFixed(1),
+                    ),
                   ],
                 ],
               ),
@@ -505,7 +627,10 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
             right: 0,
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Esk8Theme.accent,
                   borderRadius: BorderRadius.circular(4),
@@ -562,18 +687,32 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
                   heroTag: 'pause',
                   backgroundColor: const Color(0xDD1A1A1A),
                   onPressed: () => _rec.isPaused ? _rec.resume() : _rec.pause(),
-                  child: Icon(_rec.isPaused ? Icons.play_arrow : Icons.pause, color: Esk8Theme.accent),
+                  child: Icon(
+                    _rec.isPaused ? Icons.play_arrow : Icons.pause,
+                    color: Esk8Theme.accent,
+                  ),
                 ),
                 const SizedBox(width: 12),
               ],
               FloatingActionButton.extended(
                 heroTag: 'startstop',
-                backgroundColor: isTracking ? const Color(0xFFEF4444) : Esk8Theme.accent,
+                backgroundColor: isTracking
+                    ? const Color(0xFFEF4444)
+                    : Esk8Theme.accent,
                 onPressed: _toggleTracking,
-                icon: Icon(isTracking ? Icons.stop : Icons.play_arrow, color: Colors.white),
+                icon: Icon(
+                  isTracking ? Icons.stop : Icons.play_arrow,
+                  color: Colors.white,
+                ),
                 label: Text(
-                  isTracking ? (_rec.isPaused ? 'PAUSED' : 'STOP') : 'START TRIP',
-                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 1),
+                  isTracking
+                      ? (_rec.isPaused ? 'PAUSED' : 'STOP')
+                      : 'START TRIP',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1,
+                  ),
                 ),
               ),
             ],
@@ -582,6 +721,9 @@ class _TripViewState extends State<TripView> with TickerProviderStateMixin {
       ],
     );
   }
+
+  @override
+  bool get wantKeepAlive => true;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -593,7 +735,11 @@ class _MapButton extends StatelessWidget {
   final VoidCallback onTap;
   final bool highlighted;
 
-  const _MapButton({required this.icon, required this.onTap, this.highlighted = false});
+  const _MapButton({
+    required this.icon,
+    required this.onTap,
+    this.highlighted = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -609,10 +755,12 @@ class _MapButton extends StatelessWidget {
           ),
           borderRadius: BorderRadius.circular(4),
         ),
-        child: Icon(icon, color: highlighted ? Esk8Theme.accent : Colors.white, size: 20),
+        child: Icon(
+          icon,
+          color: highlighted ? Esk8Theme.accent : Colors.white,
+          size: 20,
+        ),
       ),
     );
   }
 }
-
-

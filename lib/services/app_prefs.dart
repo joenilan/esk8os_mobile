@@ -20,6 +20,10 @@ class AppPrefs {
   static bool get autoTrip => _p.getBool('autoTrip') ?? false;
   static set autoTrip(bool v) => _p.setBool('autoTrip', v);
 
+  /// After a valid recorded trip, update the board Wh/mi model from recent trips.
+  static bool get autoLearnRange => _p.getBool('autoLearnRange') ?? true;
+  static set autoLearnRange(bool v) => _p.setBool('autoLearnRange', v);
+
   /// Over-speed alert threshold in the board's display unit (0 = off).
   static double get speedAlert => _p.getDouble('speedAlert') ?? 0;
   static set speedAlert(double v) => _p.setDouble('speedAlert', v);

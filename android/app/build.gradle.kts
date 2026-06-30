@@ -50,6 +50,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Keep dev installs signature-compatible with the release app when
+            // the local permanent key exists, so debug iterations do not force
+            // an uninstall and wipe private trip data.
+            signingConfig = if (hasKeystore) signingConfigs.getByName("release")
+                            else signingConfigs.getByName("debug")
+        }
         release {
             // Permanent key when key.properties is present; debug key otherwise.
             signingConfig = if (hasKeystore) signingConfigs.getByName("release")

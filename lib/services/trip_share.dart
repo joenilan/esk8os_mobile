@@ -71,7 +71,7 @@ class _TripCard extends StatelessWidget {
               children: [
                 Text(value, style: Esk8Theme.number(40)),
                 const SizedBox(width: 4),
-                Text(unit, style: const TextStyle(fontSize: 14, color: Esk8Theme.dim)),
+                Text(unit, style: TextStyle(fontSize: 14, color: Esk8Theme.dim)),
               ],
             ),
             Text(label.toUpperCase(), style: Esk8Theme.labelStyle),
@@ -89,12 +89,12 @@ class _TripCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('ESK8OS', style: TextStyle(color: Esk8Theme.accent, fontWeight: FontWeight.bold, letterSpacing: 3, fontSize: 18)),
-              Text(DateFormat('MMM d, yyyy · h:mm a').format(start), style: const TextStyle(color: Esk8Theme.dim, fontSize: 13)),
+              Text('ESK8OS', style: TextStyle(color: Esk8Theme.accent, fontWeight: FontWeight.bold, letterSpacing: 3, fontSize: 18)),
+              Text(DateFormat('MMM d, yyyy · h:mm a').format(start), style: TextStyle(color: Esk8Theme.dim, fontSize: 13)),
             ],
           ),
           const SizedBox(height: 8),
-          const Divider(color: Esk8Theme.border),
+          Divider(color: Esk8Theme.border),
           const SizedBox(height: 16),
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             stat('Distance', dist.toStringAsFixed(2), distUnit),

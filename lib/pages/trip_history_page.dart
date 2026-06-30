@@ -118,7 +118,7 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Color(0xFF8B5CF6)))
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFB950D7)))
           : _trips.isEmpty
               ? const Center(child: Text('No trips recorded yet.', style: TextStyle(color: Colors.grey)))
               : ListView.builder(

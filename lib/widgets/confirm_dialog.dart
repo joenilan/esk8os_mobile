@@ -18,18 +18,18 @@ Future<bool> confirmAction(
     context: context,
     builder: (ctx) => AlertDialog(
       backgroundColor: Esk8Theme.scaffold,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         side: BorderSide(color: Esk8Theme.border),
         borderRadius: BorderRadius.zero, // the board never rounds
       ),
       title: Text(title,
-          style: const TextStyle(
+          style: TextStyle(
               color: Esk8Theme.textPrimary, fontWeight: FontWeight.bold)),
-      content: Text(message, style: const TextStyle(color: Esk8Theme.label)),
+      content: Text(message, style: TextStyle(color: Esk8Theme.label)),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(false),
-          child: Text(cancelLabel, style: const TextStyle(color: Esk8Theme.dim)),
+          child: Text(cancelLabel, style: TextStyle(color: Esk8Theme.dim)),
         ),
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(true),

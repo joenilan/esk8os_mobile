@@ -82,7 +82,7 @@ class DiagView extends StatelessWidget {
                 children: [
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: const [
+                    children: [
                       Text('BRAKE',
                           style: TextStyle(fontSize: 11, color: Esk8Theme.danger, letterSpacing: 1)),
                       Text('ACCEL',

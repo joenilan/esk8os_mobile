@@ -12,19 +12,31 @@ class WifiService {
   /// Fetch the log index from the board. Returns a list of filenames.
   static Future<List<String>> fetchLogIndex() async {
     try {
-      final response = await http.get(Uri.parse('$baseUrl/')).timeout(
-            const Duration(seconds: 10),
-          );
+      final response = await http
+          .get(Uri.parse('$baseUrl/'))
+          .timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         // Typical ESPAsyncWebServer directory listing parses easily via regex for hrefs.
         try {
           final List<dynamic> data = jsonDecode(response.body);
           return data.map((e) => e.toString()).toList();
         } catch (_) {
-          // Fallback: parse HTML hrefs for .csv files
-          final hrefRegex = RegExp(r'href="([^"]+\.csv)"');
-          final matches = hrefRegex.allMatches(response.body);
-          return matches.map((m) => m.group(1)!).toList();
+          // Fallback: parse the firmware HTML index. Return bare filenames,
+          // not "/dl?f=name.csv", because downloadLog builds the query itself.
+          final dlRegex = RegExp(r'''href=['"]/dl\?f=([^'"]+\.csv)['"]''');
+          final dlMatches = dlRegex
+              .allMatches(response.body)
+              .map((m) => m.group(1)!)
+              .toList();
+          if (dlMatches.isNotEmpty) return dlMatches;
+
+          final hrefRegex = RegExp(
+            r'''href=['"]([^'"]*?([^/'"?]+\.csv))['"]''',
+          );
+          return hrefRegex
+              .allMatches(response.body)
+              .map((m) => m.group(2)!)
+              .toList();
         }
       }
       throw Exception('Server returned ${response.statusCode}');
@@ -35,14 +47,21 @@ class WifiService {
 
   /// Download a specific log file and save it to the device's downloads or docs dir.
   static Future<File> downloadLog(String filename) async {
-    final response = await http.get(Uri.parse('$baseUrl/dl?f=$filename')).timeout(
+    final uri = Uri.parse(
+      '$baseUrl/dl',
+    ).replace(queryParameters: {'f': filename});
+    final response = await http
+        .get(uri)
+        .timeout(
           const Duration(seconds: 30), // Logs might be large
         );
 
     if (response.statusCode == 200) {
       Directory dir;
       if (Platform.isAndroid) {
-        dir = (await getExternalStorageDirectory()) ?? await getApplicationDocumentsDirectory();
+        dir =
+            (await getExternalStorageDirectory()) ??
+            await getApplicationDocumentsDirectory();
       } else {
         dir = await getApplicationDocumentsDirectory();
       }
@@ -58,8 +77,10 @@ class WifiService {
   /// Upload a new firmware .bin file for OTA.
   static Future<void> uploadOta(File binFile) async {
     final request = http.MultipartRequest('POST', Uri.parse('$baseUrl/update'));
-    request.files.add(await http.MultipartFile.fromPath('update', binFile.path));
-    
+    request.files.add(
+      await http.MultipartFile.fromPath('update', binFile.path),
+    );
+
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
 

@@ -56,7 +56,7 @@ class StatTile extends StatelessWidget {
                 Text(value, style: Esk8Theme.number(valueSize, color: valueColor ?? Esk8Theme.textPrimary)),
                 if (unit.isNotEmpty) ...[
                   const SizedBox(width: 4),
-                  Text(unit, style: const TextStyle(fontSize: 14, color: Esk8Theme.dim)),
+                  Text(unit, style: TextStyle(fontSize: 14, color: Esk8Theme.dim)),
                 ],
               ],
             ),
@@ -91,7 +91,7 @@ class SpeedHero extends StatelessWidget {
           child: Text(value, style: Esk8Theme.number(maxSize, color: Esk8Theme.textPrimary).copyWith(height: 0.8)),
         ),
         Text(unit,
-            style: const TextStyle(
+            style: TextStyle(
                 fontSize: 26, color: Esk8Theme.dim, fontWeight: FontWeight.w600, letterSpacing: 3)),
       ],
     );
@@ -112,13 +112,22 @@ class SegmentedBattery extends StatelessWidget {
   Widget build(BuildContext context) {
     return SizedBox(
       height: height,
-      child: CustomPaint(painter: _BatteryPainter(percent.clamp(0, 100), cells), size: Size.infinite),
+      // Glide the fill between readings so the gauge depletes smoothly. The %
+      // NUMBER shown elsewhere stays the exact telemetry value — only the bar
+      // animates, so it's smooth without ever being wrong.
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(end: percent.clamp(0, 100).toDouble()),
+        duration: const Duration(milliseconds: 700),
+        curve: Curves.easeOut,
+        builder: (context, value, _) =>
+            CustomPaint(painter: _BatteryPainter(value, cells), size: Size.infinite),
+      ),
     );
   }
 }
 
 class _BatteryPainter extends CustomPainter {
-  final int percent;
+  final double percent;   // 0..100, fractional so the fill glides between integer readings
   final int cells;
   _BatteryPainter(this.percent, this.cells);
 
@@ -126,7 +135,7 @@ class _BatteryPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final gap = cells > 12 ? 2.0 : 4.0;
     final cellW = (size.width - (cells - 1) * gap) / cells;
-    final fillColor = Esk8Theme.batteryColor(percent);
+    final fillColor = Esk8Theme.batteryColor(percent.round());
     final level = percent * cells / 100.0;
     final full = level.floor();
     final frac = level - full;
@@ -172,7 +181,7 @@ class FieldSection extends StatelessWidget {
         children: [
           Center(child: Text(title.toUpperCase(), style: Esk8Theme.labelStyle)),
           const SizedBox(height: 6),
-          const Divider(height: 1, thickness: 1, color: Esk8Theme.border),
+          Divider(height: 1, thickness: 1, color: Esk8Theme.border),
           const SizedBox(height: 4),
           ...rows,
         ],
@@ -187,9 +196,9 @@ class FieldRow extends StatelessWidget {
   final String label;
   final String value;
   final String unit;
-  final Color valueColor;
+  final Color? valueColor;
   final String? trailing;
-  final Color trailingColor;
+  final Color? trailingColor;
   final double valueSize;
 
   const FieldRow({
@@ -197,9 +206,9 @@ class FieldRow extends StatelessWidget {
     required this.label,
     required this.value,
     this.unit = '',
-    this.valueColor = Esk8Theme.textPrimary,
+    this.valueColor,
     this.trailing,
-    this.trailingColor = Esk8Theme.green,
+    this.trailingColor,
     this.valueSize = 28,
   });
 
@@ -212,7 +221,7 @@ class FieldRow extends StatelessWidget {
         children: [
           Expanded(
             child: Text(label.toUpperCase(),
-                style: const TextStyle(fontSize: 14, color: Esk8Theme.label, letterSpacing: 0.5)),
+                style: TextStyle(fontSize: 14, color: Esk8Theme.label, letterSpacing: 0.5)),
           ),
           Flexible(
             child: FittedBox(
@@ -223,14 +232,14 @@ class FieldRow extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.baseline,
                 textBaseline: TextBaseline.alphabetic,
                 children: [
-                  Text(value, style: Esk8Theme.number(valueSize, color: valueColor)),
+                  Text(value, style: Esk8Theme.number(valueSize, color: valueColor ?? Esk8Theme.textPrimary)),
                   if (unit.isNotEmpty) ...[
                     const SizedBox(width: 3),
-                    Text(unit, style: const TextStyle(fontSize: 13, color: Esk8Theme.dim)),
+                    Text(unit, style: TextStyle(fontSize: 13, color: Esk8Theme.dim)),
                   ],
                   if (trailing != null) ...[
                     const SizedBox(width: 8),
-                    Text(trailing!, style: Esk8Theme.number(valueSize - 4, color: trailingColor)),
+                    Text(trailing!, style: Esk8Theme.number(valueSize - 4, color: trailingColor ?? Esk8Theme.green)),
                   ],
                 ],
               ),
@@ -250,7 +259,7 @@ class SectionTitle extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Text(
         text.toUpperCase(),
-        style: const TextStyle(fontSize: 16, color: Esk8Theme.label, letterSpacing: 3, fontWeight: FontWeight.bold),
+        style: TextStyle(fontSize: 16, color: Esk8Theme.label, letterSpacing: 3, fontWeight: FontWeight.bold),
       );
 }
 
@@ -260,13 +269,18 @@ class TopStatusBar extends StatelessWidget {
   final String left;
   final String center;
   final String right;
-  const TopStatusBar({super.key, this.left = 'ESK8OS', this.center = '', this.right = ''});
+  final IconData? leadingIcon;
+  const TopStatusBar({super.key, this.left = 'ESK8OS', this.center = '', this.right = '', this.leadingIcon});
 
   @override
   Widget build(BuildContext context) {
-    const s = TextStyle(fontSize: 13, color: Esk8Theme.dim, letterSpacing: 1.5, fontWeight: FontWeight.w600);
+    final s = TextStyle(fontSize: 13, color: Esk8Theme.dim, letterSpacing: 1.5, fontWeight: FontWeight.w600);
     return Row(
       children: [
+        if (leadingIcon != null) ...[
+          Icon(leadingIcon, size: 16, color: Esk8Theme.accent),
+          const SizedBox(width: 6),
+        ],
         Text(left, style: s),
         Expanded(child: Center(child: Text(center, style: s))),
         Text(right, style: s),
@@ -289,9 +303,9 @@ class BottomStatus extends StatelessWidget {
       children: [
         Text('$percent%', style: TextStyle(fontSize: 13, color: Esk8Theme.batteryColor(percent), fontWeight: FontWeight.w600)),
         const SizedBox(width: 10),
-        Text('T:$trip', style: const TextStyle(fontSize: 13, color: Esk8Theme.dim)),
+        Text('T:$trip', style: TextStyle(fontSize: 13, color: Esk8Theme.dim)),
         const SizedBox(width: 10),
-        Text('O:$odo', style: const TextStyle(fontSize: 13, color: Esk8Theme.dim)),
+        Text('O:$odo', style: TextStyle(fontSize: 13, color: Esk8Theme.dim)),
       ],
     );
   }
@@ -318,7 +332,7 @@ class WaitingForTelemetry extends StatelessWidget {
   const WaitingForTelemetry({super.key});
 
   @override
-  Widget build(BuildContext context) => const Center(
+  Widget build(BuildContext context) => Center(
         child: Text('Waiting for telemetry…', style: TextStyle(color: Esk8Theme.dim)),
       );
 }
@@ -460,4 +474,32 @@ class StatRow extends StatelessWidget {
           ],
         ],
       );
+}
+
+/// Maps the board's vehicle type (0..5) to a Material icon + label — the
+/// electric-vehicle icon variants.
+class Vehicle {
+  static const _labels = ['Skateboard', 'E-Bike', 'Scooter', 'Moped', 'Car', 'Other'];
+
+  static IconData icon(int type) {
+    switch (type) {
+      case 0:
+        return Icons.skateboarding;
+      case 1:
+        return Icons.electric_bike;
+      case 2:
+        return Icons.electric_scooter;
+      case 3:
+        return Icons.electric_moped;
+      case 4:
+        return Icons.electric_car;
+      default:
+        return Icons.bolt;
+    }
+  }
+
+  static String label(int type) =>
+      (type >= 0 && type < _labels.length) ? _labels[type] : 'Other';
+
+  static int get count => _labels.length;
 }

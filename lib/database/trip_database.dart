@@ -22,7 +22,7 @@ class TripDatabase {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -33,7 +33,18 @@ class TripDatabase {
     if (oldV < 2) {
       // v2: elevation. Climb on the trip, per-point altitude for GPX export.
       await db.execute('ALTER TABLE trips ADD COLUMN elevGainM REAL DEFAULT 0');
-      await db.execute('ALTER TABLE telemetry ADD COLUMN altitude REAL DEFAULT 0');
+      await db.execute(
+        'ALTER TABLE telemetry ADD COLUMN altitude REAL DEFAULT 0',
+      );
+    }
+    if (oldV < 3) {
+      // v3: board energy/range calibration summary. Existing trips keep zeros.
+      await db.execute(
+        'ALTER TABLE trips ADD COLUMN boardDistanceMi REAL DEFAULT 0',
+      );
+      await db.execute('ALTER TABLE trips ADD COLUMN wattHours REAL DEFAULT 0');
+      await db.execute('ALTER TABLE trips ADD COLUMN regenWh REAL DEFAULT 0');
+      await db.execute('ALTER TABLE trips ADD COLUMN effWhMi REAL DEFAULT 0');
     }
   }
 
@@ -46,7 +57,11 @@ class TripDatabase {
         distance REAL NOT NULL,
         maxSpeed REAL NOT NULL,
         boardMaxSpeed REAL NOT NULL,
-        elevGainM REAL DEFAULT 0
+        elevGainM REAL DEFAULT 0,
+        boardDistanceMi REAL DEFAULT 0,
+        wattHours REAL DEFAULT 0,
+        regenWh REAL DEFAULT 0,
+        effWhMi REAL DEFAULT 0
       )
     ''');
 
@@ -80,8 +95,18 @@ class TripDatabase {
     });
   }
 
-  Future<void> updateTrip(int id, int endTime, double distance, double maxSpeed, double boardMaxSpeed,
-      {double elevGainM = 0}) async {
+  Future<void> updateTrip(
+    int id,
+    int endTime,
+    double distance,
+    double maxSpeed,
+    double boardMaxSpeed, {
+    double elevGainM = 0,
+    double boardDistanceMi = 0,
+    double wattHours = 0,
+    double regenWh = 0,
+    double effWhMi = 0,
+  }) async {
     final db = await instance.database;
     await db.update(
       'trips',
@@ -91,6 +116,10 @@ class TripDatabase {
         'maxSpeed': maxSpeed,
         'boardMaxSpeed': boardMaxSpeed,
         'elevGainM': elevGainM,
+        'boardDistanceMi': boardDistanceMi,
+        'wattHours': wattHours,
+        'regenWh': regenWh,
+        'effWhMi': effWhMi,
       },
       where: 'id = ?',
       whereArgs: [id],
@@ -102,6 +131,33 @@ class TripDatabase {
     return await db.query('trips', orderBy: 'startTime DESC');
   }
 
+  Future<Map<String, dynamic>?> getLatestRangeCalibrationTrip() async {
+    final db = await instance.database;
+    final rows = await db.query(
+      'trips',
+      where:
+          'endTime IS NOT NULL AND boardDistanceMi >= ? AND (wattHours - regenWh) >= ? AND effWhMi > 0',
+      whereArgs: [1.0, 5.0],
+      orderBy: 'endTime DESC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  Future<List<Map<String, dynamic>>> getRecentRangeCalibrationTrips({
+    int limit = 5,
+  }) async {
+    final db = await instance.database;
+    return await db.query(
+      'trips',
+      where:
+          'endTime IS NOT NULL AND boardDistanceMi >= ? AND (wattHours - regenWh) >= ? AND effWhMi > 0',
+      whereArgs: [1.0, 5.0],
+      orderBy: 'endTime DESC',
+      limit: limit,
+    );
+  }
+
   /// Finalize any trip left un-ended by a crash/kill (before its first 10 s
   /// checkpoint): derive end-time/distance/max from its telemetry, or drop it if
   /// it has no points. Run once on app start.
@@ -110,7 +166,12 @@ class TripDatabase {
     final orphans = await db.query('trips', where: 'endTime IS NULL');
     for (final o in orphans) {
       final id = o['id'] as int;
-      final tel = await db.query('telemetry', where: 'tripId = ?', whereArgs: [id], orderBy: 'timestamp ASC');
+      final tel = await db.query(
+        'telemetry',
+        where: 'tripId = ?',
+        whereArgs: [id],
+        orderBy: 'timestamp ASC',
+      );
       if (tel.isEmpty) {
         await deleteTrip(id);
         continue;
@@ -119,7 +180,9 @@ class TripDatabase {
       LatLng? prev;
       for (final r in tel) {
         final pt = LatLng(r['lat'] as double, r['lng'] as double);
-        if (prev != null) dist += const Distance().as(LengthUnit.Meter, prev, pt);
+        if (prev != null) {
+          dist += const Distance().as(LengthUnit.Meter, prev, pt);
+        }
         prev = pt;
         final s = (r['gpsSpeed'] as num).toDouble();
         if (s > maxSpd) maxSpd = s;
@@ -137,7 +200,10 @@ class TripDatabase {
 
   /// Import a trip + its telemetry under a fresh id (re-links the rows). Used by
   /// the backup/restore so trips survive a reinstall. Returns the new trip id.
-  Future<int> importTrip(Map<String, dynamic> trip, List<Map<String, dynamic>> telemetry) async {
+  Future<int> importTrip(
+    Map<String, dynamic> trip,
+    List<Map<String, dynamic>> telemetry,
+  ) async {
     final db = await instance.database;
     return await db.transaction((txn) async {
       final t = Map<String, dynamic>.from(trip)..remove('id');
@@ -161,7 +227,12 @@ class TripDatabase {
 
   Future<List<Map<String, dynamic>>> getTripTelemetry(int tripId) async {
     final db = await instance.database;
-    return await db.query('telemetry', where: 'tripId = ?', whereArgs: [tripId], orderBy: 'timestamp ASC');
+    return await db.query(
+      'telemetry',
+      where: 'tripId = ?',
+      whereArgs: [tripId],
+      orderBy: 'timestamp ASC',
+    );
   }
 
   // --- DB Stats ---

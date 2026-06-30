@@ -34,14 +34,14 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   Widget? _trailLayer;
   int _trailForIdx = -1;
 
-  static const _routeColor = Color(0xFF8B5CF6);
+  static const _routeColor = Color(0xFFB950D7);
   // Static marker dot (const) — only its position changes, so it never rebuilds.
   static const Widget _markerDot = DecoratedBox(
     decoration: BoxDecoration(
       color: Colors.white,
       shape: BoxShape.circle,
       border: Border.fromBorderSide(BorderSide(color: _routeColor, width: 3)),
-      boxShadow: [BoxShadow(color: Color(0xCC8B5CF6), blurRadius: 10, spreadRadius: 2)],
+      boxShadow: [BoxShadow(color: Color(0xCCB950D7), blurRadius: 10, spreadRadius: 2)],
     ),
   );
   List<Map<String, dynamic>> _telemetry = [];
@@ -330,7 +330,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     if (_isLoading) {
       return const Scaffold(
         backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Color(0xFF8B5CF6))),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFFB950D7))),
       );
     }
 
@@ -446,16 +446,16 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
                       Row(
                         children: [
                           IconButton(
-                            icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: const Color(0xFF8B5CF6), size: 32),
+                            icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: const Color(0xFFB950D7), size: 32),
                             onPressed: _togglePlayback,
                           ),
                           Expanded(
                             child: SliderTheme(
                               data: SliderThemeData(
-                                activeTrackColor: const Color(0xFF8B5CF6),
+                                activeTrackColor: const Color(0xFFB950D7),
                                 inactiveTrackColor: const Color(0xFF333333),
                                 thumbColor: Colors.white,
-                                overlayColor: const Color(0xFF8B5CF6).withValues(alpha: 0.2),
+                                overlayColor: const Color(0xFFB950D7).withValues(alpha: 0.2),
                               ),
                               child: Slider(
                                 value: _pos.clamp(0, (_telemetry.length - 1).toDouble()),

@@ -8,6 +8,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../ble/esk8os_ble.dart';
 import '../database/trip_database.dart';
+import 'app_prefs.dart';
 import 'trip_fg_service.dart';
 
 /// App-level trip recorder. Lives OUTSIDE the widget tree (singleton) so a trip
@@ -20,10 +21,12 @@ import 'trip_fg_service.dart';
 class TripRecorder extends ChangeNotifier {
   TripRecorder._();
   static final TripRecorder instance = TripRecorder._();
+  static const double _kmPerMile = 1.609344;
 
   bool _isRecording = false;
   bool get isRecording => _isRecording;
-  bool _starting = false; // guard: ignore repeat taps while start() is in flight
+  bool _starting =
+      false; // guard: ignore repeat taps while start() is in flight
 
   int? _tripId;
   DateTime? _startTime;
@@ -36,7 +39,8 @@ class TripRecorder extends ChangeNotifier {
 
   Duration get elapsed {
     if (_startTime == null) return Duration.zero;
-    var ms = DateTime.now().difference(_startTime!).inMilliseconds - _pausedAccumMs;
+    var ms =
+        DateTime.now().difference(_startTime!).inMilliseconds - _pausedAccumMs;
     if (_paused) ms -= DateTime.now().millisecondsSinceEpoch - _pauseStartedMs;
     return Duration(milliseconds: ms < 0 ? 0 : ms);
   }
@@ -81,9 +85,12 @@ class TripRecorder extends ChangeNotifier {
   }
 
   List<NotificationButton> _fgButtons() => [
-        NotificationButton(id: _paused ? 'resume' : 'pause', text: _paused ? 'Resume' : 'Pause'),
-        const NotificationButton(id: 'stop', text: 'Stop'),
-      ];
+    NotificationButton(
+      id: _paused ? 'resume' : 'pause',
+      text: _paused ? 'Resume' : 'Pause',
+    ),
+    const NotificationButton(id: 'stop', text: 'Stop'),
+  ];
 
   Future<void> _startFgService() async {
     _initFg();
@@ -143,7 +150,8 @@ class TripRecorder extends ChangeNotifier {
   // Moving-only stats (excludes time spent stopped at lights etc).
   int _movingMs = 0;
   int _lastFixMs = 0;
-  double get gpsMovingAvgKmh => _movingMs > 1000 ? _gpsDistanceM * 3.6 / (_movingMs / 1000.0) : 0.0;
+  double get gpsMovingAvgKmh =>
+      _movingMs > 1000 ? _gpsDistanceM * 3.6 / (_movingMs / 1000.0) : 0.0;
   // Elevation. GPS altitude is jittery, so gain uses a 2 m deadband/anchor.
   double _altitude = 0;
   bool _haveAlt = false;
@@ -155,12 +163,18 @@ class TripRecorder extends ChangeNotifier {
   double get heading => _heading;
 
   // Board-derived stats (from BLE telemetry)
-  double _boardStartRange = -1; // sentinel: captured on first sample after start
+  double _boardStartRange =
+      -1; // sentinel: captured on first sample after start
   double get boardStartRange => _boardStartRange < 0 ? 0 : _boardStartRange;
   double _boardMaxSpeed = 0;
   double get boardMaxSpeed => _boardMaxSpeed;
+  double _boardTripMiles = 0;
+  double _boardWattHours = 0;
+  double _boardRegenWh = 0;
+  double _boardEffWhMi = 0;
   Telemetry? _latestTelemetry;
   Telemetry? get latestTelemetry => _latestTelemetry;
+  Esk8Device? _device;
 
   StreamSubscription<Position>? _posSub;
   StreamSubscription<Telemetry>? _telSub;
@@ -173,8 +187,11 @@ class TripRecorder extends ChangeNotifier {
   Future<bool> ensurePermission() async {
     if (!await Geolocator.isLocationServiceEnabled()) return false;
     var p = await Geolocator.checkPermission();
-    if (p == LocationPermission.denied) p = await Geolocator.requestPermission();
-    if (p == LocationPermission.denied || p == LocationPermission.deniedForever) {
+    if (p == LocationPermission.denied) {
+      p = await Geolocator.requestPermission();
+    }
+    if (p == LocationPermission.denied ||
+        p == LocationPermission.deniedForever) {
       return false;
     }
     return true;
@@ -182,7 +199,7 @@ class TripRecorder extends ChangeNotifier {
 
   /// Start recording. [device] supplies board telemetry. Returns false if
   /// location permission/service is unavailable.
-  Future<bool> start(Esk8Device device) async {
+  Future<bool> start(Esk8Device device, {bool isMph = true}) async {
     if (_isRecording || _starting) return true; // ignore repeat taps
     _starting = true;
     if (!await ensurePermission()) {
@@ -195,7 +212,9 @@ class TripRecorder extends ChangeNotifier {
     // a second, and recording flips on NOW so the button responds immediately.
     final last = await Geolocator.getLastKnownPosition();
     _route.clear();
-    _currentPosition = last != null ? LatLng(last.latitude, last.longitude) : null;
+    _currentPosition = last != null
+        ? LatLng(last.latitude, last.longitude)
+        : null;
     if (_currentPosition != null) _route.add(_currentPosition!);
     _gpsDistanceM = 0;
     _gpsMaxSpeedKmh = 0;
@@ -208,8 +227,15 @@ class TripRecorder extends ChangeNotifier {
     _pausedAccumMs = 0;
     _boardStartRange = -1;
     _boardMaxSpeed = _latestTelemetry?.speed ?? 0;
+    _boardTripMiles = 0;
+    _boardWattHours = 0;
+    _boardRegenWh = 0;
+    _boardEffWhMi = 0;
     _startTime = DateTime.now();
-    _tripId = await TripDatabase.instance.createTrip(_startTime!.millisecondsSinceEpoch);
+    _tripId = await TripDatabase.instance.createTrip(
+      _startTime!.millisecondsSinceEpoch,
+    );
+    _device = device;
     _isRecording = true;
     _starting = false;
     // A new app trip = a new board session: zero the board's trip too (the
@@ -224,15 +250,20 @@ class TripRecorder extends ChangeNotifier {
       _latestTelemetry = t;
       if (_boardStartRange < 0) _boardStartRange = t.range;
       if (t.speed > _boardMaxSpeed) _boardMaxSpeed = t.speed;
+      _captureBoardRangeStats(t, isMph: t.mph ?? isMph);
     });
 
     // GPS. The flutter_foreground_task location service (started above) keeps
     // location + the app alive in the background, so geolocator doesn't run its
     // own second foreground service/notification here.
-    const LocationSettings settings =
-        LocationSettings(accuracy: LocationAccuracy.high, distanceFilter: 3);
+    const LocationSettings settings = LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: 3,
+    );
 
-    _posSub = Geolocator.getPositionStream(locationSettings: settings).listen((position) {
+    _posSub = Geolocator.getPositionStream(locationSettings: settings).listen((
+      position,
+    ) {
       final p = LatLng(position.latitude, position.longitude);
       // Paused: keep the marker live but freeze all trip accumulation.
       if (_paused) {
@@ -268,7 +299,9 @@ class TripRecorder extends ChangeNotifier {
       _currentPosition = p;
       _gpsSpeedKmh = position.speed * 3.6; // m/s -> km/h
       if (_gpsSpeedKmh > _gpsMaxSpeedKmh) _gpsMaxSpeedKmh = _gpsSpeedKmh;
-      if (position.speed > 0.8 && position.heading >= 0) _heading = position.heading;
+      if (position.speed > 0.8 && position.heading >= 0) {
+        _heading = position.heading;
+      }
       notifyListeners();
     });
 
@@ -295,11 +328,30 @@ class TripRecorder extends ChangeNotifier {
       // still leaves a complete, up-to-date trip — never lose more than ~10 s.
       if (++tick % 10 == 0) {
         TripDatabase.instance.updateTrip(
-            id, DateTime.now().millisecondsSinceEpoch, _gpsDistanceM, _gpsMaxSpeedKmh, _boardMaxSpeed,
-            elevGainM: _elevGainM);
+          id,
+          DateTime.now().millisecondsSinceEpoch,
+          _gpsDistanceM,
+          _gpsMaxSpeedKmh,
+          _boardMaxSpeed,
+          elevGainM: _elevGainM,
+          boardDistanceMi: _boardTripMiles,
+          wattHours: _boardWattHours,
+          regenWh: _boardRegenWh,
+          effWhMi: _boardEffWhMi,
+        );
       }
     });
     return true;
+  }
+
+  void _captureBoardRangeStats(Telemetry t, {required bool isMph}) {
+    _boardTripMiles = isMph ? t.trip : t.trip / _kmPerMile;
+    _boardWattHours = t.wattHours;
+    _boardRegenWh = t.regenWh;
+    final netWh = _boardWattHours - _boardRegenWh;
+    if (_boardTripMiles >= 0.01 && netWh > 0) {
+      _boardEffWhMi = netWh / _boardTripMiles;
+    }
   }
 
   Future<void> stop() async {
@@ -322,10 +374,47 @@ class TripRecorder extends ChangeNotifier {
         _gpsMaxSpeedKmh,
         _boardMaxSpeed,
         elevGainM: _elevGainM,
+        boardDistanceMi: _boardTripMiles,
+        wattHours: _boardWattHours,
+        regenWh: _boardRegenWh,
+        effWhMi: _boardEffWhMi,
       );
+      await _autoLearnRangeModel();
     }
     _isRecording = false;
     _tripId = null;
+    _device = null;
     notifyListeners();
   }
+
+  Future<void> _autoLearnRangeModel() async {
+    final device = _device;
+    if (device == null || !AppPrefs.autoLearnRange) return;
+    final trips = await TripDatabase.instance.getRecentRangeCalibrationTrips();
+    double miles = 0;
+    double wh = 0;
+    var valid = 0;
+    for (final trip in trips) {
+      final tripMiles = _num(trip['boardDistanceMi']);
+      final usedWh = _num(trip['wattHours']) - _num(trip['regenWh']);
+      final eff = _num(trip['effWhMi']);
+      if (tripMiles < 2.0 || usedWh < 20.0 || eff < 14.0 || eff > 40.0) {
+        continue;
+      }
+      miles += tripMiles;
+      wh += usedWh;
+      valid++;
+    }
+    if (valid == 0 || miles <= 0 || wh <= 0) return;
+    final learned = double.parse(
+      (wh / miles).clamp(14.0, 40.0).toStringAsFixed(1),
+    );
+    try {
+      await device.writeSettings(BoardSettings.writeJson(whPerMile: learned));
+    } catch (_) {
+      // Trip data is already saved; calibration can be applied next time.
+    }
+  }
+
+  static double _num(dynamic value) => value is num ? value.toDouble() : 0.0;
 }

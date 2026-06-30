@@ -40,7 +40,7 @@ class HudView extends StatelessWidget {
           // Speed — the hero. Given as much room as the layout allows (the
           // surrounding gaps are tight) so the FittedBox scales it up large.
           Expanded(child: Center(child: SpeedHero(value: '${t.speed.toInt()}', unit: speedUnit))),
-          const Divider(height: 1, thickness: 1, color: Esk8Theme.border),
+          Divider(height: 1, thickness: 1, color: Esk8Theme.border),
           const SizedBox(height: 6),
           // Remote throttle/brake + signal-present icon (decoded PPM from the VESC).
           Row(
