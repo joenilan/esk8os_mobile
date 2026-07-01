@@ -3,6 +3,7 @@ import '../database/trip_database.dart';
 import '../services/trip_backup.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/esk8_theme.dart';
+import '../widgets/esk8_widgets.dart';
 import 'trip_playback_page.dart';
 import 'package:intl/intl.dart';
 
@@ -43,7 +44,8 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
     final ok = await confirmAction(
       context,
       title: 'Delete trip?',
-      message: 'This permanently deletes the trip and its recorded telemetry. '
+      message:
+          'This permanently deletes the trip and its recorded telemetry. '
           'This can\'t be undone.',
       confirmLabel: 'Delete',
     );
@@ -53,7 +55,9 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
   }
 
   void _toast(String m) {
-    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+    }
   }
 
   Future<void> _export() async {
@@ -93,76 +97,87 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
 
     return Scaffold(
       backgroundColor: Esk8Theme.scaffold,
-      appBar: AppBar(
-        backgroundColor: Esk8Theme.scaffold,
-        title: const Text('Trip History',
-            style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.upload, color: Esk8Theme.accent),
-            tooltip: 'Back up rides',
-            onPressed: _export,
+      body: Column(
+        children: [
+          SubPageHeader(
+            title: 'Trip History',
+            actions: [
+              IconButton(
+                icon: Icon(Icons.upload, color: Esk8Theme.accent),
+                tooltip: 'Back up rides',
+                onPressed: _export,
+              ),
+              IconButton(
+                icon: Icon(Icons.download, color: Esk8Theme.accent),
+                tooltip: 'Restore rides',
+                onPressed: _import,
+              ),
+              Padding(
+                padding: const EdgeInsets.only(left: 4),
+                child: Text(
+                  'DB $_dbSizeStr',
+                  style: TextStyle(color: Esk8Theme.dim, fontSize: 12),
+                ),
+              ),
+            ],
           ),
-          IconButton(
-            icon: Icon(Icons.download, color: Esk8Theme.accent),
-            tooltip: 'Restore rides',
-            onPressed: _import,
-          ),
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.only(right: 16.0),
-              child: Text('DB $_dbSizeStr',
-                  style: TextStyle(color: Esk8Theme.dim, fontSize: 12)),
-            ),
+          Expanded(
+            child: _isLoading
+                ? Center(
+                    child: CircularProgressIndicator(color: Esk8Theme.accent),
+                  )
+                : _trips.isEmpty
+                ? _emptyState()
+                : ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _trips.length,
+                    itemBuilder: (context, index) =>
+                        _tripRow(_trips[index], unitStr, speedUnitStr),
+                  ),
           ),
         ],
       ),
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: Esk8Theme.accent))
-          : _trips.isEmpty
-              ? _emptyState()
-              : ListView.builder(
-                  itemCount: _trips.length,
-                  padding: const EdgeInsets.all(16),
-                  itemBuilder: (context, index) =>
-                      _tripRow(_trips[index], unitStr, speedUnitStr),
-                ),
     );
   }
 
   /// Anchored empty state, matching the scan-home board treatment.
   Widget _emptyState() => Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 96,
-              height: 96,
-              alignment: Alignment.center,
-              decoration:
-                  BoxDecoration(border: Border.all(color: Esk8Theme.border)),
-              child: Icon(Icons.route, size: 44, color: Esk8Theme.dim),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'NO TRIPS YET',
-              style: TextStyle(
-                fontSize: 18,
-                letterSpacing: 2.5,
-                fontWeight: FontWeight.bold,
-                color: Esk8Theme.textMuted,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text('Recorded rides show up here',
-                style: TextStyle(fontSize: 13, color: Esk8Theme.dim)),
-          ],
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 96,
+          height: 96,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: Esk8Theme.border),
+          ),
+          child: Icon(Icons.route, size: 44, color: Esk8Theme.dim),
         ),
-      );
+        const SizedBox(height: 24),
+        Text(
+          'NO TRIPS YET',
+          style: TextStyle(
+            fontSize: 18,
+            letterSpacing: 2.5,
+            fontWeight: FontWeight.bold,
+            color: Esk8Theme.textMuted,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Recorded rides show up here',
+          style: TextStyle(fontSize: 13, color: Esk8Theme.dim),
+        ),
+      ],
+    ),
+  );
 
   /// One trip as a sharp bordered panel (no rounded Card), theme-reactive.
   Widget _tripRow(Map<String, dynamic> t, String unitStr, String speedUnitStr) {
-    final startTime = DateTime.fromMillisecondsSinceEpoch(t['startTime'] as int);
+    final startTime = DateTime.fromMillisecondsSinceEpoch(
+      t['startTime'] as int,
+    );
     final isComplete = t['endTime'] != null;
     final rawDist = t['distance'] as double;
     final distDisplay = widget.isMph ? (rawDist / 1609.34) : (rawDist / 1000.0);
@@ -190,8 +205,9 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
               : null,
           child: Container(
             padding: const EdgeInsets.fromLTRB(14, 12, 6, 12),
-            decoration:
-                BoxDecoration(border: Border.all(color: Esk8Theme.border)),
+            decoration: BoxDecoration(
+              border: Border.all(color: Esk8Theme.border),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -210,21 +226,32 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
                     if (!isComplete)
                       Padding(
                         padding: const EdgeInsets.only(right: 6),
-                        child: Text('ONGOING',
-                            style: TextStyle(
-                                color: Esk8Theme.yellow,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                letterSpacing: 1)),
+                        child: Text(
+                          'ONGOING',
+                          style: TextStyle(
+                            color: Esk8Theme.yellow,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
                       ),
                     IconButton(
-                      icon: Icon(Icons.ios_share, color: Esk8Theme.accent, size: 20),
+                      icon: Icon(
+                        Icons.ios_share,
+                        color: Esk8Theme.accent,
+                        size: 20,
+                      ),
                       tooltip: 'Export GPX',
-                      onPressed: () => TripBackup.exportGpx(t['id'] as int, startTime),
+                      onPressed: () =>
+                          TripBackup.exportGpx(t['id'] as int, startTime),
                     ),
                     IconButton(
-                      icon: Icon(Icons.delete_outline,
-                          color: Esk8Theme.danger, size: 20),
+                      icon: Icon(
+                        Icons.delete_outline,
+                        color: Esk8Theme.danger,
+                        size: 20,
+                      ),
                       tooltip: 'Delete',
                       onPressed: () => _deleteTrip(t['id'] as int),
                     ),
@@ -236,14 +263,23 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
                   child: Row(
                     children: [
                       Expanded(
-                          child: _tripStat(
-                              'DIST', '${distDisplay.toStringAsFixed(2)} $unitStr')),
+                        child: _tripStat(
+                          'DIST',
+                          '${distDisplay.toStringAsFixed(2)} $unitStr',
+                        ),
+                      ),
                       Expanded(
-                          child: _tripStat('MAX',
-                              '${maxDisplay.toStringAsFixed(1)} $speedUnitStr')),
+                        child: _tripStat(
+                          'MAX',
+                          '${maxDisplay.toStringAsFixed(1)} $speedUnitStr',
+                        ),
+                      ),
                       Expanded(
-                          child: _tripStat('TIME',
-                              _formatDuration(t['startTime'], t['endTime']))),
+                        child: _tripStat(
+                          'TIME',
+                          _formatDuration(t['startTime'], t['endTime']),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -256,17 +292,19 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
   }
 
   Widget _tripStat(String label, String value) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: TextStyle(
-                  color: Esk8Theme.label,
-                  fontSize: 10,
-                  letterSpacing: 1.2,
-                  fontWeight: FontWeight.bold)),
-          const SizedBox(height: 2),
-          Text(value,
-              style: TextStyle(color: Esk8Theme.textPrimary, fontSize: 13)),
-        ],
-      );
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(
+        label,
+        style: TextStyle(
+          color: Esk8Theme.label,
+          fontSize: 10,
+          letterSpacing: 1.2,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      const SizedBox(height: 2),
+      Text(value, style: TextStyle(color: Esk8Theme.textPrimary, fontSize: 13)),
+    ],
+  );
 }

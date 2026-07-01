@@ -262,18 +262,22 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Settings'),
-        actions: [
-          // Manual refresh.
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loading ? null : _read,
-            tooltip: 'Re-read settings',
+      backgroundColor: Esk8Theme.scaffold,
+      body: Column(
+        children: [
+          SubPageHeader(
+            title: 'Settings',
+            actions: [
+              IconButton(
+                icon: Icon(Icons.refresh, color: Esk8Theme.accent),
+                onPressed: _loading ? null : _read,
+                tooltip: 'Re-read settings',
+              ),
+            ],
           ),
+          Expanded(child: _buildBody()),
         ],
       ),
-      body: _buildBody(),
     );
   }
 
@@ -366,7 +370,10 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Column(
                 children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 8,
+                    ),
                     child: Row(
                       children: [
                         Icon(Vehicle.icon(s.vehicleType), color: _accent),
@@ -378,7 +385,8 @@ class _SettingsPageState extends State<SettingsPage> {
                             textInputAction: TextInputAction.done,
                             decoration: const InputDecoration(
                               labelText: 'Board name',
-                              helperText: 'Shown in the scan list · reboot to re-advertise',
+                              helperText:
+                                  'Shown in the scan list · reboot to re-advertise',
                               border: InputBorder.none,
                               counterText: '',
                             ),
@@ -392,7 +400,9 @@ class _SettingsPageState extends State<SettingsPage> {
                           icon: Icon(Icons.check, color: _accent),
                           tooltip: 'Save name',
                           onPressed: () => _write(
-                            BoardSettings.writeJson(deviceName: _nameCtrl.text.trim()),
+                            BoardSettings.writeJson(
+                              deviceName: _nameCtrl.text.trim(),
+                            ),
                             'Board name',
                           ),
                         ),
@@ -401,7 +411,10 @@ class _SettingsPageState extends State<SettingsPage> {
                   ),
                   const Divider(height: 1),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -409,7 +422,13 @@ class _SettingsPageState extends State<SettingsPage> {
                           children: [
                             Icon(Icons.category, color: _accent),
                             SizedBox(width: 16),
-                            Text('Vehicle type', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                            Text(
+                              'Vehicle type',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 10),
@@ -425,22 +444,37 @@ class _SettingsPageState extends State<SettingsPage> {
                                   tooltip: Vehicle.label(i),
                                 ),
                             ],
-                            selected: {s.vehicleType.clamp(0, Vehicle.count - 1)},
+                            selected: {
+                              s.vehicleType.clamp(0, Vehicle.count - 1),
+                            },
                             onSelectionChanged: (sel) => _write(
                               BoardSettings.writeJson(vehicleType: sel.first),
                               'Vehicle type',
                             ),
                             style: ButtonStyle(
-                              foregroundColor: WidgetStateProperty.resolveWith((states) =>
-                                  states.contains(WidgetState.selected) ? Colors.white : Colors.grey[400]),
-                              backgroundColor: WidgetStateProperty.resolveWith((states) =>
-                                  states.contains(WidgetState.selected) ? _accent.withValues(alpha: 0.25) : null),
+                              foregroundColor: WidgetStateProperty.resolveWith(
+                                (states) =>
+                                    states.contains(WidgetState.selected)
+                                    ? Colors.white
+                                    : Colors.grey[400],
+                              ),
+                              backgroundColor: WidgetStateProperty.resolveWith(
+                                (states) =>
+                                    states.contains(WidgetState.selected)
+                                    ? _accent.withValues(alpha: 0.25)
+                                    : null,
+                              ),
                             ),
                           ),
                         ),
                         const SizedBox(height: 6),
-                        Text(Vehicle.label(s.vehicleType),
-                            style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+                        Text(
+                          Vehicle.label(s.vehicleType),
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 13,
+                          ),
+                        ),
                       ],
                     ),
                   ),

@@ -9,13 +9,19 @@ import '../database/trip_database.dart';
 import '../services/app_prefs.dart';
 import '../services/trip_share.dart';
 import '../widgets/esk8_theme.dart';
+import '../widgets/esk8_widgets.dart';
 
 class TripPlaybackPage extends StatefulWidget {
   final int tripId;
   final bool isMph;
   final Map<String, dynamic> tripData;
 
-  const TripPlaybackPage({super.key, required this.tripId, required this.isMph, required this.tripData});
+  const TripPlaybackPage({
+    super.key,
+    required this.tripId,
+    required this.isMph,
+    required this.tripData,
+  });
 
   @override
   State<TripPlaybackPage> createState() => _TripPlaybackPageState();
@@ -41,7 +47,9 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
       color: Colors.white,
       shape: BoxShape.circle,
       border: Border.fromBorderSide(BorderSide(color: _routeColor, width: 3)),
-      boxShadow: [BoxShadow(color: Color(0xCCB950D7), blurRadius: 10, spreadRadius: 2)],
+      boxShadow: [
+        BoxShadow(color: Color(0xCCB950D7), blurRadius: 10, spreadRadius: 2),
+      ],
     ),
   );
   List<Map<String, dynamic>> _telemetry = [];
@@ -50,7 +58,8 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   // The GPS updates ~every 5s but we log 1 Hz, so ~80% of points are duplicates;
   // the marker must glide between distinct fixes (spread over the duplicate span),
   // not interpolate between identical points (which looks like stop-go-stop-go).
-  final List<(double, LatLng)> _keyframes = []; // (cumulativeDistance, position)
+  final List<(double, LatLng)> _keyframes =
+      []; // (cumulativeDistance, position)
   // Speed-integrated distance per point: lets the marker hold still at real stops
   // (speed ~0) and glide while moving, instead of drifting across stopped time.
   List<double> _cumDist = [];
@@ -69,7 +78,8 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   bool _mapLight = AppPrefs.mapLight;
   bool _follow = false; // recenter the camera on the marker as it moves
 
-  int get _idx => _pos.round().clamp(0, _telemetry.isEmpty ? 0 : _telemetry.length - 1);
+  int get _idx =>
+      _pos.round().clamp(0, _telemetry.isEmpty ? 0 : _telemetry.length - 1);
 
   @override
   void initState() {
@@ -79,10 +89,14 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
         // No setState here — the marker/trail/stats/slider are AnimatedBuilders on
         // this controller, so they repaint WITHOUT rebuilding the map (the cause of
         // the pulsing). Only follow-mode needs to move the camera per frame.
-        if (mounted && _follow) _recenterIfFollow();
+        if (mounted && _follow) {
+          _recenterIfFollow();
+        }
       })
       ..addStatusListener((s) {
-        if (s == AnimationStatus.completed && mounted) setState(() => _isPlaying = false);
+        if (s == AnimationStatus.completed && mounted) {
+          setState(() => _isPlaying = false);
+        }
       });
     _loadTelemetry();
   }
@@ -94,7 +108,9 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     if (mounted) {
       setState(() {
         _telemetry = data;
-        _route = data.map((t) => LatLng(t['lat'] as double, t['lng'] as double)).toList();
+        _route = data
+            .map((t) => LatLng(t['lat'] as double, t['lng'] as double))
+            .toList();
         _isLoading = false;
       });
       // ~80 ms per recorded point; scrubbable either way.
@@ -120,7 +136,8 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
       if (_route.isNotEmpty) {
         _keyframes.add((0, _route.first));
         for (var i = 1; i < _route.length; i++) {
-          if (_dist(_route[i], _keyframes.last.$2) > 0.5 && _cumDist[i] > _keyframes.last.$1) {
+          if (_dist(_route[i], _keyframes.last.$2) > 0.5 &&
+              _cumDist[i] > _keyframes.last.$1) {
             _keyframes.add((_cumDist[i], _route[i]));
           }
         }
@@ -134,7 +151,11 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
       if (_route.length >= 2) {
         _routeLayer = PolylineLayer(
           polylines: [
-            Polyline(points: _route, strokeWidth: 4.0, color: _routeColor.withValues(alpha: 0.5)),
+            Polyline(
+              points: _route,
+              strokeWidth: 4.0,
+              color: _routeColor.withValues(alpha: 0.5),
+            ),
           ],
         );
       }
@@ -148,7 +169,12 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
                 bounds.southWest.longitude == bounds.northEast.longitude) {
               _mapController.move(_route.first, 16.0);
             } else {
-              _mapController.fitCamera(CameraFit.bounds(bounds: bounds, padding: const EdgeInsets.all(50)));
+              _mapController.fitCamera(
+                CameraFit.bounds(
+                  bounds: bounds,
+                  padding: const EdgeInsets.all(50),
+                ),
+              );
             }
           }
         });
@@ -158,7 +184,8 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
 
   static double _dist(LatLng a, LatLng b) {
     final dLat = (a.latitude - b.latitude) * 111320;
-    final dLng = (a.longitude - b.longitude) * 111320 * cos(a.latitude * pi / 180);
+    final dLng =
+        (a.longitude - b.longitude) * 111320 * cos(a.latitude * pi / 180);
     return sqrt(dLat * dLat + dLng * dLng);
   }
 
@@ -166,7 +193,9 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   /// distance (so it HOLDS at real stops and glides while moving), mapped onto the
   /// distinct-GPS-fix keyframes (so it glides across duplicate logged points).
   LatLng _markerPos() {
-    if (_keyframes.isEmpty) return _route.isEmpty ? const LatLng(0, 0) : _route.first;
+    if (_keyframes.isEmpty) {
+      return _route.isEmpty ? const LatLng(0, 0) : _route.first;
+    }
     // Traveled distance at the current playback time (interpolate cumDist by _pos).
     final lo0 = _pos.floor().clamp(0, _cumDist.length - 1);
     final hi0 = (lo0 + 1).clamp(0, _cumDist.length - 1);
@@ -199,7 +228,11 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
       _trailForIdx = _idx;
       _trailLayer = PolylineLayer(
         polylines: [
-          Polyline(points: _route.sublist(0, _idx + 1), strokeWidth: 4.0, color: _routeColor),
+          Polyline(
+            points: _route.sublist(0, _idx + 1),
+            strokeWidth: 4.0,
+            color: _routeColor,
+          ),
         ],
       );
     }
@@ -240,19 +273,52 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     return ListView(
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 190), // room for scrubber
       children: [
-        _metricChart('Speed', spdUnit, Esk8Theme.accent, (r) => (r['boardSpeed'] as num).toDouble()),
-        _metricChart('Elevation', climbUnit, const Color(0xFF4FC3F7),
-            (r) => ((r['altitude'] as num?)?.toDouble() ?? 0) * (isMph ? 3.28084 : 1)),
-        _metricChart('Power', 'W', const Color(0xFF66BB6A), (r) => (r['watts'] as num).toDouble()),
-        _metricChart('Voltage', 'V', Esk8Theme.yellow, (r) => (r['voltage'] as num).toDouble()),
-        _metricChart('Battery', '%', const Color(0xFFEF5350), (r) => (r['battery'] as num).toDouble()),
+        _metricChart(
+          'Speed',
+          spdUnit,
+          Esk8Theme.accent,
+          (r) => (r['boardSpeed'] as num).toDouble(),
+        ),
+        _metricChart(
+          'Elevation',
+          climbUnit,
+          const Color(0xFF4FC3F7),
+          (r) =>
+              ((r['altitude'] as num?)?.toDouble() ?? 0) *
+              (isMph ? 3.28084 : 1),
+        ),
+        _metricChart(
+          'Power',
+          'W',
+          const Color(0xFF66BB6A),
+          (r) => (r['watts'] as num).toDouble(),
+        ),
+        _metricChart(
+          'Voltage',
+          'V',
+          Esk8Theme.yellow,
+          (r) => (r['voltage'] as num).toDouble(),
+        ),
+        _metricChart(
+          'Battery',
+          '%',
+          const Color(0xFFEF5350),
+          (r) => (r['battery'] as num).toDouble(),
+        ),
       ],
     );
   }
 
-  Widget _metricChart(String label, String unit, Color color, double Function(Map<String, dynamic>) valueOf) {
+  Widget _metricChart(
+    String label,
+    String unit,
+    Color color,
+    double Function(Map<String, dynamic>) valueOf,
+  ) {
     final vals = [for (final r in _telemetry) valueOf(r)];
-    final spots = [for (var i = 0; i < vals.length; i++) FlSpot(i.toDouble(), vals[i])];
+    final spots = [
+      for (var i = 0; i < vals.length; i++) FlSpot(i.toDouble(), vals[i]),
+    ];
     double minY = vals.reduce(min), maxY = vals.reduce(max);
     if (maxY - minY < 1) maxY = minY + 1;
     final pad = (maxY - minY) * 0.1;
@@ -269,33 +335,47 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(label.toUpperCase(), style: Esk8Theme.labelStyle),
-              Text('${cur.toStringAsFixed(1)} $unit', style: Esk8Theme.number(20, color: color)),
+              Text(
+                '${cur.toStringAsFixed(1)} $unit',
+                style: Esk8Theme.number(20, color: color),
+              ),
             ],
           ),
           const SizedBox(height: 8),
           Expanded(
-            child: LineChart(LineChartData(
-              gridData: const FlGridData(show: true, drawVerticalLine: false),
-              titlesData: const FlTitlesData(show: false),
-              borderData: FlBorderData(show: false),
-              minX: 0,
-              maxX: (vals.length - 1).toDouble().clamp(1, double.infinity),
-              minY: minY - pad,
-              maxY: maxY + pad,
-              lineBarsData: [
-                LineChartBarData(
-                  spots: spots,
-                  isCurved: false,
-                  color: color,
-                  barWidth: 2,
-                  dotData: const FlDotData(show: false),
-                  belowBarData: BarAreaData(show: true, color: color.withValues(alpha: 0.15)),
+            child: LineChart(
+              LineChartData(
+                gridData: const FlGridData(show: true, drawVerticalLine: false),
+                titlesData: const FlTitlesData(show: false),
+                borderData: FlBorderData(show: false),
+                minX: 0,
+                maxX: (vals.length - 1).toDouble().clamp(1, double.infinity),
+                minY: minY - pad,
+                maxY: maxY + pad,
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: false,
+                    color: color,
+                    barWidth: 2,
+                    dotData: const FlDotData(show: false),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color: color.withValues(alpha: 0.15),
+                    ),
+                  ),
+                ],
+                extraLinesData: ExtraLinesData(
+                  verticalLines: [
+                    VerticalLine(
+                      x: _idx.toDouble(),
+                      color: Colors.white54,
+                      strokeWidth: 1,
+                    ),
+                  ],
                 ),
-              ],
-              extraLinesData: ExtraLinesData(
-                verticalLines: [VerticalLine(x: _idx.toDouble(), color: Colors.white54, strokeWidth: 1)],
               ),
-            )),
+            ),
           ),
         ],
       ),
@@ -307,7 +387,8 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   Widget _tileLayer() {
     if (_mapLight) {
       return TileLayer(
-        urlTemplate: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+        urlTemplate:
+            'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
         subdomains: const ['a', 'b', 'c', 'd'],
       );
     }
@@ -319,7 +400,8 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
         0, 0, 0, 1, 0, //
       ]),
       child: TileLayer(
-        urlTemplate: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+        urlTemplate:
+            'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
         subdomains: const ['a', 'b', 'c', 'd'],
       ),
     );
@@ -330,15 +412,35 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     if (_isLoading) {
       return Scaffold(
         backgroundColor: Esk8Theme.scaffold,
-        body: Center(child: CircularProgressIndicator(color: Esk8Theme.accent)),
+        body: Column(
+          children: [
+            const SubPageHeader(title: 'Trip Playback'),
+            Expanded(
+              child: Center(
+                child: CircularProgressIndicator(color: Esk8Theme.accent),
+              ),
+            ),
+          ],
+        ),
       );
     }
 
     if (_telemetry.isEmpty) {
       return Scaffold(
         backgroundColor: Esk8Theme.scaffold,
-        appBar: AppBar(backgroundColor: Esk8Theme.scaffold, title: const Text('Playback')),
-        body: Center(child: Text('No telemetry data for this trip.', style: TextStyle(color: Esk8Theme.dim))),
+        body: Column(
+          children: [
+            const SubPageHeader(title: 'Trip Playback'),
+            Expanded(
+              child: Center(
+                child: Text(
+                  'No telemetry data for this trip.',
+                  style: TextStyle(color: Esk8Theme.dim),
+                ),
+              ),
+            ),
+          ],
+        ),
       );
     }
 
@@ -346,136 +448,200 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     final accent = Esk8Theme.accent;
     return Scaffold(
       backgroundColor: Esk8Theme.scaffold,
-      appBar: AppBar(
-        backgroundColor: Esk8Theme.scaffold,
-        title: const Text('Trip Playback', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
-        actions: [
-          if (!_showGraphs) ...[
-            IconButton(
-              icon: Icon(_mapLight ? Icons.light_mode : Icons.dark_mode, color: accent),
-              tooltip: _mapLight ? 'Light map' : 'Dark map',
-              onPressed: () => setState(() {
-                _mapLight = !_mapLight;
-                AppPrefs.mapLight = _mapLight; // share with the live map
-              }),
-            ),
-            IconButton(
-              icon: Icon(_follow ? Icons.my_location : Icons.location_searching, color: accent),
-              tooltip: _follow ? 'Following marker' : 'Free look',
-              onPressed: () => setState(() {
-                _follow = !_follow;
-                if (_follow) _recenterIfFollow();
-              }),
-            ),
-          ],
-          IconButton(
-            icon: Icon(_showGraphs ? Icons.map : Icons.show_chart, color: accent),
-            tooltip: _showGraphs ? 'Map' : 'Graphs',
-            onPressed: () => setState(() => _showGraphs = !_showGraphs),
-          ),
-          IconButton(
-            icon: Icon(Icons.ios_share, color: accent),
-            tooltip: 'Share trip card',
-            onPressed: () => TripShare.shareSummary(context, widget.tripData, widget.isMph),
-          ),
-        ],
-      ),
-      body: Stack(
+      body: Column(
         children: [
-          if (_showGraphs) _buildGraphs() else FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: _route.isNotEmpty ? _route.first : const LatLng(0, 0),
-              initialZoom: 16,
-              onMapReady: () => _mapReady = true,
-              onPositionChanged: (camera, hasGesture) {
-                if (hasGesture && _follow) setState(() => _follow = false); // a manual pan drops follow
-              },
-            ),
-            children: [
-              _tileLayer(),
-              ?_routeLayer, // cached static full route (skipped while still loading)
-              // The trail + marker animate on the controller WITHOUT rebuilding the
-              // map (tiles/route stay put), so the marker glides at vsync. No page
-              // setState happens during playback.
-              AnimatedBuilder(animation: _playCtrl, builder: (_, _) => _buildTrailLayer()),
-              AnimatedBuilder(
-                animation: _playCtrl,
-                builder: (_, _) => MarkerLayer(
-                  markers: [
-                    Marker(point: _markerPos(), width: 20, height: 20, child: _markerDot),
-                  ],
+          SubPageHeader(
+            title: 'Trip Playback',
+            actions: [
+              if (!_showGraphs) ...[
+                IconButton(
+                  icon: Icon(
+                    _mapLight ? Icons.light_mode : Icons.dark_mode,
+                    color: accent,
+                  ),
+                  tooltip: _mapLight ? 'Light map' : 'Dark map',
+                  onPressed: () => setState(() {
+                    _mapLight = !_mapLight;
+                    AppPrefs.mapLight = _mapLight; // share with the live map
+                  }),
+                ),
+                IconButton(
+                  icon: Icon(
+                    _follow ? Icons.my_location : Icons.location_searching,
+                    color: accent,
+                  ),
+                  tooltip: _follow ? 'Following marker' : 'Free look',
+                  onPressed: () => setState(() {
+                    _follow = !_follow;
+                    if (_follow) _recenterIfFollow();
+                  }),
+                ),
+              ],
+              IconButton(
+                icon: Icon(
+                  _showGraphs ? Icons.map : Icons.show_chart,
+                  color: accent,
+                ),
+                tooltip: _showGraphs ? 'Map' : 'Graphs',
+                onPressed: () => setState(() => _showGraphs = !_showGraphs),
+              ),
+              IconButton(
+                icon: Icon(Icons.ios_share, color: accent),
+                tooltip: 'Share trip card',
+                onPressed: () => TripShare.shareSummary(
+                  context,
+                  widget.tripData,
+                  widget.isMph,
                 ),
               ),
             ],
           ),
-
-          // Playback controls (Bottom)
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            child: Container(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
-              decoration: const BoxDecoration(
-                color: Color(0xDD1E1E1E),
-                border: Border(top: BorderSide(color: Color(0xFF333333))),
-              ),
-              // Stats + slider update on the controller (no page rebuild), so they
-              // track playback in sync with the gliding marker.
-              child: AnimatedBuilder(
-                animation: _playCtrl,
-                builder: (context, _) {
-                  final data = _telemetry[_idx];
-                  final ts = DateTime.fromMillisecondsSinceEpoch(data['timestamp'] as int);
-                  final gps = widget.isMph ? (data['gpsSpeed'] as double) / 1.60934 : data['gpsSpeed'] as double;
-                  final board = data['boardSpeed'] as double;
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
+          Expanded(
+            child: Stack(
+              children: [
+                if (_showGraphs)
+                  _buildGraphs()
+                else
+                  FlutterMap(
+                    mapController: _mapController,
+                    options: MapOptions(
+                      initialCenter: _route.isNotEmpty
+                          ? _route.first
+                          : const LatLng(0, 0),
+                      initialZoom: 16,
+                      onMapReady: () => _mapReady = true,
+                      onPositionChanged: (camera, hasGesture) {
+                        if (hasGesture && _follow) {
+                          setState(
+                            () => _follow = false,
+                          ); // a manual pan drops follow
+                        }
+                      },
+                    ),
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: [
-                          _StatColumn('Time', DateFormat('h:mm:ss a').format(ts)),
-                          _StatColumn('GPS Speed', '${gps.toStringAsFixed(1)} $speedUnitStr'),
-                          _StatColumn('Board Speed', '${board.toStringAsFixed(1)} $speedUnitStr'),
-                          _StatColumn('Battery', '${data['battery']}%'),
-                        ],
+                      _tileLayer(),
+                      ?_routeLayer, // cached static full route (skipped while still loading)
+                      // The trail + marker animate on the controller WITHOUT rebuilding the
+                      // map (tiles/route stay put), so the marker glides at vsync. No page
+                      // setState happens during playback.
+                      AnimatedBuilder(
+                        animation: _playCtrl,
+                        builder: (_, _) => _buildTrailLayer(),
                       ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          IconButton(
-                            icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: accent, size: 32),
-                            onPressed: _togglePlayback,
-                          ),
-                          Expanded(
-                            child: SliderTheme(
-                              data: SliderThemeData(
-                                activeTrackColor: accent,
-                                inactiveTrackColor: const Color(0xFF333333),
-                                thumbColor: Colors.white,
-                                overlayColor: accent.withValues(alpha: 0.2),
-                              ),
-                              child: Slider(
-                                value: _pos.clamp(0, (_telemetry.length - 1).toDouble()),
-                                min: 0,
-                                max: (_telemetry.length - 1).toDouble(),
-                                onChanged: (val) {
-                                  _playCtrl.stop();
-                                  _playCtrl.value = (val / _maxPos).clamp(0.0, 1.0);
-                                  if (_isPlaying) setState(() => _isPlaying = false);
-                                  _recenterIfFollow();
-                                },
-                              ),
+                      AnimatedBuilder(
+                        animation: _playCtrl,
+                        builder: (_, _) => MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: _markerPos(),
+                              width: 20,
+                              height: 20,
+                              child: _markerDot,
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
-                  );
-                },
-              ),
+                  ),
+
+                // Playback controls (Bottom)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+                    decoration: const BoxDecoration(
+                      color: Color(0xDD1E1E1E),
+                      border: Border(top: BorderSide(color: Color(0xFF333333))),
+                    ),
+                    // Stats + slider update on the controller (no page rebuild), so they
+                    // track playback in sync with the gliding marker.
+                    child: AnimatedBuilder(
+                      animation: _playCtrl,
+                      builder: (context, _) {
+                        final data = _telemetry[_idx];
+                        final ts = DateTime.fromMillisecondsSinceEpoch(
+                          data['timestamp'] as int,
+                        );
+                        final gps = widget.isMph
+                            ? (data['gpsSpeed'] as double) / 1.60934
+                            : data['gpsSpeed'] as double;
+                        final board = data['boardSpeed'] as double;
+                        return Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _StatColumn(
+                                  'Time',
+                                  DateFormat('h:mm:ss a').format(ts),
+                                ),
+                                _StatColumn(
+                                  'GPS Speed',
+                                  '${gps.toStringAsFixed(1)} $speedUnitStr',
+                                ),
+                                _StatColumn(
+                                  'Board Speed',
+                                  '${board.toStringAsFixed(1)} $speedUnitStr',
+                                ),
+                                _StatColumn('Battery', '${data['battery']}%'),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: Icon(
+                                    _isPlaying ? Icons.pause : Icons.play_arrow,
+                                    color: accent,
+                                    size: 32,
+                                  ),
+                                  onPressed: _togglePlayback,
+                                ),
+                                Expanded(
+                                  child: SliderTheme(
+                                    data: SliderThemeData(
+                                      activeTrackColor: accent,
+                                      inactiveTrackColor: const Color(
+                                        0xFF333333,
+                                      ),
+                                      thumbColor: Colors.white,
+                                      overlayColor: accent.withValues(
+                                        alpha: 0.2,
+                                      ),
+                                    ),
+                                    child: Slider(
+                                      value: _pos.clamp(
+                                        0,
+                                        (_telemetry.length - 1).toDouble(),
+                                      ),
+                                      min: 0,
+                                      max: (_telemetry.length - 1).toDouble(),
+                                      onChanged: (val) {
+                                        _playCtrl.stop();
+                                        _playCtrl.value = (val / _maxPos).clamp(
+                                          0.0,
+                                          1.0,
+                                        );
+                                        if (_isPlaying) {
+                                          setState(() => _isPlaying = false);
+                                        }
+                                        _recenterIfFollow();
+                                      },
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
@@ -493,9 +659,23 @@ class _StatColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label, style: const TextStyle(color: Colors.grey, fontSize: 10, fontWeight: FontWeight.bold)),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.grey,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         const SizedBox(height: 4),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w300)),
+        Text(
+          value,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w300,
+          ),
+        ),
       ],
     );
   }

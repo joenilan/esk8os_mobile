@@ -492,6 +492,8 @@ class _DashboardPageState extends State<DashboardPage>
   // playback push INSIDE the deck (top & bottom panels stay) instead of over the
   // whole app. Android back pops this first (see PopScope in build).
   final GlobalKey<NavigatorState> _contentNavKey = GlobalKey<NavigatorState>();
+  late final _ContentNavigatorObserver _contentNavObserver;
+  bool _contentPageOpen = false;
 
   // Auto start/stop + over-speed alert run off the latest telemetry frame.
   Telemetry? _latestT;
@@ -510,6 +512,7 @@ class _DashboardPageState extends State<DashboardPage>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _contentNavObserver = _ContentNavigatorObserver(_setContentPageOpen);
     _subscribeTelemetry();
     _connSub = widget.dev.connectionState.listen((s) {
       if (s == DeviceConnectionState.disconnected &&
@@ -530,6 +533,14 @@ class _DashboardPageState extends State<DashboardPage>
     }
     _autoTimer = Timer.periodic(const Duration(seconds: 1), (_) => _autoTick());
     _fetchSettings();
+  }
+
+  void _setContentPageOpen(bool open) {
+    if (!mounted || _contentPageOpen == open) return;
+    setState(() {
+      _contentPageOpen = open;
+      if (open) _showControls = false;
+    });
   }
 
   /// Pop the floating window when a recording trip is backgrounded; dismiss it
@@ -951,6 +962,7 @@ class _DashboardPageState extends State<DashboardPage>
                       removeTop: true,
                       child: Navigator(
                         key: _contentNavKey,
+                        observers: [_contentNavObserver],
                         onGenerateRoute: (_) => MaterialPageRoute(
                           builder: (_) => StreamBuilder<Telemetry>(
                             stream: _telCtrl.stream,
@@ -1012,29 +1024,32 @@ class _DashboardPageState extends State<DashboardPage>
                                   ),
                                   // Page title — moved out of the top panel, centered at the
                                   // top of the content (in the open space above the speed).
-                                  Positioned(
-                                    top: 6,
-                                    left: 0,
-                                    right: 0,
-                                    child: IgnorePointer(
-                                      child: Center(
-                                        child: Text(
-                                          _pageName(_currentPage),
-                                          style: TextStyle(
-                                            fontSize: 13,
-                                            color: Esk8Theme.dim,
-                                            letterSpacing: 2,
-                                            fontWeight: FontWeight.w600,
+                                  if (!_contentPageOpen)
+                                    Positioned(
+                                      top: 6,
+                                      left: 0,
+                                      right: 0,
+                                      child: IgnorePointer(
+                                        child: Center(
+                                          child: Text(
+                                            _pageName(_currentPage),
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                              color: Esk8Theme.dim,
+                                              letterSpacing: 2,
+                                              fontWeight: FontWeight.w600,
+                                            ),
                                           ),
                                         ),
                                       ),
                                     ),
-                                  ),
 
                                   // Headless boards need obvious phone navigation. The TRIP
                                   // map also gets arrows because map gestures consume swipes.
-                                  if (isHeadless ||
-                                      _pageName(_currentPage) == 'TRIP') ...[
+                                  if (!_contentPageOpen &&
+                                      (isHeadless ||
+                                          _pageName(_currentPage) ==
+                                              'TRIP')) ...[
                                     Positioned(
                                       left: 6,
                                       top: 0,
@@ -1068,7 +1083,7 @@ class _DashboardPageState extends State<DashboardPage>
                                       ),
                                     ),
                                   ],
-                                  if (!_showControls)
+                                  if (!_contentPageOpen && !_showControls)
                                     Positioned(
                                       top: 8,
                                       right: 8,
@@ -1081,14 +1096,14 @@ class _DashboardPageState extends State<DashboardPage>
                                         ),
                                       ),
                                     ),
-                                  if (_showControls)
+                                  if (!_contentPageOpen && _showControls)
                                     Positioned(
                                       bottom: 0,
                                       left: 0,
                                       right: 0,
                                       child: Container(
                                         decoration: BoxDecoration(
-                                          color: Esk8Theme.panelOverlay,
+                                          color: Esk8Theme.panel,
                                           border: Border(
                                             top: BorderSide(
                                               color: Esk8Theme.border,
@@ -1217,26 +1232,27 @@ class _DashboardPageState extends State<DashboardPage>
                   ),
 
                   // PAGE DOTS
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 6),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: List.generate(
-                        _pageNames.length,
-                        (i) => Container(
-                          width: 6,
-                          height: 6,
-                          margin: const EdgeInsets.symmetric(horizontal: 3),
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: i == _currentPage
-                                ? _accent
-                                : Colors.white.withValues(alpha: 0.25),
+                  if (!_contentPageOpen)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(
+                          _pageNames.length,
+                          (i) => Container(
+                            width: 6,
+                            height: 6,
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: i == _currentPage
+                                  ? _accent
+                                  : Colors.white.withValues(alpha: 0.25),
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
 
                   // BOTTOM PANEL — identifies battery · trip · odometer
                   Container(
@@ -1259,6 +1275,42 @@ class _DashboardPageState extends State<DashboardPage>
         ),
       ),
     );
+  }
+}
+
+class _ContentNavigatorObserver extends NavigatorObserver {
+  final ValueChanged<bool> onStackChanged;
+
+  _ContentNavigatorObserver(this.onStackChanged);
+
+  void _notify() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      onStackChanged(navigator?.canPop() ?? false);
+    });
+  }
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPush(route, previousRoute);
+    _notify();
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didPop(route, previousRoute);
+    _notify();
+  }
+
+  @override
+  void didRemove(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    super.didRemove(route, previousRoute);
+    _notify();
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+    _notify();
   }
 }
 

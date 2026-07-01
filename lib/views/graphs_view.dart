@@ -35,7 +35,7 @@ class GraphsView extends StatelessWidget {
     final samples = List<Telemetry>.of(history, growable: false);
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 22, 12, 8),
+      padding: const EdgeInsets.fromLTRB(12, 44, 12, 8),
       child: Column(
         children: [
           Expanded(
@@ -100,12 +100,18 @@ class _MetricChart extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             SectionTitle(label),
-            Text(
-              '${current.toStringAsFixed(1)} $unit',
-              style: Esk8Theme.number(22, color: color),
+            const SizedBox(width: 12),
+            Expanded(
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: Text(
+                  '${current.toStringAsFixed(1)} $unit',
+                  style: Esk8Theme.number(22, color: color),
+                ),
+              ),
             ),
           ],
         ),
