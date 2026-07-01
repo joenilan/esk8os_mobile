@@ -296,6 +296,71 @@ class _TripViewState extends State<TripView>
     ],
   );
 
+  Widget _compareSpeedRow(
+    double boardSpeed,
+    double gpsSpeed,
+    String unit,
+  ) => Column(
+    children: [
+      Row(
+        children: [
+          Expanded(
+            child: Text(
+              'BOARD',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 8,
+                color: _ctlDim,
+                letterSpacing: 0.5,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          SizedBox(width: 18),
+          Expanded(
+            child: Text(
+              'GPS',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 8,
+                color: _ctlDim,
+                letterSpacing: 0.5,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 2),
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              boardSpeed.toStringAsFixed(0),
+              style: Esk8Theme.number(24, color: _ctlFg),
+            ),
+            const SizedBox(width: 3),
+            Text(unit, style: Esk8Theme.labelStyle.copyWith(color: _ctlDim)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: Text('|', style: TextStyle(color: _ctlDim, fontSize: 18)),
+            ),
+            Text(
+              gpsSpeed.toStringAsFixed(0),
+              style: Esk8Theme.number(24, color: _ctlFg),
+            ),
+            const SizedBox(width: 3),
+            Text(unit, style: Esk8Theme.labelStyle.copyWith(color: _ctlDim)),
+          ],
+        ),
+      ),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     super.build(context);
@@ -643,11 +708,10 @@ class _TripViewState extends State<TripView>
                   if (_statsExpanded) ...[
                     Divider(color: _ctlBorder, height: 6),
                     const SizedBox(height: 6),
-                    _miniRow(
-                      'BOARD SPD',
-                      telemetry.speed.toStringAsFixed(1),
-                      'GPS SPD',
-                      gpsSpeedDisplay.toStringAsFixed(1),
+                    _compareSpeedRow(
+                      telemetry.speed,
+                      gpsSpeedDisplay,
+                      speedUnitStr,
                     ),
                     const SizedBox(height: 8),
                     _miniRow(
