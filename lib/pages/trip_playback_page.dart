@@ -328,26 +328,26 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Color(0xFFB950D7))),
+      return Scaffold(
+        backgroundColor: Esk8Theme.scaffold,
+        body: Center(child: CircularProgressIndicator(color: Esk8Theme.accent)),
       );
     }
 
     if (_telemetry.isEmpty) {
       return Scaffold(
-        backgroundColor: Colors.black,
-        appBar: AppBar(backgroundColor: const Color(0xFF1E1E1E), title: const Text('Playback')),
-        body: const Center(child: Text('No telemetry data for this trip.', style: TextStyle(color: Colors.grey))),
+        backgroundColor: Esk8Theme.scaffold,
+        appBar: AppBar(backgroundColor: Esk8Theme.scaffold, title: const Text('Playback')),
+        body: Center(child: Text('No telemetry data for this trip.', style: TextStyle(color: Esk8Theme.dim))),
       );
     }
 
     final speedUnitStr = widget.isMph ? 'mph' : 'km/h';
-    const accent = Color(0xFFB950D7);
+    final accent = Esk8Theme.accent;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: Esk8Theme.scaffold,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E1E1E),
+        backgroundColor: Esk8Theme.scaffold,
         title: const Text('Trip Playback', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
         actions: [
           if (!_showGraphs) ...[
@@ -374,7 +374,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
             onPressed: () => setState(() => _showGraphs = !_showGraphs),
           ),
           IconButton(
-            icon: const Icon(Icons.ios_share, color: accent),
+            icon: Icon(Icons.ios_share, color: accent),
             tooltip: 'Share trip card',
             onPressed: () => TripShare.shareSummary(context, widget.tripData, widget.isMph),
           ),
@@ -446,16 +446,16 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
                       Row(
                         children: [
                           IconButton(
-                            icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: const Color(0xFFB950D7), size: 32),
+                            icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow, color: accent, size: 32),
                             onPressed: _togglePlayback,
                           ),
                           Expanded(
                             child: SliderTheme(
                               data: SliderThemeData(
-                                activeTrackColor: const Color(0xFFB950D7),
+                                activeTrackColor: accent,
                                 inactiveTrackColor: const Color(0xFF333333),
                                 thumbColor: Colors.white,
-                                overlayColor: const Color(0xFFB950D7).withValues(alpha: 0.2),
+                                overlayColor: accent.withValues(alpha: 0.2),
                               ),
                               child: Slider(
                                 value: _pos.clamp(0, (_telemetry.length - 1).toDouble()),

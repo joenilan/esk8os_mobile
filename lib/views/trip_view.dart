@@ -170,6 +170,14 @@ class _TripViewState extends State<TripView>
     AppPrefs.mapLight = _mapLight;
   }
 
+  // Map-control chrome flips with the basemap: light controls over the light map,
+  // dark controls over the dark map. Accent stays for highlights on both.
+  Color get _ctlBg => _mapLight ? const Color(0xF2FAFAFA) : const Color(0xDD1E1E1E);
+  Color get _ctlBorder =>
+      _mapLight ? const Color(0xFFBEBEC6) : const Color(0xFF333333);
+  Color get _ctlFg => _mapLight ? const Color(0xFF18181C) : Colors.white;
+  Color get _ctlDim => _mapLight ? const Color(0xFF70707A) : Colors.grey;
+
   /// Recorder ticked (new GPS fix / start / stop): glide the marker + refresh.
   void _onRec() {
     if (!mounted) return;
@@ -445,9 +453,8 @@ class _TripViewState extends State<TripView>
                   vertical: 6,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xDD1E1E1E),
-                  border: Border.all(color: const Color(0xFF333333)),
-                  borderRadius: BorderRadius.circular(4),
+                  color: _ctlBg,
+                  border: Border.all(color: _ctlBorder),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -457,7 +464,7 @@ class _TripViewState extends State<TripView>
                       size: 14,
                       color: (_locationReady || isTracking)
                           ? Esk8Theme.accent
-                          : Colors.grey,
+                          : _ctlDim,
                     ),
                     const SizedBox(width: 6),
                     Text(
@@ -469,8 +476,8 @@ class _TripViewState extends State<TripView>
                         fontWeight: FontWeight.bold,
                         letterSpacing: 1,
                         color: (_locationReady || isTracking)
-                            ? Colors.white
-                            : Colors.grey,
+                            ? _ctlFg
+                            : _ctlDim,
                       ),
                     ),
                   ],
@@ -484,15 +491,14 @@ class _TripViewState extends State<TripView>
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xDD1E1E1E),
-                    border: Border.all(color: const Color(0xFF333333)),
-                    borderRadius: BorderRadius.circular(4),
+                    color: _ctlBg,
+                    border: Border.all(color: _ctlBorder),
                   ),
                   child: Text(
                     '${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 10,
-                      color: Colors.grey,
+                      color: _ctlDim,
                       fontFamily: 'monospace',
                     ),
                   ),
@@ -514,22 +520,21 @@ class _TripViewState extends State<TripView>
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: const Color(0xDD1E1E1E),
-                    border: Border.all(color: const Color(0xFF333333)),
-                    borderRadius: BorderRadius.circular(4),
+                    color: _ctlBg,
+                    border: Border.all(color: _ctlBorder),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.history, size: 14, color: Colors.white),
-                      SizedBox(width: 6),
+                      Icon(Icons.history, size: 14, color: _ctlFg),
+                      const SizedBox(width: 6),
                       Text(
                         'HISTORY',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
                           letterSpacing: 1,
-                          color: Colors.white,
+                          color: _ctlFg,
                         ),
                       ),
                     ],
@@ -633,7 +638,6 @@ class _TripViewState extends State<TripView>
                 ),
                 decoration: BoxDecoration(
                   color: Esk8Theme.accent,
-                  borderRadius: BorderRadius.circular(4),
                 ),
                 child: const Text(
                   '● RECORDING',
@@ -658,18 +662,21 @@ class _TripViewState extends State<TripView>
                 icon: Icons.my_location,
                 onTap: _recenter,
                 highlighted: !_followMode,
+                light: _mapLight,
               ),
               const SizedBox(height: 8),
               _MapButton(
                 icon: _headingUp ? Icons.navigation : Icons.explore,
                 onTap: _toggleHeadingUp,
                 highlighted: _headingUp,
+                light: _mapLight,
               ),
               const SizedBox(height: 8),
               _MapButton(
                 icon: _mapLight ? Icons.dark_mode : Icons.light_mode,
                 onTap: _toggleMapLight,
                 highlighted: _mapLight,
+                light: _mapLight,
               ),
             ],
           ),
@@ -734,30 +741,33 @@ class _MapButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
   final bool highlighted;
+  final bool light;
 
   const _MapButton({
     required this.icon,
     required this.onTap,
     this.highlighted = false,
+    this.light = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    // Chrome flips with the basemap: light button over the light map, dark over dark.
+    final bg = light ? const Color(0xF2FAFAFA) : const Color(0xDD1E1E1E);
+    final bd = light ? const Color(0xFFBEBEC6) : const Color(0xFF333333);
+    final fg = light ? const Color(0xFF18181C) : Colors.white;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: 44,
         height: 44,
         decoration: BoxDecoration(
-          color: const Color(0xDD1E1E1E),
-          border: Border.all(
-            color: highlighted ? Esk8Theme.accent : const Color(0xFF333333),
-          ),
-          borderRadius: BorderRadius.circular(4),
+          color: bg,
+          border: Border.all(color: highlighted ? Esk8Theme.accent : bd),
         ),
         child: Icon(
           icon,
-          color: highlighted ? Esk8Theme.accent : Colors.white,
+          color: highlighted ? Esk8Theme.accent : fg,
           size: 20,
         ),
       ),

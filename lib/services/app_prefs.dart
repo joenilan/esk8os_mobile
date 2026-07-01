@@ -13,7 +13,7 @@ class AppPrefs {
   static bool get mapHeadingUp => _p.getBool('mapHeadingUp') ?? false;
   static set mapHeadingUp(bool v) => _p.setBool('mapHeadingUp', v);
 
-  static bool get mapLight => _p.getBool('mapLight') ?? false;
+  static bool get mapLight => _p.getBool('mapLight') ?? true;   // light basemap by default — feels more natural
   static set mapLight(bool v) => _p.setBool('mapLight', v);
 
   /// Auto start/stop a trip from movement.
