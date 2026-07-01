@@ -151,87 +151,239 @@ class _ScanPageState extends State<ScanPage> {
             tooltip: 'Mock Mode',
             onPressed: _connecting ? null : _startMockMode,
           ),
-          StreamBuilder<bool>(
-            stream: CompanionScanner.isScanning,
-            initialData: false,
-            builder: (_, snap) => (snap.data ?? false)
-                ? const Padding(
-                    padding: EdgeInsets.all(16),
-                    child: SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    ),
-                  )
-                : IconButton(icon: const Icon(Icons.search), onPressed: _scan),
-          ),
         ],
       ),
       body: Column(
         children: [
           if (_error != null)
-            Padding(
-              padding: const EdgeInsets.all(12),
-              child: Text(
-                _error!,
-                style: const TextStyle(color: Colors.redAccent),
+            Container(
+              width: double.infinity,
+              color: Esk8Theme.danger.withValues(alpha: 0.12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Esk8Theme.danger, size: 18),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(_error!,
+                        style: TextStyle(color: Esk8Theme.danger, fontSize: 13)),
+                  ),
+                ],
               ),
             ),
-          if (_connecting) const LinearProgressIndicator(),
+          if (_connecting)
+            LinearProgressIndicator(
+                color: Esk8Theme.accent, backgroundColor: Esk8Theme.border),
           Expanded(
             child: StreamBuilder<List<ScanResult>>(
               stream: CompanionScanner.results(),
               initialData: const [],
               builder: (_, snap) {
                 final results = snap.data ?? const [];
-                if (results.isEmpty) {
-                  return const Center(
-                    child: Text('Tap search to scan for your board'),
-                  );
-                }
-                return ListView(
-                  children: [
-                    // The board advertises [vtype, macHi, macLo] in manufacturer
-                    // data (company 0xFFFF), so we can show the right vehicle icon
-                    // and the pair code BEFORE connecting. Fall back to the MAC tail
-                    // for the code (Android exposes it) and a skateboard icon.
-                    ...results.map((r) {
-                      final mfg =
-                          r.advertisementData.manufacturerData[0xFFFF];
-                      final hasMfg = mfg != null && mfg.length >= 3;
-                      final vtype = hasMfg ? mfg[0] : 0;
-                      final macHex =
-                          r.device.remoteId.str.replaceAll(':', '');
-                      final code = hasMfg
-                          ? (mfg[1].toRadixString(16).padLeft(2, '0') +
-                                    mfg[2].toRadixString(16).padLeft(2, '0'))
-                                .toUpperCase()
-                          : (macHex.length >= 4
-                                ? macHex
-                                      .substring(macHex.length - 4)
-                                      .toUpperCase()
-                                : null);
-                      return ListTile(
-                        leading: Icon(Vehicle.icon(vtype)),
-                        title: Text(
-                          r.device.platformName.isNotEmpty
-                              ? r.device.platformName
-                              : r.device.remoteId.str,
-                        ),
-                        subtitle: Text(
-                          code != null
-                              ? 'PAIR #$code   ·   ${r.rssi} dBm'
-                              : '${r.rssi} dBm',
-                        ),
-                        onTap: _connecting ? null : () => _connect(r.device),
-                      );
-                    }),
-                  ],
+                return StreamBuilder<bool>(
+                  stream: CompanionScanner.isScanning,
+                  initialData: false,
+                  builder: (_, scanSnap) {
+                    final scanning = scanSnap.data ?? false;
+                    return results.isEmpty
+                        ? _emptyState(scanning)
+                        : _resultsList(results, scanning);
+                  },
                 );
               },
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ---- disconnected / scan home ---------------------------------------------
+
+  /// Anchored empty state: board icon + copy + a prominent sharp SCAN button.
+  Widget _emptyState(bool scanning) => Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 96,
+                height: 96,
+                alignment: Alignment.center,
+                decoration: Esk8Theme.panelBox(
+                    borderColor: scanning ? Esk8Theme.accent : Esk8Theme.border),
+                child: Icon(
+                  scanning ? Icons.bluetooth_searching : Icons.skateboarding,
+                  size: 44,
+                  color: scanning ? Esk8Theme.accent : Esk8Theme.dim,
+                ),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                scanning ? 'SCANNING…' : 'NO BOARD CONNECTED',
+                style: TextStyle(
+                  fontSize: 18,
+                  letterSpacing: 2.5,
+                  fontWeight: FontWeight.bold,
+                  color: Esk8Theme.textMuted,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                scanning
+                    ? 'Looking for nearby ESK8OS boards'
+                    : 'Scan to pair your board over Bluetooth',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Esk8Theme.dim),
+              ),
+              const SizedBox(height: 28),
+              _scanButton(scanning),
+            ],
+          ),
+        ),
+      );
+
+  /// Sharp accent-bordered SCAN button — mirrors the board's boxed labels.
+  Widget _scanButton(bool scanning) => Material(
+        color: Esk8Theme.panel,
+        child: InkWell(
+          onTap: (scanning || _connecting) ? null : _scan,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 44, vertical: 15),
+            decoration: BoxDecoration(border: Border.all(color: Esk8Theme.accent)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                scanning
+                    ? SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: Esk8Theme.accent),
+                      )
+                    : Icon(Icons.bluetooth_searching,
+                        size: 18, color: Esk8Theme.accent),
+                const SizedBox(width: 10),
+                Text(
+                  scanning ? 'SCANNING' : 'SCAN',
+                  style: TextStyle(
+                    fontSize: 15,
+                    letterSpacing: 3,
+                    fontWeight: FontWeight.bold,
+                    color: Esk8Theme.accent,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+  Widget _resultsList(List<ScanResult> results, bool scanning) => ListView(
+        padding: const EdgeInsets.fromLTRB(12, 16, 12, 24),
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 4, bottom: 12),
+            child: const SectionTitle('Select your board'),
+          ),
+          ...results.map(_resultRow),
+          const SizedBox(height: 20),
+          Center(child: _scanButton(scanning)),
+        ],
+      );
+
+  /// One scan result as a tappable bordered panel. The board advertises
+  /// [vtype, macHi, macLo] in manufacturer data (company 0xFFFF), so we show the
+  /// right vehicle icon + pair code before connecting; fall back to the MAC tail.
+  Widget _resultRow(ScanResult r) {
+    final mfg = r.advertisementData.manufacturerData[0xFFFF];
+    final hasMfg = mfg != null && mfg.length >= 3;
+    final vtype = hasMfg ? mfg[0] : 0;
+    final macHex = r.device.remoteId.str.replaceAll(':', '');
+    final code = hasMfg
+        ? (mfg[1].toRadixString(16).padLeft(2, '0') +
+                mfg[2].toRadixString(16).padLeft(2, '0'))
+            .toUpperCase()
+        : (macHex.length >= 4
+            ? macHex.substring(macHex.length - 4).toUpperCase()
+            : null);
+    final name = r.device.platformName.isNotEmpty
+        ? r.device.platformName
+        : r.device.remoteId.str;
+    final rssi = r.rssi;
+    final signalColor = rssi >= -60
+        ? Esk8Theme.green
+        : (rssi >= -75 ? Esk8Theme.yellow : Esk8Theme.orange);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Material(
+        color: Esk8Theme.panel,
+        child: InkWell(
+          onTap: _connecting ? null : () => _connect(r.device),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(border: Border.all(color: Esk8Theme.border)),
+            child: Row(
+              children: [
+                Container(
+                  width: 46,
+                  height: 46,
+                  alignment: Alignment.center,
+                  decoration:
+                      BoxDecoration(border: Border.all(color: Esk8Theme.accent)),
+                  child:
+                      Icon(Vehicle.icon(vtype), color: Esk8Theme.accent, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Esk8Theme.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (code != null) ...[
+                            Text(
+                              'PAIR #$code',
+                              style: TextStyle(
+                                fontSize: 12,
+                                letterSpacing: 1.5,
+                                fontWeight: FontWeight.bold,
+                                color: Esk8Theme.accent,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Text('·', style: TextStyle(color: Esk8Theme.dim)),
+                            const SizedBox(width: 10),
+                          ],
+                          Icon(Icons.signal_cellular_alt,
+                              size: 13, color: signalColor),
+                          const SizedBox(width: 4),
+                          Text('$rssi dBm',
+                              style:
+                                  TextStyle(fontSize: 12, color: Esk8Theme.dim)),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(Icons.chevron_right, color: Esk8Theme.dim),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
