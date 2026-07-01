@@ -39,6 +39,7 @@ class _TripViewState extends State<TripView>
 
   bool _locationReady = false;
   bool _statsExpanded = false; // collapsed = speed only; tap to show all stats
+  bool _gpsCompare = false;
   bool _followMode = true;
   double _currentZoom = 16.0;
   // Persisted across page swipes / restarts (see AppPrefs).
@@ -273,10 +274,34 @@ class _TripViewState extends State<TripView>
     return '${s}s';
   }
 
-  Widget _miniStat(String label, String value) => Column(
+  Widget _miniStat(String label, String value, {String? compare}) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(value, style: Esk8Theme.number(17, color: _ctlFg)),
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        alignment: Alignment.centerLeft,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(value, style: Esk8Theme.number(17, color: _ctlFg)),
+            if (compare != null) ...[
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  '|',
+                  style: TextStyle(color: _ctlDim, fontSize: 12),
+                ),
+              ),
+              Text(
+                compare,
+                style: Esk8Theme.number(17, color: Esk8Theme.accent),
+              ),
+            ],
+          ],
+        ),
+      ),
       Text(
         label,
         style: TextStyle(
@@ -289,75 +314,17 @@ class _TripViewState extends State<TripView>
     ],
   );
 
-  Widget _miniRow(String l1, String v1, String l2, String v2) => Row(
+  Widget _miniRow(
+    String l1,
+    String v1,
+    String l2,
+    String v2, {
+    String? c1,
+    String? c2,
+  }) => Row(
     children: [
-      Expanded(child: _miniStat(l1, v1)),
-      Expanded(child: _miniStat(l2, v2)),
-    ],
-  );
-
-  Widget _compareSpeedRow(
-    double boardSpeed,
-    double gpsSpeed,
-    String unit,
-  ) => Column(
-    children: [
-      Row(
-        children: [
-          Expanded(
-            child: Text(
-              'BOARD',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 8,
-                color: _ctlDim,
-                letterSpacing: 0.5,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-          SizedBox(width: 18),
-          Expanded(
-            child: Text(
-              'GPS',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 8,
-                color: _ctlDim,
-                letterSpacing: 0.5,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 2),
-      FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(
-              boardSpeed.toStringAsFixed(0),
-              style: Esk8Theme.number(24, color: _ctlFg),
-            ),
-            const SizedBox(width: 3),
-            Text(unit, style: Esk8Theme.labelStyle.copyWith(color: _ctlDim)),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text('|', style: TextStyle(color: _ctlDim, fontSize: 18)),
-            ),
-            Text(
-              gpsSpeed.toStringAsFixed(0),
-              style: Esk8Theme.number(24, color: _ctlFg),
-            ),
-            const SizedBox(width: 3),
-            Text(unit, style: Esk8Theme.labelStyle.copyWith(color: _ctlDim)),
-          ],
-        ),
-      ),
+      Expanded(child: _miniStat(l1, v1, compare: c1)),
+      Expanded(child: _miniStat(l2, v2, compare: c2)),
     ],
   );
 
@@ -415,6 +382,15 @@ class _TripViewState extends State<TripView>
     final gpsMovingAvgDisplay = isMph
         ? _rec.gpsMovingAvgKmh / 1.60934
         : _rec.gpsMovingAvgKmh;
+    final boardMaxSpeedDisplay = _rec.boardMaxSpeed;
+    final elapsedHours = elapsed.inMilliseconds / 3600000.0;
+    final boardMovingHours = boardMovingTime.inMilliseconds / 3600000.0;
+    final boardAvgDisplay = elapsedHours > 0
+        ? boardTripDisplay / elapsedHours
+        : 0.0;
+    final boardMovingAvgDisplay = boardMovingHours > 0
+        ? boardTripDisplay / boardMovingHours
+        : 0.0;
     final climbDisplay = isMph ? _rec.elevGainM * 3.28084 : _rec.elevGainM;
     final climbUnit = isMph ? 'FT' : 'M';
 
@@ -633,7 +609,10 @@ class _TripViewState extends State<TripView>
               ),
               const SizedBox(height: 8),
               GestureDetector(
-                onTap: () => setState(() => _statsExpanded = !_statsExpanded),
+                onTap: () => setState(() {
+                  _gpsCompare = !_gpsCompare;
+                  if (_gpsCompare) _statsExpanded = true;
+                }),
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -642,7 +621,7 @@ class _TripViewState extends State<TripView>
                   decoration: BoxDecoration(
                     color: _ctlBg,
                     border: Border.all(
-                      color: _statsExpanded ? Esk8Theme.accent : _ctlBorder,
+                      color: _gpsCompare ? Esk8Theme.accent : _ctlBorder,
                     ),
                   ),
                   child: Row(
@@ -651,7 +630,7 @@ class _TripViewState extends State<TripView>
                       Icon(Icons.compare_arrows, size: 14, color: _ctlFg),
                       const SizedBox(width: 6),
                       Text(
-                        _statsExpanded ? 'HIDE STATS' : 'COMPARE',
+                        _gpsCompare ? 'GPS ON' : 'COMPARE',
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.bold,
@@ -675,7 +654,9 @@ class _TripViewState extends State<TripView>
           child: GestureDetector(
             onTap: () => setState(() => _statsExpanded = !_statsExpanded),
             child: Container(
-              width: _statsExpanded ? 156 : 96,
+              width: _statsExpanded
+                  ? (_gpsCompare ? 210 : 156)
+                  : (_gpsCompare ? 136 : 96),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: _ctlBg,
@@ -689,9 +670,42 @@ class _TripViewState extends State<TripView>
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
                     children: [
-                      Text(
-                        '${telemetry.speed.toInt()}',
-                        style: Esk8Theme.number(38, color: _ctlFg),
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.baseline,
+                            textBaseline: TextBaseline.alphabetic,
+                            children: [
+                              Text(
+                                '${telemetry.speed.toInt()}',
+                                style: Esk8Theme.number(38, color: _ctlFg),
+                              ),
+                              if (_gpsCompare) ...[
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                  ),
+                                  child: Text(
+                                    '|',
+                                    style: TextStyle(
+                                      color: _ctlDim,
+                                      fontSize: 20,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  '${gpsSpeedDisplay.toInt()}',
+                                  style: Esk8Theme.number(
+                                    38,
+                                    color: Esk8Theme.accent,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 3),
                       Text(
@@ -708,48 +722,53 @@ class _TripViewState extends State<TripView>
                   if (_statsExpanded) ...[
                     Divider(color: _ctlBorder, height: 6),
                     const SizedBox(height: 6),
-                    _compareSpeedRow(
-                      telemetry.speed,
-                      gpsSpeedDisplay,
-                      speedUnitStr,
-                    ),
-                    const SizedBox(height: 8),
                     _miniRow(
+                      'SPD $speedUnitStr',
+                      telemetry.speed.toStringAsFixed(1),
                       'TRIP $unitStr',
                       boardTripDisplay.toStringAsFixed(2),
+                      c1: _gpsCompare
+                          ? gpsSpeedDisplay.toStringAsFixed(1)
+                          : null,
+                      c2: _gpsCompare
+                          ? gpsTripDistDisplay.toStringAsFixed(2)
+                          : null,
+                    ),
+                    const SizedBox(height: 8),
+                    _miniRow(
                       'TIME',
                       _formatDuration(boardMovingTime),
-                    ),
-                    const SizedBox(height: 8),
-                    // GPS compare (board wheel distance is canonical above; GPS may
-                    // differ — different sensor). GPS TIME is wall-clock elapsed.
-                    _miniRow(
-                      'GPS $unitStr',
-                      gpsTripDistDisplay.toStringAsFixed(2),
-                      'GPS TIME',
-                      _formatDuration(elapsed),
-                    ),
-                    const SizedBox(height: 8),
-                    _miniRow(
                       'MAX',
-                      gpsMaxSpeedDisplay.toStringAsFixed(1),
-                      'AVG',
-                      gpsAvgDisplay.toStringAsFixed(1),
+                      boardMaxSpeedDisplay.toStringAsFixed(1),
+                      c1: _gpsCompare ? _formatDuration(elapsed) : null,
+                      c2: _gpsCompare
+                          ? gpsMaxSpeedDisplay.toStringAsFixed(1)
+                          : null,
                     ),
                     const SizedBox(height: 8),
                     _miniRow(
+                      'AVG',
+                      boardAvgDisplay.toStringAsFixed(1),
                       'MOVE',
-                      gpsMovingAvgDisplay.toStringAsFixed(1),
+                      boardMovingAvgDisplay.toStringAsFixed(1),
+                      c1: _gpsCompare ? gpsAvgDisplay.toStringAsFixed(1) : null,
+                      c2: _gpsCompare
+                          ? gpsMovingAvgDisplay.toStringAsFixed(1)
+                          : null,
+                    ),
+                    const SizedBox(height: 8),
+                    _miniRow(
                       'CLIMB $climbUnit',
                       climbDisplay.toStringAsFixed(0),
-                    ),
-                    const SizedBox(height: 8),
-                    // Board-canonical efficiency + lifetime odometer.
-                    _miniRow(
                       'EFF wh/${isMph ? 'mi' : 'km'}',
                       telemetry.efficiency.toStringAsFixed(1),
+                    ),
+                    const SizedBox(height: 8),
+                    _miniRow(
                       'ODO $unitStr',
                       telemetry.odometer.toStringAsFixed(1),
+                      'RANGE $unitStr',
+                      telemetry.range.toStringAsFixed(1),
                     ),
                   ],
                 ],
