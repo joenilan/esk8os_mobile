@@ -488,6 +488,10 @@ class _DashboardPageState extends State<DashboardPage>
   int _currentPage = 0;
   bool _showControls = false;
   bool _bridgeModeRequested = false;
+  // Nested navigator for the middle content area, so settings / trip history /
+  // playback push INSIDE the deck (top & bottom panels stay) instead of over the
+  // whole app. Android back pops this first (see PopScope in build).
+  final GlobalKey<NavigatorState> _contentNavKey = GlobalKey<NavigatorState>();
 
   // Auto start/stop + over-speed alert run off the latest telemetry frame.
   Telemetry? _latestT;
@@ -826,372 +830,433 @@ class _DashboardPageState extends State<DashboardPage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: StreamBuilder<Telemetry>(
-        stream: _telCtrl.stream,
-        initialData: _latestT,
-        builder: (_, snap) {
-          final t = snap.data ?? _latestT;
-          _latestT = t; // feed the auto-trip / alert tick
-          final du = _boardSettings?.mph == true ? 'mi' : 'km';
-          final rider = (_boardSettings?.rider ?? '').trim().toUpperCase();
-          final isHeadless =
-              _boardSettings?.display == 'none' ||
-              _boardSettings?.ui == 'headless';
-          return SafeArea(
-            top: false,
-            bottom: false,
-            child: Column(
-              children: [
-                // TOP PANEL — rider (left) · time (right). The centre is left
-                // empty so the camera punch-hole sits in clear space; the panel
-                // rides up at the notch line. Page title moves into the content.
-                Container(
-                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
-                  decoration: BoxDecoration(
-                    border: Border(bottom: BorderSide(color: Esk8Theme.border)),
-                  ),
-                  child: TopStatusBar(
-                    leadingIcon: Vehicle.icon(_boardSettings?.vehicleType ?? 0),
-                    left: rider.isNotEmpty ? 'RIDER: $rider' : 'ESK8OS',
-                    right: _clock(),
-                  ),
-                ),
-
-                // Connection-lost banner: shown while we retry in the background.
-                // The dashboard keeps the last telemetry frame underneath.
-                if (_reconnecting)
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        final nav = _contentNavKey.currentState;
+        if (nav != null && nav.canPop()) {
+          nav.pop(); // back out of settings / history / playback first
+        } else {
+          Navigator.of(context).maybePop(); // then leave the dashboard
+        }
+      },
+      child: Scaffold(
+        body: StreamBuilder<Telemetry>(
+          stream: _telCtrl.stream,
+          initialData: _latestT,
+          builder: (_, snap) {
+            final t = snap.data ?? _latestT;
+            _latestT = t; // feed the auto-trip / alert tick
+            final du = _boardSettings?.mph == true ? 'mi' : 'km';
+            final rider = (_boardSettings?.rider ?? '').trim().toUpperCase();
+            return SafeArea(
+              top: false,
+              bottom: false,
+              child: Column(
+                children: [
+                  // TOP PANEL — rider (left) · time (right). The centre is left
+                  // empty so the camera punch-hole sits in clear space; the panel
+                  // rides up at the notch line. Page title moves into the content.
                   Container(
-                    width: double.infinity,
-                    color: const Color(0x26FFCD00), // yellow @ ~15%
-                    padding: const EdgeInsets.symmetric(vertical: 5),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 12,
-                          height: 12,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Esk8Theme.yellow,
-                          ),
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          'Reconnecting to board…',
-                          style: TextStyle(
-                            color: Esk8Theme.yellow,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (!_reconnecting && t != null && t.rangeWarning != 0)
-                  Container(
-                    width: double.infinity,
-                    color: _rangeWarningColor(
-                      t.rangeWarning,
-                    ).withValues(alpha: 0.18),
-                    padding: const EdgeInsets.symmetric(vertical: 5),
-                    child: Text(
-                      _rangeWarningText(t),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: _rangeWarningColor(t.rangeWarning),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.7,
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 6),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: BorderSide(color: Esk8Theme.border),
                       ),
                     ),
-                  ),
-                if (!_reconnecting && t != null && !t.live)
-                  Container(
-                    width: double.infinity,
-                    color: Esk8Theme.orange.withValues(alpha: 0.18),
-                    padding: const EdgeInsets.symmetric(vertical: 5),
-                    child: Text(
-                      _telemetryStateText(t),
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Esk8Theme.orange,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.7,
+                    child: TopStatusBar(
+                      leadingIcon: Vehicle.icon(
+                        _boardSettings?.vehicleType ?? 0,
                       ),
+                      left: rider.isNotEmpty ? 'RIDER: $rider' : 'ESK8OS',
+                      right: _clock(),
                     ),
                   ),
 
-                // PAGES — double-tap toggles the controls overlay
-                Expanded(
-                  child: Stack(
-                    children: [
-                      GestureDetector(
-                        onDoubleTap: () =>
-                            setState(() => _showControls = !_showControls),
-                        child: PageView.builder(
-                          controller: _pageCtrl,
-                          onPageChanged: (i) =>
-                              _onPageChanged(i % _pageNames.length),
-                          itemBuilder: (_, i) {
-                            switch (i % _pageNames.length) {
-                              case 0:
-                                return HudView(
-                                  telemetry: t,
-                                  settings: _boardSettings,
-                                );
-                              case 1:
-                                return DashView(
-                                  telemetry: t,
-                                  settings: _boardSettings,
-                                );
-                              case 2:
-                                return TripView(
-                                  dev: widget.dev,
-                                  telemetry: t,
-                                  settings: _boardSettings,
-                                );
-                              case 3:
-                                return GraphsView(
-                                  telemetry: t,
-                                  history: _telemetryHistory,
-                                  settings: _boardSettings,
-                                );
-                              case 4:
-                                return DiagView(
-                                  telemetry: t,
-                                  settings: _boardSettings,
-                                );
-                              default:
-                                return SettingsSummaryView(
-                                  dev: widget.dev,
-                                  settings: _boardSettings,
-                                  telemetry: t,
-                                  onEdited: _fetchSettings,
-                                );
-                            }
-                          },
-                        ),
-                      ),
-                      // Page title — moved out of the top panel, centered at the
-                      // top of the content (in the open space above the speed).
-                      Positioned(
-                        top: 6,
-                        left: 0,
-                        right: 0,
-                        child: IgnorePointer(
-                          child: Center(
-                            child: Text(
-                              _pageName(_currentPage),
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: Esk8Theme.dim,
-                                letterSpacing: 2,
-                                fontWeight: FontWeight.w600,
-                              ),
+                  // Connection-lost banner: shown while we retry in the background.
+                  // The dashboard keeps the last telemetry frame underneath.
+                  if (_reconnecting)
+                    Container(
+                      width: double.infinity,
+                      color: const Color(0x26FFCD00), // yellow @ ~15%
+                      padding: const EdgeInsets.symmetric(vertical: 5),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Esk8Theme.yellow,
                             ),
                           ),
+                          SizedBox(width: 8),
+                          Text(
+                            'Reconnecting to board…',
+                            style: TextStyle(
+                              color: Esk8Theme.yellow,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (!_reconnecting && t != null && t.rangeWarning != 0)
+                    Container(
+                      width: double.infinity,
+                      color: _rangeWarningColor(
+                        t.rangeWarning,
+                      ).withValues(alpha: 0.18),
+                      padding: const EdgeInsets.symmetric(vertical: 5),
+                      child: Text(
+                        _rangeWarningText(t),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: _rangeWarningColor(t.rangeWarning),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.7,
                         ),
                       ),
+                    ),
+                  if (!_reconnecting && t != null && !t.live)
+                    Container(
+                      width: double.infinity,
+                      color: Esk8Theme.orange.withValues(alpha: 0.18),
+                      padding: const EdgeInsets.symmetric(vertical: 5),
+                      child: Text(
+                        _telemetryStateText(t),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Esk8Theme.orange,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.7,
+                        ),
+                      ),
+                    ),
 
-                      // Headless boards need obvious phone navigation. The TRIP
-                      // map also gets arrows because map gestures consume swipes.
-                      if (isHeadless || _pageName(_currentPage) == 'TRIP') ...[
-                        Positioned(
-                          left: 6,
-                          top: 0,
-                          bottom: 0,
-                          child: Center(
-                            child: _NavButton(
-                              Icons.chevron_left,
-                              () => _pageCtrl.previousPage(
-                                duration: const Duration(milliseconds: 280),
-                                curve: Curves.easeOut,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          right: 6,
-                          top: 0,
-                          bottom: 0,
-                          child: Center(
-                            child: _NavButton(
-                              Icons.chevron_right,
-                              () => _pageCtrl.nextPage(
-                                duration: const Duration(milliseconds: 280),
-                                curve: Curves.easeOut,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                      if (!_showControls)
-                        Positioned(
-                          top: 8,
-                          right: 8,
-                          child: IconButton(
-                            icon: const Icon(Icons.tune, size: 30),
-                            color: Colors.white60,
-                            tooltip: 'Controls',
-                            onPressed: () =>
-                                setState(() => _showControls = true),
-                          ),
-                        ),
-                      if (_showControls)
-                        Positioned(
-                          bottom: 0,
-                          left: 0,
-                          right: 0,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Esk8Theme.panelOverlay,
-                              border: Border(
-                                top: BorderSide(color: Esk8Theme.border),
-                              ),
-                            ),
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                Row(
-                                  children: [
-                                    const SectionTitle('Controls'),
-                                    const Spacer(),
-                                    IconButton(
-                                      tooltip: 'Close',
-                                      onPressed: () =>
-                                          setState(() => _showControls = false),
-                                      icon: Icon(
-                                        Icons.close,
-                                        color: Esk8Theme.dim,
-                                      ),
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
+                  // PAGES — hosted in a nested Navigator so settings / trip history
+                  // / playback push INTO this middle area (top & bottom panels stay
+                  // put) instead of covering the whole app. The deck carries its own
+                  // telemetry StreamBuilder so the live pages keep updating; the
+                  // removePadding stops pushed pages re-adding the camera-cutout gap.
+                  Expanded(
+                    child: MediaQuery.removePadding(
+                      context: context,
+                      removeTop: true,
+                      child: Navigator(
+                        key: _contentNavKey,
+                        onGenerateRoute: (_) => MaterialPageRoute(
+                          builder: (_) => StreamBuilder<Telemetry>(
+                            stream: _telCtrl.stream,
+                            initialData: _latestT,
+                            builder: (_, deckSnap) {
+                              final t = deckSnap.data ?? _latestT;
+                              final isHeadless =
+                                  _boardSettings?.display == 'none' ||
+                                  _boardSettings?.ui == 'headless';
+                              return Stack(
+                                children: [
+                                  GestureDetector(
+                                    onDoubleTap: () => setState(
+                                      () => _showControls = !_showControls,
                                     ),
-                                  ],
-                                ),
-                                const SizedBox(height: 14),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: _controlAction(
-                                        Icons.replay,
-                                        'TRIP RESET',
-                                        () => _cmdConfirm(
-                                          Esk8Commands.tripReset,
-                                          'Trip Reset',
-                                          'Zeros the board\'s trip distance and moving-time. The lifetime odometer is unaffected.',
+                                    child: PageView.builder(
+                                      controller: _pageCtrl,
+                                      onPageChanged: (i) =>
+                                          _onPageChanged(i % _pageNames.length),
+                                      itemBuilder: (_, i) {
+                                        switch (i % _pageNames.length) {
+                                          case 0:
+                                            return HudView(
+                                              telemetry: t,
+                                              settings: _boardSettings,
+                                            );
+                                          case 1:
+                                            return DashView(
+                                              telemetry: t,
+                                              settings: _boardSettings,
+                                            );
+                                          case 2:
+                                            return TripView(
+                                              dev: widget.dev,
+                                              telemetry: t,
+                                              settings: _boardSettings,
+                                            );
+                                          case 3:
+                                            return GraphsView(
+                                              telemetry: t,
+                                              history: _telemetryHistory,
+                                              settings: _boardSettings,
+                                            );
+                                          case 4:
+                                            return DiagView(
+                                              telemetry: t,
+                                              settings: _boardSettings,
+                                            );
+                                          default:
+                                            return SettingsSummaryView(
+                                              dev: widget.dev,
+                                              settings: _boardSettings,
+                                              telemetry: t,
+                                              onEdited: _fetchSettings,
+                                            );
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                  // Page title — moved out of the top panel, centered at the
+                                  // top of the content (in the open space above the speed).
+                                  Positioned(
+                                    top: 6,
+                                    left: 0,
+                                    right: 0,
+                                    child: IgnorePointer(
+                                      child: Center(
+                                        child: Text(
+                                          _pageName(_currentPage),
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Esk8Theme.dim,
+                                            letterSpacing: 2,
+                                            fontWeight: FontWeight.w600,
+                                          ),
                                         ),
                                       ),
                                     ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: _controlAction(
-                                        Icons.wifi,
-                                        'EXPORT / OTA',
-                                        () => Navigator.of(context).push(
-                                          MaterialPageRoute(
-                                            builder: (_) =>
-                                                WifiExportPage(dev: widget.dev),
+                                  ),
+
+                                  // Headless boards need obvious phone navigation. The TRIP
+                                  // map also gets arrows because map gestures consume swipes.
+                                  if (isHeadless ||
+                                      _pageName(_currentPage) == 'TRIP') ...[
+                                    Positioned(
+                                      left: 6,
+                                      top: 0,
+                                      bottom: 0,
+                                      child: Center(
+                                        child: _NavButton(
+                                          Icons.chevron_left,
+                                          () => _pageCtrl.previousPage(
+                                            duration: const Duration(
+                                              milliseconds: 280,
+                                            ),
+                                            curve: Curves.easeOut,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Positioned(
+                                      right: 6,
+                                      top: 0,
+                                      bottom: 0,
+                                      child: Center(
+                                        child: _NavButton(
+                                          Icons.chevron_right,
+                                          () => _pageCtrl.nextPage(
+                                            duration: const Duration(
+                                              milliseconds: 280,
+                                            ),
+                                            curve: Curves.easeOut,
                                           ),
                                         ),
                                       ),
                                     ),
                                   ],
-                                ),
-                                const SizedBox(height: 10),
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: _controlAction(
-                                        Icons.cable,
-                                        _bridgeModeRequested
-                                            ? 'STOP BRIDGE'
-                                            : 'BRIDGE',
-                                        () => _cmdConfirm(
-                                          _bridgeModeRequested
-                                              ? Esk8Commands.bridgeExit
-                                              : Esk8Commands.bridgeMode,
-                                          _bridgeModeRequested
-                                              ? 'Stop Bridge'
-                                              : 'Bridge Mode',
-                                          _bridgeModeRequested
-                                              ? 'Stops VESC passthrough and returns the ESP32 to normal dashboard telemetry.'
-                                              : 'Puts the board into VESC passthrough. Use Stop Bridge here when you are done.',
-                                          confirmLabel: _bridgeModeRequested
-                                              ? 'Stop'
-                                              : 'Enter',
+                                  if (!_showControls)
+                                    Positioned(
+                                      top: 8,
+                                      right: 8,
+                                      child: IconButton(
+                                        icon: const Icon(Icons.tune, size: 30),
+                                        color: Colors.white60,
+                                        tooltip: 'Controls',
+                                        onPressed: () => setState(
+                                          () => _showControls = true,
                                         ),
-                                        highlighted: _bridgeModeRequested,
                                       ),
                                     ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: _controlAction(
-                                        Icons.restart_alt,
-                                        'REBOOT',
-                                        () => _cmdConfirm(
-                                          Esk8Commands.reboot,
-                                          'Reboot',
-                                          'Restarts the board now. Telemetry will drop for a few seconds.',
+                                  if (_showControls)
+                                    Positioned(
+                                      bottom: 0,
+                                      left: 0,
+                                      right: 0,
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: Esk8Theme.panelOverlay,
+                                          border: Border(
+                                            top: BorderSide(
+                                              color: Esk8Theme.border,
+                                            ),
+                                          ),
                                         ),
-                                        danger: true,
+                                        padding: const EdgeInsets.fromLTRB(
+                                          16,
+                                          12,
+                                          16,
+                                          28,
+                                        ),
+                                        child: Column(
+                                          mainAxisSize: MainAxisSize.min,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.stretch,
+                                          children: [
+                                            Row(
+                                              children: [
+                                                const SectionTitle('Controls'),
+                                                const Spacer(),
+                                                IconButton(
+                                                  tooltip: 'Close',
+                                                  onPressed: () => setState(
+                                                    () => _showControls = false,
+                                                  ),
+                                                  icon: Icon(
+                                                    Icons.close,
+                                                    color: Esk8Theme.dim,
+                                                  ),
+                                                  padding: EdgeInsets.zero,
+                                                  constraints:
+                                                      const BoxConstraints(),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 14),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: _controlAction(
+                                                    Icons.replay,
+                                                    'TRIP RESET',
+                                                    () => _cmdConfirm(
+                                                      Esk8Commands.tripReset,
+                                                      'Trip Reset',
+                                                      'Zeros the board\'s trip distance and moving-time. The lifetime odometer is unaffected.',
+                                                    ),
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: _controlAction(
+                                                    Icons.wifi,
+                                                    'EXPORT / OTA',
+                                                    () => Navigator.of(context)
+                                                        .push(
+                                                          MaterialPageRoute(
+                                                            builder: (_) =>
+                                                                WifiExportPage(
+                                                                  dev: widget
+                                                                      .dev,
+                                                                ),
+                                                          ),
+                                                        ),
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            const SizedBox(height: 10),
+                                            Row(
+                                              children: [
+                                                Expanded(
+                                                  child: _controlAction(
+                                                    Icons.cable,
+                                                    _bridgeModeRequested
+                                                        ? 'STOP BRIDGE'
+                                                        : 'BRIDGE',
+                                                    () => _cmdConfirm(
+                                                      _bridgeModeRequested
+                                                          ? Esk8Commands
+                                                                .bridgeExit
+                                                          : Esk8Commands
+                                                                .bridgeMode,
+                                                      _bridgeModeRequested
+                                                          ? 'Stop Bridge'
+                                                          : 'Bridge Mode',
+                                                      _bridgeModeRequested
+                                                          ? 'Stops VESC passthrough and returns the ESP32 to normal dashboard telemetry.'
+                                                          : 'Puts the board into VESC passthrough. Use Stop Bridge here when you are done.',
+                                                      confirmLabel:
+                                                          _bridgeModeRequested
+                                                          ? 'Stop'
+                                                          : 'Enter',
+                                                    ),
+                                                    highlighted:
+                                                        _bridgeModeRequested,
+                                                  ),
+                                                ),
+                                                const SizedBox(width: 10),
+                                                Expanded(
+                                                  child: _controlAction(
+                                                    Icons.restart_alt,
+                                                    'REBOOT',
+                                                    () => _cmdConfirm(
+                                                      Esk8Commands.reboot,
+                                                      'Reboot',
+                                                      'Restarts the board now. Telemetry will drop for a few seconds.',
+                                                    ),
+                                                    danger: true,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
-                                  ],
-                                ),
-                              ],
-                            ),
+                                ],
+                              );
+                            },
                           ),
-                        ),
-                    ],
-                  ),
-                ),
-
-                // PAGE DOTS
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: List.generate(
-                      _pageNames.length,
-                      (i) => Container(
-                        width: 6,
-                        height: 6,
-                        margin: const EdgeInsets.symmetric(horizontal: 3),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: i == _currentPage
-                              ? _accent
-                              : Colors.white.withValues(alpha: 0.25),
                         ),
                       ),
                     ),
                   ),
-                ),
 
-                // BOTTOM PANEL — identifies battery · trip · odometer
-                Container(
-                  padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
-                  decoration: BoxDecoration(
-                    border: Border(top: BorderSide(color: Esk8Theme.border)),
-                  ),
-                  child: t == null
-                      ? const SizedBox(height: 18)
-                      : BottomStatus(
-                          percent: t.battery,
-                          trip: '${t.trip.toStringAsFixed(1)}$du',
-                          odo: '${t.odometer.toStringAsFixed(0)}$du',
+                  // PAGE DOTS
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 6),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(
+                        _pageNames.length,
+                        (i) => Container(
+                          width: 6,
+                          height: 6,
+                          margin: const EdgeInsets.symmetric(horizontal: 3),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: i == _currentPage
+                                ? _accent
+                                : Colors.white.withValues(alpha: 0.25),
+                          ),
                         ),
-                ),
-              ],
-            ),
-          );
-        },
+                      ),
+                    ),
+                  ),
+
+                  // BOTTOM PANEL — identifies battery · trip · odometer
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(12, 6, 12, 8),
+                    decoration: BoxDecoration(
+                      border: Border(top: BorderSide(color: Esk8Theme.border)),
+                    ),
+                    child: t == null
+                        ? const SizedBox(height: 18)
+                        : BottomStatus(
+                            percent: t.battery,
+                            trip: '${t.trip.toStringAsFixed(1)}$du',
+                            odo: '${t.odometer.toStringAsFixed(0)}$du',
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
       ),
     );
   }
