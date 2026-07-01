@@ -13,7 +13,6 @@ import 'ble/companion_device.dart';
 import 'ble/esk8os_ble.dart';
 import 'ble/mock_device.dart';
 import 'database/trip_database.dart';
-import 'pages/settings_page.dart';
 import 'pages/wifi_export_page.dart';
 import 'services/app_prefs.dart';
 import 'services/trip_recorder.dart';
@@ -57,8 +56,9 @@ class Esk8App extends StatelessWidget {
     return ValueListenableBuilder<int>(
       valueListenable: Esk8Theme.revision,
       builder: (context, _, child) {
-        final brightness =
-            Esk8Theme.isLight ? Brightness.light : Brightness.dark;
+        final brightness = Esk8Theme.isLight
+            ? Brightness.light
+            : Brightness.dark;
         return MaterialApp(
           title: 'ESK8OS',
           debugShowCheckedModeBanner: false,
@@ -81,28 +81,39 @@ class Esk8App extends StatelessWidget {
               ),
             ),
             outlinedButtonTheme: OutlinedButtonThemeData(
-              style:
-                  OutlinedButton.styleFrom(shape: const RoundedRectangleBorder()),
+              style: OutlinedButton.styleFrom(
+                shape: const RoundedRectangleBorder(),
+              ),
             ),
             elevatedButtonTheme: ElevatedButtonThemeData(
-              style:
-                  ElevatedButton.styleFrom(shape: const RoundedRectangleBorder()),
+              style: ElevatedButton.styleFrom(
+                shape: const RoundedRectangleBorder(),
+              ),
             ),
             filledButtonTheme: FilledButtonThemeData(
-              style: FilledButton.styleFrom(shape: const RoundedRectangleBorder()),
+              style: FilledButton.styleFrom(
+                shape: const RoundedRectangleBorder(),
+              ),
             ),
             textButtonTheme: TextButtonThemeData(
-              style: TextButton.styleFrom(shape: const RoundedRectangleBorder()),
+              style: TextButton.styleFrom(
+                shape: const RoundedRectangleBorder(),
+              ),
             ),
             inputDecorationTheme: const InputDecorationTheme(
               border: OutlineInputBorder(borderRadius: BorderRadius.zero),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.zero),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.zero),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.zero,
+              ),
             ),
             dialogTheme: const DialogThemeData(shape: RoundedRectangleBorder()),
             segmentedButtonTheme: SegmentedButtonThemeData(
-              style:
-                  SegmentedButton.styleFrom(shape: const RoundedRectangleBorder()),
+              style: SegmentedButton.styleFrom(
+                shape: const RoundedRectangleBorder(),
+              ),
             ),
           ),
           home: const ScanPage(),
@@ -199,15 +210,19 @@ class _ScanPageState extends State<ScanPage> {
                   Icon(Icons.error_outline, color: Esk8Theme.danger, size: 18),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(_error!,
-                        style: TextStyle(color: Esk8Theme.danger, fontSize: 13)),
+                    child: Text(
+                      _error!,
+                      style: TextStyle(color: Esk8Theme.danger, fontSize: 13),
+                    ),
                   ),
                 ],
               ),
             ),
           if (_connecting)
             LinearProgressIndicator(
-                color: Esk8Theme.accent, backgroundColor: Esk8Theme.border),
+              color: Esk8Theme.accent,
+              backgroundColor: Esk8Theme.border,
+            ),
           Expanded(
             child: StreamBuilder<List<ScanResult>>(
               stream: CompanionScanner.results(),
@@ -236,96 +251,102 @@ class _ScanPageState extends State<ScanPage> {
 
   /// Anchored empty state: board icon + copy + a prominent sharp SCAN button.
   Widget _emptyState(bool scanning) => Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 96,
-                height: 96,
-                alignment: Alignment.center,
-                decoration: Esk8Theme.panelBox(
-                    borderColor: scanning ? Esk8Theme.accent : Esk8Theme.border),
-                child: Icon(
-                  scanning ? Icons.bluetooth_searching : Icons.skateboarding,
-                  size: 44,
-                  color: scanning ? Esk8Theme.accent : Esk8Theme.dim,
-                ),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                scanning ? 'SCANNING…' : 'NO BOARD CONNECTED',
-                style: TextStyle(
-                  fontSize: 18,
-                  letterSpacing: 2.5,
-                  fontWeight: FontWeight.bold,
-                  color: Esk8Theme.textMuted,
-                ),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                scanning
-                    ? 'Looking for nearby ESK8OS boards'
-                    : 'Scan to pair your board over Bluetooth',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 13, color: Esk8Theme.dim),
-              ),
-              const SizedBox(height: 28),
-              _scanButton(scanning),
-            ],
+    child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 96,
+            height: 96,
+            alignment: Alignment.center,
+            decoration: Esk8Theme.panelBox(
+              borderColor: scanning ? Esk8Theme.accent : Esk8Theme.border,
+            ),
+            child: Icon(
+              scanning ? Icons.bluetooth_searching : Icons.skateboarding,
+              size: 44,
+              color: scanning ? Esk8Theme.accent : Esk8Theme.dim,
+            ),
           ),
-        ),
-      );
+          const SizedBox(height: 24),
+          Text(
+            scanning ? 'SCANNING…' : 'NO BOARD CONNECTED',
+            style: TextStyle(
+              fontSize: 18,
+              letterSpacing: 2.5,
+              fontWeight: FontWeight.bold,
+              color: Esk8Theme.textMuted,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            scanning
+                ? 'Looking for nearby ESK8OS boards'
+                : 'Scan to pair your board over Bluetooth',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 13, color: Esk8Theme.dim),
+          ),
+          const SizedBox(height: 28),
+          _scanButton(scanning),
+        ],
+      ),
+    ),
+  );
 
   /// Sharp accent-bordered SCAN button — mirrors the board's boxed labels.
   Widget _scanButton(bool scanning) => Material(
-        color: Esk8Theme.panel,
-        child: InkWell(
-          onTap: (scanning || _connecting) ? null : _scan,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 44, vertical: 15),
-            decoration: BoxDecoration(border: Border.all(color: Esk8Theme.accent)),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                scanning
-                    ? SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Esk8Theme.accent),
-                      )
-                    : Icon(Icons.bluetooth_searching,
-                        size: 18, color: Esk8Theme.accent),
-                const SizedBox(width: 10),
-                Text(
-                  scanning ? 'SCANNING' : 'SCAN',
-                  style: TextStyle(
-                    fontSize: 15,
-                    letterSpacing: 3,
-                    fontWeight: FontWeight.bold,
+    color: Esk8Theme.panel,
+    child: InkWell(
+      onTap: (scanning || _connecting) ? null : _scan,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 44, vertical: 15),
+        decoration: BoxDecoration(border: Border.all(color: Esk8Theme.accent)),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            scanning
+                ? SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Esk8Theme.accent,
+                    ),
+                  )
+                : Icon(
+                    Icons.bluetooth_searching,
+                    size: 18,
                     color: Esk8Theme.accent,
                   ),
-                ),
-              ],
+            const SizedBox(width: 10),
+            Text(
+              scanning ? 'SCANNING' : 'SCAN',
+              style: TextStyle(
+                fontSize: 15,
+                letterSpacing: 3,
+                fontWeight: FontWeight.bold,
+                color: Esk8Theme.accent,
+              ),
             ),
-          ),
+          ],
         ),
-      );
+      ),
+    ),
+  );
 
   Widget _resultsList(List<ScanResult> results, bool scanning) => ListView(
-        padding: const EdgeInsets.fromLTRB(12, 16, 12, 24),
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 12),
-            child: const SectionTitle('Select your board'),
-          ),
-          ...results.map(_resultRow),
-          const SizedBox(height: 20),
-          Center(child: _scanButton(scanning)),
-        ],
-      );
+    padding: const EdgeInsets.fromLTRB(12, 16, 12, 24),
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(left: 4, bottom: 12),
+        child: const SectionTitle('Select your board'),
+      ),
+      ...results.map(_resultRow),
+      const SizedBox(height: 20),
+      Center(child: _scanButton(scanning)),
+    ],
+  );
 
   /// One scan result as a tappable bordered panel. The board advertises
   /// [vtype, macHi, macLo] in manufacturer data (company 0xFFFF), so we show the
@@ -337,11 +358,11 @@ class _ScanPageState extends State<ScanPage> {
     final macHex = r.device.remoteId.str.replaceAll(':', '');
     final code = hasMfg
         ? (mfg[1].toRadixString(16).padLeft(2, '0') +
-                mfg[2].toRadixString(16).padLeft(2, '0'))
-            .toUpperCase()
+                  mfg[2].toRadixString(16).padLeft(2, '0'))
+              .toUpperCase()
         : (macHex.length >= 4
-            ? macHex.substring(macHex.length - 4).toUpperCase()
-            : null);
+              ? macHex.substring(macHex.length - 4).toUpperCase()
+              : null);
     final name = r.device.platformName.isNotEmpty
         ? r.device.platformName
         : r.device.remoteId.str;
@@ -358,17 +379,23 @@ class _ScanPageState extends State<ScanPage> {
           onTap: _connecting ? null : () => _connect(r.device),
           child: Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(border: Border.all(color: Esk8Theme.border)),
+            decoration: BoxDecoration(
+              border: Border.all(color: Esk8Theme.border),
+            ),
             child: Row(
               children: [
                 Container(
                   width: 46,
                   height: 46,
                   alignment: Alignment.center,
-                  decoration:
-                      BoxDecoration(border: Border.all(color: Esk8Theme.accent)),
-                  child:
-                      Icon(Vehicle.icon(vtype), color: Esk8Theme.accent, size: 24),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Esk8Theme.accent),
+                  ),
+                  child: Icon(
+                    Vehicle.icon(vtype),
+                    color: Esk8Theme.accent,
+                    size: 24,
+                  ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -402,12 +429,19 @@ class _ScanPageState extends State<ScanPage> {
                             Text('·', style: TextStyle(color: Esk8Theme.dim)),
                             const SizedBox(width: 10),
                           ],
-                          Icon(Icons.signal_cellular_alt,
-                              size: 13, color: signalColor),
+                          Icon(
+                            Icons.signal_cellular_alt,
+                            size: 13,
+                            color: signalColor,
+                          ),
                           const SizedBox(width: 4),
-                          Text('$rssi dBm',
-                              style:
-                                  TextStyle(fontSize: 12, color: Esk8Theme.dim)),
+                          Text(
+                            '$rssi dBm',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Esk8Theme.dim,
+                            ),
+                          ),
                         ],
                       ),
                     ],
@@ -454,7 +488,6 @@ class _DashboardPageState extends State<DashboardPage>
   int _currentPage = 0;
   bool _showControls = false;
   bool _bridgeModeRequested = false;
-  static const _oledFaces = ['speed', 'battery', 'volts', 'watts', 'safety'];
 
   // Auto start/stop + over-speed alert run off the latest telemetry frame.
   Telemetry? _latestT;
@@ -674,40 +707,6 @@ class _DashboardPageState extends State<DashboardPage>
     }
   }
 
-  Future<void> _writeSettings(
-    Map<String, dynamic> partial,
-    String label,
-  ) async {
-    try {
-      await widget.dev.writeSettings(partial);
-      await _fetchSettings();
-      _toast('$label updated');
-    } catch (e) {
-      _toast('Failed: $e');
-    }
-  }
-
-  Future<void> _setOledFace(String face) =>
-      _writeSettings(BoardSettings.writeJson(hudFace: face), 'OLED face');
-
-  Future<void> _stepOledFace(int delta) async {
-    final current = _boardSettings?.hudFace ?? 'speed';
-    final index = _oledFaces.contains(current)
-        ? _oledFaces.indexOf(current)
-        : 0;
-    final next = _oledFaces[(index + delta) % _oledFaces.length];
-    await _setOledFace(next);
-  }
-
-  static String _faceLabel(String face) => switch (face) {
-    'speed' => 'Speed',
-    'battery' => 'Battery',
-    'volts' => 'Volts',
-    'watts' => 'Watts',
-    'safety' => 'Safety',
-    _ => face,
-  };
-
   /// Confirm before a disruptive board command, then send it.
   Future<void> _cmdConfirm(
     String command,
@@ -782,6 +781,49 @@ class _DashboardPageState extends State<DashboardPage>
     _ => Colors.transparent,
   };
 
+  /// One sharp board-style action tile for the controls overlay.
+  Widget _controlAction(
+    IconData icon,
+    String label,
+    VoidCallback onTap, {
+    bool highlighted = false,
+    bool danger = false,
+  }) {
+    final c = danger
+        ? Esk8Theme.danger
+        : (highlighted ? Esk8Theme.accent : Esk8Theme.textPrimary);
+    return Material(
+      color: Esk8Theme.panel,
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: highlighted ? Esk8Theme.accent : Esk8Theme.border,
+            ),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: c, size: 24),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                style: TextStyle(
+                  color: c,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.2,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -796,7 +838,6 @@ class _DashboardPageState extends State<DashboardPage>
           final isHeadless =
               _boardSettings?.display == 'none' ||
               _boardSettings?.ui == 'headless';
-          final hasBoardDisplay = _boardSettings?.display != 'none';
           return SafeArea(
             top: false,
             bottom: false,
@@ -995,7 +1036,8 @@ class _DashboardPageState extends State<DashboardPage>
                             icon: const Icon(Icons.tune, size: 30),
                             color: Colors.white60,
                             tooltip: 'Controls',
-                            onPressed: () => setState(() => _showControls = true),
+                            onPressed: () =>
+                                setState(() => _showControls = true),
                           ),
                         ),
                       if (_showControls)
@@ -1004,44 +1046,60 @@ class _DashboardPageState extends State<DashboardPage>
                           left: 0,
                           right: 0,
                           child: Container(
-                            color: Colors.black87,
-                            padding: const EdgeInsets.all(
-                              16,
-                            ).copyWith(bottom: 32),
+                            decoration: BoxDecoration(
+                              color: Esk8Theme.panelOverlay,
+                              border: Border(
+                                top: BorderSide(color: Esk8Theme.border),
+                              ),
+                            ),
+                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                const Text(
-                                  'CONTROLS',
-                                  style: TextStyle(
-                                    color: Colors.grey,
-                                    letterSpacing: 2,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
                                 Row(
                                   children: [
-                                    const Icon(
-                                      Icons.touch_app,
-                                      color: Colors.white60,
-                                    ),
-                                    const SizedBox(width: 10),
-                                    const Text(
-                                      'PHONE NAVIGATION',
-                                      style: TextStyle(
-                                        color: Colors.white70,
-                                        fontWeight: FontWeight.w700,
-                                        letterSpacing: 1.2,
-                                      ),
-                                    ),
+                                    const SectionTitle('Controls'),
                                     const Spacer(),
                                     IconButton(
-                                      tooltip: 'Close controls',
+                                      tooltip: 'Close',
                                       onPressed: () =>
                                           setState(() => _showControls = false),
-                                      icon: const Icon(Icons.close),
-                                      color: Colors.white60,
+                                      icon: Icon(
+                                        Icons.close,
+                                        color: Esk8Theme.dim,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _controlAction(
+                                        Icons.replay,
+                                        'TRIP RESET',
+                                        () => _cmdConfirm(
+                                          Esk8Commands.tripReset,
+                                          'Trip Reset',
+                                          'Zeros the board\'s trip distance and moving-time. The lifetime odometer is unaffected.',
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: _controlAction(
+                                        Icons.wifi,
+                                        'WIFI',
+                                        () => Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                WifiExportPage(dev: widget.dev),
+                                          ),
+                                        ),
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -1049,219 +1107,39 @@ class _DashboardPageState extends State<DashboardPage>
                                 Row(
                                   children: [
                                     Expanded(
-                                      child: OutlinedButton.icon(
-                                        onPressed: () => _pageCtrl.previousPage(
-                                          duration: const Duration(
-                                            milliseconds: 280,
-                                          ),
-                                          curve: Curves.easeOut,
+                                      child: _controlAction(
+                                        Icons.cable,
+                                        _bridgeModeRequested
+                                            ? 'STOP BRIDGE'
+                                            : 'BRIDGE',
+                                        () => _cmdConfirm(
+                                          _bridgeModeRequested
+                                              ? Esk8Commands.bridgeExit
+                                              : Esk8Commands.bridgeMode,
+                                          _bridgeModeRequested
+                                              ? 'Stop Bridge'
+                                              : 'Bridge Mode',
+                                          _bridgeModeRequested
+                                              ? 'Stops VESC passthrough and returns the ESP32 to normal dashboard telemetry.'
+                                              : 'Puts the board into VESC passthrough. Use Stop Bridge here when you are done.',
+                                          confirmLabel: _bridgeModeRequested
+                                              ? 'Stop'
+                                              : 'Enter',
                                         ),
-                                        icon: const Icon(Icons.chevron_left),
-                                        label: const FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          child: Text('Prev'),
-                                        ),
+                                        highlighted: _bridgeModeRequested,
                                       ),
                                     ),
                                     const SizedBox(width: 10),
                                     Expanded(
-                                      child: OutlinedButton.icon(
-                                        onPressed: () => _pageCtrl.nextPage(
-                                          duration: const Duration(
-                                            milliseconds: 280,
-                                          ),
-                                          curve: Curves.easeOut,
+                                      child: _controlAction(
+                                        Icons.restart_alt,
+                                        'REBOOT',
+                                        () => _cmdConfirm(
+                                          Esk8Commands.reboot,
+                                          'Reboot',
+                                          'Restarts the board now. Telemetry will drop for a few seconds.',
                                         ),
-                                        icon: const Icon(Icons.chevron_right),
-                                        label: const FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          child: Text('Next'),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: OutlinedButton.icon(
-                                        onPressed: () async {
-                                          await Navigator.of(context).push(
-                                            MaterialPageRoute(
-                                              builder: (_) => SettingsPage(
-                                                dev: widget.dev,
-                                                telemetry: _latestT,
-                                              ),
-                                            ),
-                                          );
-                                          _fetchSettings();
-                                        },
-                                        icon: const Icon(Icons.settings),
-                                        label: const FittedBox(
-                                          fit: BoxFit.scaleDown,
-                                          child: Text('Settings'),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 16),
-                                if (hasBoardDisplay) ...[
-                                  Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.developer_board,
-                                        color: Colors.white60,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      const Expanded(
-                                        child: Text(
-                                          'BOARD DISPLAY',
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color: Colors.white70,
-                                            fontWeight: FontWeight.w700,
-                                            letterSpacing: 1.2,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      OutlinedButton.icon(
-                                        onPressed: () => _cmd(
-                                          Esk8Commands.pagePrev,
-                                          'Board page previous',
-                                        ),
-                                        icon: const Icon(Icons.chevron_left),
-                                        label: const Text('Prev'),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      OutlinedButton.icon(
-                                        onPressed: () => _cmd(
-                                          Esk8Commands.pageNext,
-                                          'Board page next',
-                                        ),
-                                        icon: const Icon(Icons.chevron_right),
-                                        label: const Text('Next'),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                ],
-                                if (_boardSettings?.display == 'oled') ...[
-                                  Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.splitscreen,
-                                        color: Colors.white60,
-                                      ),
-                                      const SizedBox(width: 10),
-                                      const Text(
-                                        'OLED FACE',
-                                        style: TextStyle(
-                                          color: Colors.white70,
-                                          fontWeight: FontWeight.w700,
-                                          letterSpacing: 1.2,
-                                        ),
-                                      ),
-                                      const Spacer(),
-                                      Text(
-                                        _faceLabel(
-                                          _boardSettings?.hudFace ?? 'speed',
-                                        ).toUpperCase(),
-                                        style: TextStyle(
-                                          color: _accent,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: 1.2,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 10),
-                                  Row(
-                                    children: [
-                                      _NavButton(
-                                        Icons.chevron_left,
-                                        () => _stepOledFace(-1),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Wrap(
-                                          spacing: 8,
-                                          runSpacing: 8,
-                                          children: [
-                                            for (final face in _oledFaces)
-                                              ChoiceChip(
-                                                label: Text(_faceLabel(face)),
-                                                selected:
-                                                    (_boardSettings?.hudFace ??
-                                                        'speed') ==
-                                                    face,
-                                                selectedColor: _accent,
-                                                labelStyle: TextStyle(
-                                                  color:
-                                                      (_boardSettings
-                                                                  ?.hudFace ??
-                                                              'speed') ==
-                                                          face
-                                                      ? Colors.black
-                                                      : Colors.white70,
-                                                  fontWeight: FontWeight.w700,
-                                                ),
-                                                onSelected: (_) =>
-                                                    _setOledFace(face),
-                                              ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      _NavButton(
-                                        Icons.chevron_right,
-                                        () => _stepOledFace(1),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 16),
-                                ],
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    _CmdButton(
-                                      'Trip Reset',
-                                      () => _cmdConfirm(
-                                        Esk8Commands.tripReset,
-                                        'Trip Reset',
-                                        'Zeros the board\'s trip distance and moving-time. The lifetime odometer is unaffected.',
-                                      ),
-                                    ),
-                                    _CmdButton('WiFi Export / OTA', () {
-                                      Navigator.of(context).push(
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              WifiExportPage(dev: widget.dev),
-                                        ),
-                                      );
-                                    }),
-                                    _CmdButton(
-                                      'Bridge Mode',
-                                      () => _cmdConfirm(
-                                        _bridgeModeRequested
-                                            ? Esk8Commands.bridgeExit
-                                            : Esk8Commands.bridgeMode,
-                                        _bridgeModeRequested
-                                            ? 'Stop Bridge'
-                                            : 'Bridge Mode',
-                                        _bridgeModeRequested
-                                            ? 'Stops VESC passthrough and returns the ESP32 to normal dashboard telemetry.'
-                                            : 'Puts the board into VESC passthrough. Use Stop Bridge here when you are done.',
-                                        confirmLabel: _bridgeModeRequested
-                                            ? 'Stop'
-                                            : 'Enter',
-                                      ),
-                                    ),
-                                    _CmdButton(
-                                      'Reboot',
-                                      () => _cmdConfirm(
-                                        Esk8Commands.reboot,
-                                        'Reboot',
-                                        'Restarts the board now. Telemetry will drop for a few seconds.',
+                                        danger: true,
                                       ),
                                     ),
                                   ],
@@ -1317,16 +1195,6 @@ class _DashboardPageState extends State<DashboardPage>
       ),
     );
   }
-}
-
-class _CmdButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  const _CmdButton(this.label, this.onTap);
-
-  @override
-  Widget build(BuildContext context) =>
-      OutlinedButton(onPressed: onTap, child: Text(label));
 }
 
 /// Round translucent page-nav button (used on the map page where swipe pans).
