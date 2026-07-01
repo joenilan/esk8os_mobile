@@ -188,18 +188,9 @@ class _ScanPageState extends State<ScanPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('ESK8OS'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.bug_report),
-            tooltip: 'Mock Mode',
-            onPressed: _connecting ? null : _startMockMode,
-          ),
-        ],
-      ),
       body: Column(
         children: [
+          _scanHeader(),
           if (_error != null)
             Container(
               width: double.infinity,
@@ -248,6 +239,35 @@ class _ScanPageState extends State<ScanPage> {
   }
 
   // ---- disconnected / scan home ---------------------------------------------
+
+  Widget _scanHeader() => Container(
+    height: 52,
+    padding: const EdgeInsets.fromLTRB(16, 0, 4, 0),
+    decoration: BoxDecoration(
+      color: Esk8Theme.scaffold,
+      border: Border(bottom: BorderSide(color: Esk8Theme.border)),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Text(
+            'ESK8OS',
+            style: TextStyle(
+              color: Esk8Theme.textPrimary,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 2,
+            ),
+          ),
+        ),
+        IconButton(
+          icon: Icon(Icons.bug_report, color: Esk8Theme.accent),
+          tooltip: 'Mock Mode',
+          onPressed: _connecting ? null : _startMockMode,
+        ),
+      ],
+    ),
+  );
 
   /// Anchored empty state: board icon + copy + a prominent sharp SCAN button.
   Widget _emptyState(bool scanning) => Center(
