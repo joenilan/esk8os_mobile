@@ -339,6 +339,9 @@ class _TripViewState extends State<TripView>
     final gpsMaxSpeedDisplay = isMph
         ? (_rec.gpsMaxSpeedKmh / 1.60934)
         : _rec.gpsMaxSpeedKmh;
+    final gpsSpeedDisplay = isMph
+        ? (_rec.gpsSpeedKmh / 1.60934)
+        : _rec.gpsSpeedKmh;
     final elapsed = _rec.elapsed;
     final gpsAvgKmh = elapsed.inSeconds > 0
         ? _rec.gpsDistanceM * 3.6 / elapsed.inSeconds
@@ -563,6 +566,38 @@ class _TripViewState extends State<TripView>
                   ),
                 ),
               ),
+              const SizedBox(height: 8),
+              GestureDetector(
+                onTap: () => setState(() => _statsExpanded = !_statsExpanded),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _ctlBg,
+                    border: Border.all(
+                      color: _statsExpanded ? Esk8Theme.accent : _ctlBorder,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.compare_arrows, size: 14, color: _ctlFg),
+                      const SizedBox(width: 6),
+                      Text(
+                        _statsExpanded ? 'HIDE STATS' : 'COMPARE',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                          color: _ctlFg,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             ],
           ),
         ),
@@ -608,6 +643,13 @@ class _TripViewState extends State<TripView>
                   if (_statsExpanded) ...[
                     Divider(color: _ctlBorder, height: 6),
                     const SizedBox(height: 6),
+                    _miniRow(
+                      'BOARD SPD',
+                      telemetry.speed.toStringAsFixed(1),
+                      'GPS SPD',
+                      gpsSpeedDisplay.toStringAsFixed(1),
+                    ),
+                    const SizedBox(height: 8),
                     _miniRow(
                       'TRIP $unitStr',
                       boardTripDisplay.toStringAsFixed(2),
