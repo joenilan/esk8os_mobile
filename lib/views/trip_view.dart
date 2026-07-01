@@ -172,7 +172,8 @@ class _TripViewState extends State<TripView>
 
   // Map-control chrome flips with the basemap: light controls over the light map,
   // dark controls over the dark map. Accent stays for highlights on both.
-  Color get _ctlBg => _mapLight ? const Color(0xF2FAFAFA) : const Color(0xDD1E1E1E);
+  Color get _ctlBg =>
+      _mapLight ? const Color(0xF2FAFAFA) : const Color(0xDD1E1E1E);
   Color get _ctlBorder =>
       _mapLight ? const Color(0xFFBEBEC6) : const Color(0xFF333333);
   Color get _ctlFg => _mapLight ? const Color(0xFF18181C) : Colors.white;
@@ -205,14 +206,27 @@ class _TripViewState extends State<TripView>
       }
       if (permission == LocationPermission.deniedForever) return;
 
+      // Seed from the last known fix first — it's instant, so the map opens
+      // roughly on the rider instead of a default city that then jumps when the
+      // live fix lands.
+      final last = await Geolocator.getLastKnownPosition();
+      if (last != null && mounted && _initialCenter == null) {
+        setState(() => _initialCenter = LatLng(last.latitude, last.longitude));
+      }
+
       final pos = await Geolocator.getCurrentPosition();
       final latLng = LatLng(pos.latitude, pos.longitude);
       if (mounted) {
+        final hadCenter = _initialCenter != null;
         setState(() {
           _initialCenter = latLng;
           _locationReady = true;
         });
-        _mapController.move(latLng, _currentZoom);
+        // Only recenter if we didn't already open on the rider (cold start) or
+        // we're actively following — avoids a visible "jump" on a fresh fix.
+        if (!hadCenter || _followMode) {
+          _mapController.move(latLng, _currentZoom);
+        }
       }
     } catch (_) {
       // Location unavailable — map stays on default center
@@ -262,12 +276,12 @@ class _TripViewState extends State<TripView>
   Widget _miniStat(String label, String value) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(value, style: Esk8Theme.number(17)),
+      Text(value, style: Esk8Theme.number(17, color: _ctlFg)),
       Text(
         label,
         style: TextStyle(
           fontSize: 8,
-          color: Esk8Theme.dim,
+          color: _ctlDim,
           letterSpacing: 0.5,
           fontWeight: FontWeight.bold,
         ),
@@ -338,86 +352,88 @@ class _TripViewState extends State<TripView>
 
     return Stack(
       children: [
-        // Map Layer
-        FlutterMap(
-          mapController: _mapController,
-          options: MapOptions(
-            initialCenter: pos ?? const LatLng(37.7749, -122.4194),
-            initialZoom: _currentZoom,
-            // Free look-around: pan, pinch-zoom and rotate are all enabled now
-            // (page navigation moves to the on-map prev/next buttons).
-            interactionOptions: const InteractionOptions(
-              flags:
-                  InteractiveFlag.drag |
-                  InteractiveFlag.pinchZoom |
-                  InteractiveFlag.pinchMove |
-                  InteractiveFlag.rotate |
-                  InteractiveFlag.doubleTapZoom |
-                  InteractiveFlag.flingAnimation,
+        // Map layer — build only once we have a fix (the last-known seed is
+        // near-instant) so it opens ON the rider, not a default city that then
+        // jumps when the live fix lands.
+        if (pos != null)
+          FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: pos,
+              initialZoom: _currentZoom,
+              // Free look-around: pan, pinch-zoom and rotate are all enabled now
+              // (page navigation moves to the on-map prev/next buttons).
+              interactionOptions: const InteractionOptions(
+                flags:
+                    InteractiveFlag.drag |
+                    InteractiveFlag.pinchZoom |
+                    InteractiveFlag.pinchMove |
+                    InteractiveFlag.rotate |
+                    InteractiveFlag.doubleTapZoom |
+                    InteractiveFlag.flingAnimation,
+              ),
+              onPositionChanged: (camera, hasGesture) {
+                if (hasGesture) {
+                  _currentZoom = camera.zoom;
+                  if (_followMode) setState(() => _followMode = false);
+                }
+              },
             ),
-            onPositionChanged: (camera, hasGesture) {
-              if (hasGesture) {
-                _currentZoom = camera.zoom;
-                if (_followMode) setState(() => _followMode = false);
-              }
-            },
-          ),
-          children: [
-            // Light vs dark basemap (persisted). Dark tiles get a brightness
-            // bump; light tiles are used as-is.
-            if (_mapLight)
-              // Voyager = normal colours with readable roads/labels (light_all
-              // was too washed-out).
-              TileLayer(
-                urlTemplate:
-                    'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-                subdomains: const ['a', 'b', 'c', 'd'],
-              )
-            else
-              ColorFiltered(
-                colorFilter: const ColorFilter.matrix([
-                  1.5,
-                  0,
-                  0,
-                  0,
-                  15,
-                  0,
-                  1.5,
-                  0,
-                  0,
-                  15,
-                  0,
-                  0,
-                  1.5,
-                  0,
-                  15,
-                  0,
-                  0,
-                  0,
-                  1,
-                  0,
-                ]),
-                child: TileLayer(
+            children: [
+              // Light vs dark basemap (persisted). Dark tiles get a brightness
+              // bump; light tiles are used as-is.
+              if (_mapLight)
+                // Voyager = normal colours with readable roads/labels (light_all
+                // was too washed-out).
+                TileLayer(
                   urlTemplate:
-                      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
                   subdomains: const ['a', 'b', 'c', 'd'],
-                ),
-              ),
-            if (linePoints.length >= 2)
-              PolylineLayer(
-                polylines: [
-                  Polyline(
-                    points: linePoints,
-                    strokeWidth: 4.0,
-                    color: Esk8Theme.accent,
+                )
+              else
+                ColorFiltered(
+                  colorFilter: const ColorFilter.matrix([
+                    1.5,
+                    0,
+                    0,
+                    0,
+                    15,
+                    0,
+                    1.5,
+                    0,
+                    0,
+                    15,
+                    0,
+                    0,
+                    1.5,
+                    0,
+                    15,
+                    0,
+                    0,
+                    0,
+                    1,
+                    0,
+                  ]),
+                  child: TileLayer(
+                    urlTemplate:
+                        'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+                    subdomains: const ['a', 'b', 'c', 'd'],
                   ),
-                ],
-              ),
-            if ((_smoothPos ?? pos) != null)
+                ),
+              if (linePoints.length >= 2)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: linePoints,
+                      strokeWidth: 4.0,
+                      color: Esk8Theme.accent,
+                    ),
+                  ],
+                ),
               MarkerLayer(
                 markers: [
                   Marker(
-                    point: _smoothPos ?? pos!,
+                    point: _smoothPos ?? pos,
                     width: 20,
                     height: 20,
                     child: Container(
@@ -437,8 +453,14 @@ class _TripViewState extends State<TripView>
                   ),
                 ],
               ),
-          ],
-        ),
+            ],
+          )
+        else
+          Positioned.fill(
+            child: Container(
+              color: _mapLight ? const Color(0xFFE8E8EA) : Esk8Theme.scaffold,
+            ),
+          ),
 
         // Top-left: GPS status + history
         Positioned(
@@ -555,7 +577,10 @@ class _TripViewState extends State<TripView>
             child: Container(
               width: _statsExpanded ? 156 : 96,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: Esk8Theme.panelBox(),
+              decoration: BoxDecoration(
+                color: _ctlBg,
+                border: Border.all(color: _ctlBorder),
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -566,19 +591,22 @@ class _TripViewState extends State<TripView>
                     children: [
                       Text(
                         '${telemetry.speed.toInt()}',
-                        style: Esk8Theme.number(38),
+                        style: Esk8Theme.number(38, color: _ctlFg),
                       ),
                       const SizedBox(width: 3),
-                      Text(speedUnitStr, style: Esk8Theme.labelStyle),
+                      Text(
+                        speedUnitStr,
+                        style: Esk8Theme.labelStyle.copyWith(color: _ctlDim),
+                      ),
                     ],
                   ),
                   Icon(
                     _statsExpanded ? Icons.expand_less : Icons.expand_more,
                     size: 16,
-                    color: Esk8Theme.dim,
+                    color: _ctlDim,
                   ),
                   if (_statsExpanded) ...[
-                    Divider(color: Esk8Theme.border, height: 6),
+                    Divider(color: _ctlBorder, height: 6),
                     const SizedBox(height: 6),
                     _miniRow(
                       'TRIP $unitStr',
@@ -636,9 +664,7 @@ class _TripViewState extends State<TripView>
                   horizontal: 16,
                   vertical: 6,
                 ),
-                decoration: BoxDecoration(
-                  color: Esk8Theme.accent,
-                ),
+                decoration: BoxDecoration(color: Esk8Theme.accent),
                 child: const Text(
                   '● RECORDING',
                   style: TextStyle(
@@ -698,8 +724,9 @@ class _TripViewState extends State<TripView>
                       width: 52,
                       height: 52,
                       alignment: Alignment.center,
-                      decoration:
-                          BoxDecoration(border: Border.all(color: _ctlBorder)),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: _ctlBorder),
+                      ),
                       child: Icon(
                         _rec.isPaused ? Icons.play_arrow : Icons.pause,
                         color: Esk8Theme.accent,
@@ -715,13 +742,18 @@ class _TripViewState extends State<TripView>
                 child: InkWell(
                   onTap: _toggleTracking,
                   child: Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 22,
+                      vertical: 15,
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(isTracking ? Icons.stop : Icons.play_arrow,
-                            color: Colors.white, size: 22),
+                        Icon(
+                          isTracking ? Icons.stop : Icons.play_arrow,
+                          color: Colors.white,
+                          size: 22,
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           isTracking
@@ -782,11 +814,7 @@ class _MapButton extends StatelessWidget {
           color: bg,
           border: Border.all(color: highlighted ? Esk8Theme.accent : bd),
         ),
-        child: Icon(
-          icon,
-          color: highlighted ? Esk8Theme.accent : fg,
-          size: 20,
-        ),
+        child: Icon(icon, color: highlighted ? Esk8Theme.accent : fg, size: 20),
       ),
     );
   }
