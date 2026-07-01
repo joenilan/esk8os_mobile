@@ -110,6 +110,7 @@ class SettingsSummaryView extends StatelessWidget {
               foregroundColor: Esk8Theme.accent,
               side: BorderSide(color: Esk8Theme.accent),
               padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: const RoundedRectangleBorder(), // sharp — board look
             ),
             label: const Text(
               'EDIT SETTINGS',

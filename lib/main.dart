@@ -70,6 +70,40 @@ class Esk8App extends StatelessWidget {
               seedColor: Esk8Theme.accent,
               brightness: brightness,
             ),
+            // Board look everywhere: sharp corners (the board never rounds), flat
+            // bordered cards that share the bg. Applied globally so the Material
+            // pages (settings, wifi, dialogs, inputs) match the dashboard.
+            cardTheme: CardThemeData(
+              elevation: 0,
+              color: Esk8Theme.panel,
+              shape: RoundedRectangleBorder(
+                side: BorderSide(color: Esk8Theme.border),
+              ),
+            ),
+            outlinedButtonTheme: OutlinedButtonThemeData(
+              style:
+                  OutlinedButton.styleFrom(shape: const RoundedRectangleBorder()),
+            ),
+            elevatedButtonTheme: ElevatedButtonThemeData(
+              style:
+                  ElevatedButton.styleFrom(shape: const RoundedRectangleBorder()),
+            ),
+            filledButtonTheme: FilledButtonThemeData(
+              style: FilledButton.styleFrom(shape: const RoundedRectangleBorder()),
+            ),
+            textButtonTheme: TextButtonThemeData(
+              style: TextButton.styleFrom(shape: const RoundedRectangleBorder()),
+            ),
+            inputDecorationTheme: const InputDecorationTheme(
+              border: OutlineInputBorder(borderRadius: BorderRadius.zero),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.zero),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.zero),
+            ),
+            dialogTheme: const DialogThemeData(shape: RoundedRectangleBorder()),
+            segmentedButtonTheme: SegmentedButtonThemeData(
+              style:
+                  SegmentedButton.styleFrom(shape: const RoundedRectangleBorder()),
+            ),
           ),
           home: const ScanPage(),
         );

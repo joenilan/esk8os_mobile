@@ -690,35 +690,52 @@ class _TripViewState extends State<TripView>
             mainAxisSize: MainAxisSize.min,
             children: [
               if (isTracking) ...[
-                FloatingActionButton(
-                  heroTag: 'pause',
-                  backgroundColor: const Color(0xDD1A1A1A),
-                  onPressed: () => _rec.isPaused ? _rec.resume() : _rec.pause(),
-                  child: Icon(
-                    _rec.isPaused ? Icons.play_arrow : Icons.pause,
-                    color: Esk8Theme.accent,
+                Material(
+                  color: _ctlBg,
+                  child: InkWell(
+                    onTap: () => _rec.isPaused ? _rec.resume() : _rec.pause(),
+                    child: Container(
+                      width: 52,
+                      height: 52,
+                      alignment: Alignment.center,
+                      decoration:
+                          BoxDecoration(border: Border.all(color: _ctlBorder)),
+                      child: Icon(
+                        _rec.isPaused ? Icons.play_arrow : Icons.pause,
+                        color: Esk8Theme.accent,
+                      ),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
               ],
-              FloatingActionButton.extended(
-                heroTag: 'startstop',
-                backgroundColor: isTracking
-                    ? const Color(0xFFEF4444)
-                    : Esk8Theme.accent,
-                onPressed: _toggleTracking,
-                icon: Icon(
-                  isTracking ? Icons.stop : Icons.play_arrow,
-                  color: Colors.white,
-                ),
-                label: Text(
-                  isTracking
-                      ? (_rec.isPaused ? 'PAUSED' : 'STOP')
-                      : 'START TRIP',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1,
+              // Sharp filled primary CTA — board look, no rounded FAB.
+              Material(
+                color: isTracking ? const Color(0xFFEF4444) : Esk8Theme.accent,
+                child: InkWell(
+                  onTap: _toggleTracking,
+                  child: Padding(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 22, vertical: 15),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(isTracking ? Icons.stop : Icons.play_arrow,
+                            color: Colors.white, size: 22),
+                        const SizedBox(width: 8),
+                        Text(
+                          isTracking
+                              ? (_rec.isPaused ? 'PAUSED' : 'STOP')
+                              : 'START TRIP',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.5,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
