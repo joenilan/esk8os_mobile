@@ -1092,7 +1092,7 @@ class _DashboardPageState extends State<DashboardPage>
                                     Expanded(
                                       child: _controlAction(
                                         Icons.wifi,
-                                        'WIFI',
+                                        'EXPORT / OTA',
                                         () => Navigator.of(context).push(
                                           MaterialPageRoute(
                                             builder: (_) =>
