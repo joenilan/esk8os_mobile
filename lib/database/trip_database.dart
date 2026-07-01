@@ -22,7 +22,7 @@ class TripDatabase {
 
     return await openDatabase(
       path,
-      version: 3,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -45,6 +45,13 @@ class TripDatabase {
       await db.execute('ALTER TABLE trips ADD COLUMN wattHours REAL DEFAULT 0');
       await db.execute('ALTER TABLE trips ADD COLUMN regenWh REAL DEFAULT 0');
       await db.execute('ALTER TABLE trips ADD COLUMN effWhMi REAL DEFAULT 0');
+    }
+    if (oldV < 4) {
+      // v4: telemetry rows are looked up by trip on every playback/delete —
+      // without this index that's a full scan of a table that grows 1 row/s.
+      await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_telemetry_trip ON telemetry(tripId)',
+      );
     }
   }
 
@@ -81,6 +88,10 @@ class TripDatabase {
         FOREIGN KEY (tripId) REFERENCES trips (id) ON DELETE CASCADE
       )
     ''');
+
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_telemetry_trip ON telemetry(tripId)',
+    );
   }
 
   // --- Trips ---

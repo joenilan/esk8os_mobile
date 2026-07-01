@@ -136,6 +136,7 @@ class TripRecorder extends ChangeNotifier {
   }
 
   final List<LatLng> _route = [];
+  bool _routeAnchorStale = false; // set while paused; next fix restarts the polyline
   List<LatLng> get route => List.unmodifiable(_route);
   LatLng? _currentPosition;
   LatLng? get currentPosition => _currentPosition;
@@ -225,6 +226,7 @@ class TripRecorder extends ChangeNotifier {
     _elevGainM = 0;
     _paused = false;
     _pausedAccumMs = 0;
+    _routeAnchorStale = false;
     _boardStartRange = -1;
     _boardMaxSpeed = _latestTelemetry?.speed ?? 0;
     _boardTripMiles = 0;
@@ -265,11 +267,26 @@ class TripRecorder extends ChangeNotifier {
       position,
     ) {
       final p = LatLng(position.latitude, position.longitude);
-      // Paused: keep the marker live but freeze all trip accumulation.
+      // Paused: keep the marker live but freeze all trip accumulation. Mark the
+      // route anchor stale so distance moved WHILE paused isn't credited to the
+      // trip in one jump on the first post-resume fix.
       if (_paused) {
         _currentPosition = p;
         _gpsSpeedKmh = position.speed * 3.6;
         _lastFixMs = 0;
+        _routeAnchorStale = true;
+        notifyListeners();
+        return;
+      }
+      // Reject low-quality fixes: urban-canyon jitter (30 m+ error circles)
+      // inflates distance while stopped and can spike max speed.
+      if (position.accuracy > 20) return;
+      if (_routeAnchorStale) {
+        // First fix after a pause: restart the polyline here, count no distance.
+        _routeAnchorStale = false;
+        _route.add(p);
+        _currentPosition = p;
+        _gpsSpeedKmh = position.speed * 3.6;
         notifyListeners();
         return;
       }
