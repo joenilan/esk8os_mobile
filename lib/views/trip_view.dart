@@ -655,8 +655,8 @@ class _TripViewState extends State<TripView>
             onTap: () => setState(() => _statsExpanded = !_statsExpanded),
             child: Container(
               width: _statsExpanded
-                  ? (_gpsCompare ? 210 : 156)
-                  : (_gpsCompare ? 136 : 96),
+                  ? (_gpsCompare ? 190 : 156)
+                  : (_gpsCompare ? 126 : 96),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: _ctlBg,

@@ -73,6 +73,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   double get _pos => _telemetry.length < 2 ? 0.0 : _playCtrl.value * _maxPos;
   bool _isPlaying = false;
   bool _showGraphs = false;
+  bool _gpsCompare = true;
   // Map style is shared with the live trip map (AppPrefs.mapLight) so playback
   // matches what you ride with; the toggle here flips that same pref.
   bool _mapLight = AppPrefs.mapLight;
@@ -259,6 +260,55 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     }
   }
 
+  static double _num(dynamic value) =>
+      value is num ? value.toDouble() : double.tryParse('$value') ?? 0.0;
+
+  String _formatDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60);
+    if (h > 0) return '${h}h ${m}m';
+    if (m > 0) return '${m}m ${s}s';
+    return '${s}s';
+  }
+
+  String _fmt(double value, {int digits = 1}) => value.toStringAsFixed(digits);
+
+  Widget _compareStat(String label, String value, {String? gps}) => Column(
+    crossAxisAlignment: CrossAxisAlignment.center,
+    children: [
+      FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(value, style: Esk8Theme.number(18, color: Colors.white)),
+            if (gps != null) ...[
+              const SizedBox(width: 4),
+              const Text(
+                '|',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              const SizedBox(width: 4),
+              Text(gps, style: Esk8Theme.number(18, color: Esk8Theme.accent)),
+            ],
+          ],
+        ),
+      ),
+      const SizedBox(height: 2),
+      Text(
+        label,
+        style: const TextStyle(
+          color: Colors.grey,
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+    ],
+  );
+
   @override
   void dispose() {
     _playCtrl.dispose();
@@ -278,6 +328,12 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
           spdUnit,
           Esk8Theme.accent,
           (r) => (r['boardSpeed'] as num).toDouble(),
+          compareValueOf: _gpsCompare
+              ? (r) {
+                  final gps = (r['gpsSpeed'] as num).toDouble();
+                  return isMph ? gps / 1.60934 : gps;
+                }
+              : null,
         ),
         _metricChart(
           'Elevation',
@@ -313,16 +369,30 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     String label,
     String unit,
     Color color,
-    double Function(Map<String, dynamic>) valueOf,
-  ) {
+    double Function(Map<String, dynamic>) valueOf, {
+    double Function(Map<String, dynamic>)? compareValueOf,
+  }) {
     final vals = [for (final r in _telemetry) valueOf(r)];
+    final compareVals = compareValueOf == null
+        ? null
+        : [for (final r in _telemetry) compareValueOf(r)];
     final spots = [
       for (var i = 0; i < vals.length; i++) FlSpot(i.toDouble(), vals[i]),
     ];
-    double minY = vals.reduce(min), maxY = vals.reduce(max);
+    final compareSpots = compareVals == null
+        ? null
+        : [
+            for (var i = 0; i < compareVals.length; i++)
+              FlSpot(i.toDouble(), compareVals[i]),
+          ];
+    final allVals = compareVals == null ? vals : [...vals, ...compareVals];
+    double minY = allVals.reduce(min), maxY = allVals.reduce(max);
     if (maxY - minY < 1) maxY = minY + 1;
     final pad = (maxY - minY) * 0.1;
     final cur = vals[_idx.clamp(0, vals.length - 1)];
+    final compareCur = compareVals == null
+        ? null
+        : compareVals[_idx.clamp(0, compareVals.length - 1)];
     return Container(
       height: 170,
       margin: const EdgeInsets.only(bottom: 12),
@@ -335,9 +405,30 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(label.toUpperCase(), style: Esk8Theme.labelStyle),
-              Text(
-                '${cur.toStringAsFixed(1)} $unit',
-                style: Esk8Theme.number(20, color: color),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.baseline,
+                  textBaseline: TextBaseline.alphabetic,
+                  children: [
+                    Text(
+                      cur.toStringAsFixed(1),
+                      style: Esk8Theme.number(20, color: color),
+                    ),
+                    if (compareCur != null) ...[
+                      const SizedBox(width: 5),
+                      Text('|', style: TextStyle(color: Esk8Theme.dim)),
+                      const SizedBox(width: 5),
+                      Text(
+                        compareCur.toStringAsFixed(1),
+                        style: Esk8Theme.number(20, color: Esk8Theme.accent),
+                      ),
+                    ],
+                    const SizedBox(width: 4),
+                    Text(unit, style: TextStyle(color: Esk8Theme.dim)),
+                  ],
+                ),
               ),
             ],
           ),
@@ -364,6 +455,14 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
                       color: color.withValues(alpha: 0.15),
                     ),
                   ),
+                  if (compareSpots != null)
+                    LineChartBarData(
+                      spots: compareSpots,
+                      isCurved: false,
+                      color: Esk8Theme.accent,
+                      barWidth: 2,
+                      dotData: const FlDotData(show: false),
+                    ),
                 ],
                 extraLinesData: ExtraLinesData(
                   verticalLines: [
@@ -445,6 +544,23 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     }
 
     final speedUnitStr = widget.isMph ? 'mph' : 'km/h';
+    final distUnitStr = widget.isMph ? 'mi' : 'km';
+    final startMs = widget.tripData['startTime'] as int?;
+    final endMs = widget.tripData['endTime'] as int?;
+    final elapsed = startMs != null && endMs != null
+        ? Duration(milliseconds: endMs - startMs)
+        : Duration.zero;
+    final elapsedHours = elapsed.inMilliseconds / 3600000.0;
+    final gpsDistance =
+        _num(widget.tripData['distance']) / (widget.isMph ? 1609.34 : 1000.0);
+    final boardDistance =
+        _num(widget.tripData['boardDistanceMi']) *
+        (widget.isMph ? 1.0 : 1.60934);
+    final gpsMax =
+        _num(widget.tripData['maxSpeed']) / (widget.isMph ? 1.60934 : 1.0);
+    final boardMax = _num(widget.tripData['boardMaxSpeed']);
+    final gpsAvg = elapsedHours > 0 ? gpsDistance / elapsedHours : 0.0;
+    final boardAvg = elapsedHours > 0 ? boardDistance / elapsedHours : 0.0;
     final accent = Esk8Theme.accent;
     return Scaffold(
       backgroundColor: Esk8Theme.scaffold,
@@ -453,6 +569,11 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
           SubPageHeader(
             title: 'Trip Playback',
             actions: [
+              IconButton(
+                icon: Icon(Icons.compare_arrows, color: accent),
+                tooltip: _gpsCompare ? 'Hide GPS compare' : 'GPS compare',
+                onPressed: () => setState(() => _gpsCompare = !_gpsCompare),
+              ),
               if (!_showGraphs) ...[
                 IconButton(
                   icon: Icon(
@@ -574,19 +695,43 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
-                                _StatColumn(
+                                _compareStat(
+                                  'Speed $speedUnitStr',
+                                  _fmt(board),
+                                  gps: _gpsCompare ? _fmt(gps) : null,
+                                ),
+                                _compareStat(
+                                  'Trip $distUnitStr',
+                                  _fmt(boardDistance, digits: 2),
+                                  gps: _gpsCompare
+                                      ? _fmt(gpsDistance, digits: 2)
+                                      : null,
+                                ),
+                                _compareStat(
+                                  'Max $speedUnitStr',
+                                  _fmt(boardMax),
+                                  gps: _gpsCompare ? _fmt(gpsMax) : null,
+                                ),
+                                _compareStat(
+                                  'Avg $speedUnitStr',
+                                  _fmt(boardAvg),
+                                  gps: _gpsCompare ? _fmt(gpsAvg) : null,
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                _compareStat(
                                   'Time',
                                   DateFormat('h:mm:ss a').format(ts),
                                 ),
-                                _StatColumn(
-                                  'GPS Speed',
-                                  '${gps.toStringAsFixed(1)} $speedUnitStr',
+                                _compareStat('Battery', '${data['battery']}%'),
+                                _compareStat(
+                                  'Duration',
+                                  _formatDuration(elapsed),
                                 ),
-                                _StatColumn(
-                                  'Board Speed',
-                                  '${board.toStringAsFixed(1)} $speedUnitStr',
-                                ),
-                                _StatColumn('Battery', '${data['battery']}%'),
                               ],
                             ),
                             const SizedBox(height: 16),
@@ -646,37 +791,6 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
           ),
         ],
       ),
-    );
-  }
-}
-
-class _StatColumn extends StatelessWidget {
-  final String label;
-  final String value;
-  const _StatColumn(this.label, this.value);
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            color: Colors.grey,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 14,
-            fontWeight: FontWeight.w300,
-          ),
-        ),
-      ],
     );
   }
 }
