@@ -75,7 +75,12 @@ class _SettingsPageState extends State<SettingsPage> {
       final s = await widget.dev.readSettings();
       if (s == null) throw StateError('Empty response from board');
       if (!mounted) return;
-      Esk8Theme.applyTheme(s.theme);
+      if (AppPrefs.themeSyncWithBoard) {
+        AppPrefs.phoneTheme = s.theme;
+        Esk8Theme.applyTheme(s.theme);
+      } else {
+        Esk8Theme.applyTheme(AppPrefs.phoneTheme);
+      }
       setState(() {
         _settings = s;
         _riderCtrl.text = s.rider;
@@ -120,7 +125,10 @@ class _SettingsPageState extends State<SettingsPage> {
       // Re-read to confirm the board accepted the value.
       final s = await widget.dev.readSettings();
       if (s != null && mounted) {
-        Esk8Theme.applyTheme(s.theme);
+        if (AppPrefs.themeSyncWithBoard) {
+          AppPrefs.phoneTheme = s.theme;
+          Esk8Theme.applyTheme(s.theme);
+        }
         setState(() => _settings = s);
       }
       _toast('$label updated');
@@ -129,6 +137,50 @@ class _SettingsPageState extends State<SettingsPage> {
     } finally {
       if (mounted) setState(() => _writing = false);
     }
+  }
+
+  void _setThemeSync(bool enabled) {
+    final s = _settings;
+    setState(() => AppPrefs.themeSyncWithBoard = enabled);
+    if (enabled && s != null) {
+      AppPrefs.phoneTheme = s.theme;
+      Esk8Theme.applyTheme(s.theme);
+    } else {
+      AppPrefs.phoneTheme = Esk8Theme.themeName;
+    }
+  }
+
+  void _setPhoneTheme(String theme) {
+    AppPrefs.phoneTheme = theme;
+    Esk8Theme.applyTheme(theme);
+    setState(() {});
+  }
+
+  Widget _themePicker({
+    required String label,
+    required String value,
+    required ValueChanged<String> onChanged,
+    required IconData icon,
+  }) {
+    final current = _themeNames.contains(value.toUpperCase())
+        ? value.toUpperCase()
+        : _themeNames.first;
+    return DropdownButtonFormField<String>(
+      key: ValueKey('$label-$current'),
+      initialValue: current,
+      decoration: InputDecoration(
+        icon: Icon(icon, color: _accent),
+        labelText: label,
+        border: InputBorder.none,
+      ),
+      dropdownColor: Esk8Theme.panel,
+      items: [
+        for (final t in _themeNames) DropdownMenuItem(value: t, child: Text(t)),
+      ],
+      onChanged: (v) {
+        if (v != null) onChanged(v);
+      },
+    );
   }
 
   Future<void> _command(String command, String label) async {
@@ -510,29 +562,60 @@ class _SettingsPageState extends State<SettingsPage> {
             _SectionHeader('THEME'),
             Card(
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: DropdownButtonFormField<String>(
-                  initialValue: _themeNames.contains(s.theme.toUpperCase())
-                      ? s.theme.toUpperCase()
-                      : _themeNames.first,
-                  decoration: InputDecoration(
-                    icon: Icon(Icons.palette, color: _accent),
-                    labelText: 'Board Theme',
-                    border: InputBorder.none,
-                  ),
-                  dropdownColor: const Color(0xFF1E1E1E),
-                  items: [
-                    for (final t in _themeNames)
-                      DropdownMenuItem(value: t, child: Text(t)),
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                child: Column(
+                  children: [
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'Sync with Board',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(
+                        AppPrefs.themeSyncWithBoard
+                            ? 'Phone follows the ESP32 theme'
+                            : 'Phone and ESP32 themes are separate',
+                      ),
+                      secondary: Icon(Icons.sync, color: _accent),
+                      value: AppPrefs.themeSyncWithBoard,
+                      activeThumbColor: _accent,
+                      onChanged: _setThemeSync,
+                    ),
+                    const Divider(height: 1),
+                    _themePicker(
+                      label: AppPrefs.themeSyncWithBoard
+                          ? 'Board + Phone Theme'
+                          : 'Phone Theme',
+                      value: AppPrefs.themeSyncWithBoard
+                          ? s.theme
+                          : AppPrefs.phoneTheme,
+                      icon: AppPrefs.themeSyncWithBoard
+                          ? Icons.palette
+                          : Icons.phone_android,
+                      onChanged: (v) {
+                        if (AppPrefs.themeSyncWithBoard) {
+                          _write(BoardSettings.writeJson(theme: v), 'Theme');
+                        } else {
+                          _setPhoneTheme(v);
+                        }
+                      },
+                    ),
+                    if (!AppPrefs.themeSyncWithBoard) ...[
+                      const Divider(height: 1),
+                      _themePicker(
+                        label: 'Board Theme',
+                        value: s.theme,
+                        icon: Icons.developer_board,
+                        onChanged: (v) => _write(
+                          BoardSettings.writeJson(theme: v),
+                          'Board theme',
+                        ),
+                      ),
+                    ],
                   ],
-                  onChanged: (v) {
-                    if (v != null) {
-                      _write(BoardSettings.writeJson(theme: v), 'Theme');
-                    }
-                  },
                 ),
               ),
             ),

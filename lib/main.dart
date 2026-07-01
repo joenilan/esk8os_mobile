@@ -30,6 +30,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   FlutterForegroundTask.initCommunicationPort(); // for notification-button relay
   await AppPrefs.init();
+  Esk8Theme.applyTheme(AppPrefs.phoneTheme);
   TripDatabase.instance
       .recoverOrphans(); // finalize any trip left open by a kill
   SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -662,7 +663,10 @@ class _DashboardPageState extends State<DashboardPage>
     try {
       final s = await widget.dev.readSettings();
       if (mounted && s != null) {
-        Esk8Theme.applyTheme(s.theme);
+        if (AppPrefs.themeSyncWithBoard) {
+          AppPrefs.phoneTheme = s.theme;
+          Esk8Theme.applyTheme(s.theme);
+        }
         setState(() => _boardSettings = s);
       }
     } catch (_) {}
