@@ -161,25 +161,32 @@ class _SettingsPageState extends State<SettingsPage> {
     required String value,
     required ValueChanged<String> onChanged,
     required IconData icon,
+    EdgeInsets padding = const EdgeInsets.symmetric(vertical: 10),
   }) {
     final current = _themeNames.contains(value.toUpperCase())
         ? value.toUpperCase()
         : _themeNames.first;
-    return DropdownButtonFormField<String>(
-      key: ValueKey('$label-$current'),
-      initialValue: current,
-      decoration: InputDecoration(
-        icon: Icon(icon, color: _accent),
-        labelText: label,
-        border: InputBorder.none,
+    return Padding(
+      padding: padding,
+      child: DropdownButtonFormField<String>(
+        key: ValueKey('$label-$current'),
+        initialValue: current,
+        decoration: InputDecoration(
+          icon: Icon(icon, color: _accent),
+          labelText: label,
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.only(top: 8, bottom: 4),
+          isDense: false,
+        ),
+        dropdownColor: Esk8Theme.panel,
+        items: [
+          for (final t in _themeNames)
+            DropdownMenuItem(value: t, child: Text(t)),
+        ],
+        onChanged: (v) {
+          if (v != null) onChanged(v);
+        },
       ),
-      dropdownColor: Esk8Theme.panel,
-      items: [
-        for (final t in _themeNames) DropdownMenuItem(value: t, child: Text(t)),
-      ],
-      onChanged: (v) {
-        if (v != null) onChanged(v);
-      },
     );
   }
 
@@ -562,7 +569,7 @@ class _SettingsPageState extends State<SettingsPage> {
             _SectionHeader('THEME'),
             Card(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
                 child: Column(
                   children: [
                     SwitchListTile(
@@ -584,7 +591,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       activeThumbColor: _accent,
                       onChanged: _setThemeSync,
                     ),
-                    const Divider(height: 1),
+                    const Divider(height: 18),
                     _themePicker(
                       label: AppPrefs.themeSyncWithBoard
                           ? 'Board + Phone Theme'
@@ -604,7 +611,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       },
                     ),
                     if (!AppPrefs.themeSyncWithBoard) ...[
-                      const Divider(height: 1),
+                      const Divider(height: 18),
                       _themePicker(
                         label: 'Board Theme',
                         value: s.theme,
