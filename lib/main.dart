@@ -13,6 +13,7 @@ import 'ble/companion_device.dart';
 import 'ble/esk8os_ble.dart';
 import 'ble/mock_device.dart';
 import 'database/trip_database.dart';
+import 'pages/settings_page.dart';
 import 'pages/wifi_export_page.dart';
 import 'services/app_prefs.dart';
 import 'services/trip_recorder.dart';
@@ -863,6 +864,18 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
+  Future<void> _openSettingsEditor() async {
+    setState(() => _showControls = false);
+    final nav = _contentNavKey.currentState;
+    if (nav == null) return;
+    await nav.push(
+      MaterialPageRoute(
+        builder: (_) => SettingsPage(dev: widget.dev, telemetry: _latestT),
+      ),
+    );
+    await _fetchSettings();
+  }
+
   @override
   Widget build(BuildContext context) {
     return PopScope(
@@ -1165,6 +1178,12 @@ class _DashboardPageState extends State<DashboardPage>
                                               ],
                                             ),
                                             const SizedBox(height: 14),
+                                            _controlAction(
+                                              Icons.settings,
+                                              'EDIT SETTINGS',
+                                              _openSettingsEditor,
+                                            ),
+                                            const SizedBox(height: 10),
                                             Row(
                                               children: [
                                                 Expanded(
