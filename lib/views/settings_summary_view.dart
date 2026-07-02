@@ -91,7 +91,16 @@ class SettingsSummaryView extends StatelessWidget {
               value: s.stopCellV.toStringAsFixed(2),
               unit: 'V',
             ),
-            FieldRow(label: 'Wh/mi', value: s.whPerMile.toStringAsFixed(1)),
+            // Prefer the board's LEARNED Wh/mi (fw 0.9.5+) over the configured
+            // fallback — otherwise this reads the seed value, not what the
+            // board actually uses for range.
+            FieldRow(
+              label: 'Wh/mi',
+              value: (s.hasBoardCal && s.calWhPerMile > 0
+                      ? s.calWhPerMile
+                      : s.whPerMile)
+                  .toStringAsFixed(1),
+            ),
           ],
         ),
         Padding(

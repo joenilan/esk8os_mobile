@@ -759,28 +759,34 @@ class _SettingsPageState extends State<SettingsPage> {
                         'Limp floor',
                       ),
                     ),
-                    _RangeModelControl(
-                      value: rangeWhPerMile,
-                      pending: _pendingWhPerMile != null,
-                      onStep: (delta) =>
-                          _queueWhPerMile(rangeWhPerMile + delta),
-                      onExact: () => _editWhPerMile(rangeWhPerMile),
-                    ),
-                    if (s.hasBoardCal) ...[
-                      const Divider(height: 1),
+                    // On a self-learning board (fw 0.9.5+) the board owns the
+                    // range model — it learns Wh/mi, pack resistance and real
+                    // deliverable energy while riding, and IGNORES any whmi the
+                    // app writes. So show only the read-only learned summary
+                    // here; every whmi-writing control below is hidden because
+                    // it would silently do nothing. Older firmware keeps the
+                    // full manual + app-learned toolkit.
+                    if (s.hasBoardCal)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: Icon(Icons.memory, color: _accent),
                         title: const Text(
-                          'Board-learned calibration',
+                          'Board-learned range model',
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
-                        subtitle: Text(_boardCalSummary(s)),
+                        subtitle: Text(
+                          '${_boardCalSummary(s)}\n'
+                          'The board tunes this automatically while you ride.',
+                        ),
                       ),
-                    ],
-                    // App-side auto-learn only exists for firmware that can't
-                    // learn on-device — self-learning boards hide it entirely.
                     if (!s.hasBoardCal) ...[
+                      _RangeModelControl(
+                        value: rangeWhPerMile,
+                        pending: _pendingWhPerMile != null,
+                        onStep: (delta) =>
+                            _queueWhPerMile(rangeWhPerMile + delta),
+                        onExact: () => _editWhPerMile(rangeWhPerMile),
+                      ),
                       const Divider(height: 1),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
@@ -796,82 +802,82 @@ class _SettingsPageState extends State<SettingsPage> {
                         onChanged: (v) =>
                             setState(() => AppPrefs.autoLearnRange = v),
                       ),
+                      const Divider(height: 1),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.auto_graph, color: _accent),
+                        title: const Text(
+                          'Calibrate range from ride',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(rangeCalibration.subtitle),
+                        trailing: FilledButton(
+                          onPressed: rangeCalibration.canUse
+                              ? () => _write(
+                                  BoardSettings.writeJson(
+                                    whPerMile: rangeCalibration.whPerMile,
+                                  ),
+                                  'Range model',
+                                )
+                              : null,
+                          child: const Text('Use'),
+                        ),
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.insights, color: _accent),
+                        title: const Text(
+                          'Use learned model',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          _loadingLastTrip
+                              ? 'Checking trip history'
+                              : _learnedCalibration?.subtitle ??
+                                    'Need longer recorded trips first',
+                        ),
+                        trailing: FilledButton(
+                          onPressed:
+                              _learnedCalibration != null &&
+                                  _learnedCalibration!.canUse
+                              ? () => _write(
+                                  BoardSettings.writeJson(
+                                    whPerMile: _learnedCalibration!.whPerMile,
+                                  ),
+                                  'Range model',
+                                )
+                              : null,
+                          child: const Text('Use'),
+                        ),
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.history, color: _accent),
+                        title: const Text(
+                          'Use last recorded trip',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(
+                          _loadingLastTrip
+                              ? 'Checking trip history'
+                              : lastTripCalibration?.subtitle ??
+                                    'No recorded trip with board energy yet',
+                        ),
+                        trailing: FilledButton(
+                          onPressed:
+                              lastTripCalibration != null &&
+                                  lastTripCalibration.canUse
+                              ? () => _write(
+                                  BoardSettings.writeJson(
+                                    whPerMile: lastTripCalibration.whPerMile,
+                                  ),
+                                  'Range model',
+                                )
+                              : null,
+                          child: const Text('Use'),
+                        ),
+                      ),
                     ],
-                    const Divider(height: 1),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.auto_graph, color: _accent),
-                      title: const Text(
-                        'Calibrate range from ride',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text(rangeCalibration.subtitle),
-                      trailing: FilledButton(
-                        onPressed: rangeCalibration.canUse
-                            ? () => _write(
-                                BoardSettings.writeJson(
-                                  whPerMile: rangeCalibration.whPerMile,
-                                ),
-                                'Range model',
-                              )
-                            : null,
-                        child: const Text('Use'),
-                      ),
-                    ),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.insights, color: _accent),
-                      title: const Text(
-                        'Use learned model',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text(
-                        _loadingLastTrip
-                            ? 'Checking trip history'
-                            : _learnedCalibration?.subtitle ??
-                                  'Need longer recorded trips first',
-                      ),
-                      trailing: FilledButton(
-                        onPressed:
-                            _learnedCalibration != null &&
-                                _learnedCalibration!.canUse
-                            ? () => _write(
-                                BoardSettings.writeJson(
-                                  whPerMile: _learnedCalibration!.whPerMile,
-                                ),
-                                'Range model',
-                              )
-                            : null,
-                        child: const Text('Use'),
-                      ),
-                    ),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.history, color: _accent),
-                      title: const Text(
-                        'Use last recorded trip',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                      subtitle: Text(
-                        _loadingLastTrip
-                            ? 'Checking trip history'
-                            : lastTripCalibration?.subtitle ??
-                                  'No recorded trip with board energy yet',
-                      ),
-                      trailing: FilledButton(
-                        onPressed:
-                            lastTripCalibration != null &&
-                                lastTripCalibration.canUse
-                            ? () => _write(
-                                BoardSettings.writeJson(
-                                  whPerMile: lastTripCalibration.whPerMile,
-                                ),
-                                'Range model',
-                              )
-                            : null,
-                        child: const Text('Use'),
-                      ),
-                    ),
                   ],
                 ),
               ),
