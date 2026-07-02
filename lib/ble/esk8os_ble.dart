@@ -244,6 +244,9 @@ class BoardSettings {
   // ESK8OS firmware version string, e.g. "v0.9.5 9fc0918" (fw 0.9.5+; empty on
   // older firmware). Shown on the app's About card.
   final String firmwareVersion; // fwv
+  // fw 0.9.5+ only reports "rgb" when the build has a controllable status LED
+  // (headless/OLED devkits). Absent -> hide the toggle in the app.
+  final bool hasStatusRgb;
 
   const BoardSettings({
     this.hardware = 'tdisplay-s3',
@@ -278,6 +281,7 @@ class BoardSettings {
     this.calWhPerMile = 0.0,
     this.calPackWh = 0,
     this.firmwareVersion = '',
+    this.hasStatusRgb = true,
   });
 
   factory BoardSettings.fromJson(Map<String, dynamic> j) => BoardSettings(
@@ -319,6 +323,9 @@ class BoardSettings {
     calWhPerMile: _d(j['calWhmi']),
     calPackWh: _i(j['calWh']),
     firmwareVersion: (j['fwv'] ?? '').toString(),
+    // Pre-0.9.5 firmware always sent rgb; keep the toggle for it. On 0.9.5+
+    // the key's absence means "this hardware has no LED".
+    hasStatusRgb: j.containsKey('rgb') || !j.containsKey('fwv'),
   );
 
   /// Build a partial-update map for the writable fields only. Pass just what you
@@ -396,6 +403,7 @@ class BoardSettings {
     calWhPerMile: calWhPerMile,
     calPackWh: calPackWh,
     firmwareVersion: firmwareVersion,
+    hasStatusRgb: hasStatusRgb,
   );
 }
 

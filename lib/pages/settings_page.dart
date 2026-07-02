@@ -778,24 +778,25 @@ class _SettingsPageState extends State<SettingsPage> {
                         subtitle: Text(_boardCalSummary(s)),
                       ),
                     ],
-                    const Divider(height: 1),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      secondary: Icon(Icons.auto_mode, color: _accent),
-                      title: const Text(
-                        'Auto-learn range',
-                        style: TextStyle(fontWeight: FontWeight.w600),
+                    // App-side auto-learn only exists for firmware that can't
+                    // learn on-device — self-learning boards hide it entirely.
+                    if (!s.hasBoardCal) ...[
+                      const Divider(height: 1),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        secondary: Icon(Icons.auto_mode, color: _accent),
+                        title: const Text(
+                          'Auto-learn range',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: const Text(
+                          'Starts at 22.0 Wh/mi, then learns from 2+ mi / 20+ Wh trips',
+                        ),
+                        value: AppPrefs.autoLearnRange,
+                        onChanged: (v) =>
+                            setState(() => AppPrefs.autoLearnRange = v),
                       ),
-                      subtitle: Text(
-                        s.hasBoardCal
-                            ? 'Board learns on-device (fw 0.9.5+) — app push off'
-                            : 'Starts at 22.0 Wh/mi, then learns from 2+ mi / 20+ Wh trips',
-                      ),
-                      value: s.hasBoardCal ? false : AppPrefs.autoLearnRange,
-                      onChanged: s.hasBoardCal
-                          ? null
-                          : (v) => setState(() => AppPrefs.autoLearnRange = v),
-                    ),
+                    ],
                     const Divider(height: 1),
                     ListTile(
                       contentPadding: EdgeInsets.zero,
@@ -977,27 +978,30 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                       ),
                   ],
-                  SwitchListTile(
-                    title: const Text(
-                      'Status RGB LED',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                  // Only firmware built with a controllable status LED reports
+                  // the rgb setting (fw 0.9.5+) — no LED, no toggle.
+                  if (s.hasStatusRgb)
+                    SwitchListTile(
+                      title: const Text(
+                        'Status RGB LED',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(
+                        hasOnboardDisplay
+                            ? 'On-board status indicator light'
+                            : 'Headless status indicator light',
+                      ),
+                      secondary: Icon(Icons.lightbulb_outline, color: _accent),
+                      value: s.statusRgb,
+                      activeThumbColor: _accent,
+                      onChanged: (v) => _write(
+                        BoardSettings.writeJson(statusRgb: v),
+                        'Status RGB',
                       ),
                     ),
-                    subtitle: Text(
-                      hasOnboardDisplay
-                          ? 'On-board status indicator light'
-                          : 'Headless status indicator light',
-                    ),
-                    secondary: Icon(Icons.lightbulb_outline, color: _accent),
-                    value: s.statusRgb,
-                    activeThumbColor: _accent,
-                    onChanged: (v) => _write(
-                      BoardSettings.writeJson(statusRgb: v),
-                      'Status RGB',
-                    ),
-                  ),
                   SwitchListTile(
                     title: const Text(
                       'Demo mode',
