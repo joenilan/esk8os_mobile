@@ -381,6 +381,16 @@ class _TripViewState extends State<TripView>
     final gpsSpeedDisplay = isMph
         ? (_rec.gpsSpeedKmh / 1.60934)
         : _rec.gpsSpeedKmh;
+    // Big speed number: the trusted source. While recording, the recorder
+    // picks board-when-live / GPS-when-not; when idle, the live board feed.
+    final bool boardLive = _rec.isRecording
+        ? _rec.boardLive
+        : (telemetry.live && telemetry.vescConnected);
+    final double effSpeedKmh = _rec.isRecording
+        ? _rec.effectiveSpeedKmh
+        : ((telemetry.mph ?? true) ? telemetry.speed * 1.60934 : telemetry.speed);
+    final double bigSpeedDisplay = isMph ? effSpeedKmh / 1.60934 : effSpeedKmh;
+    final String speedSource = boardLive ? 'BOARD' : 'GPS';
     final elapsed = _rec.elapsed;
     final gpsAvgKmh = elapsed.inSeconds > 0
         ? _rec.gpsDistanceM * 3.6 / elapsed.inSeconds
@@ -704,7 +714,7 @@ class _TripViewState extends State<TripView>
                             textBaseline: TextBaseline.alphabetic,
                             children: [
                               Text(
-                                '${telemetry.speed.toInt()}',
+                                '${bigSpeedDisplay.toInt()}',
                                 style: Esk8Theme.number(38, color: _ctlFg),
                               ),
                               if (_gpsCompare) ...[
@@ -737,6 +747,31 @@ class _TripViewState extends State<TripView>
                         speedUnitStr,
                         style: Esk8Theme.labelStyle.copyWith(color: _ctlDim),
                       ),
+                      // Fallback signal: only shown when GPS is driving the
+                      // number (board not feeding), so the rider knows the
+                      // source is the phone, not the wheel.
+                      if (!boardLive) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 1,
+                          ),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: _ctlDim, width: 1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            speedSource,
+                            style: TextStyle(
+                              color: _ctlDim,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                   Icon(

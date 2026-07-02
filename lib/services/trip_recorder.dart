@@ -177,6 +177,42 @@ class TripRecorder extends ChangeNotifier {
   Telemetry? get latestTelemetry => _latestTelemetry;
   Esk8Device? _device;
 
+  // --- source accuracy: the board is authoritative for speed/distance while
+  // it's actually feeding live data; if it drops (BLE lost, powered off, VESC
+  // asleep) the numbers fall back to GPS so they stay real instead of freezing.
+  int _lastTelemetryMs = 0;
+  bool _boardEverLive = false; // did a live board drive this ride at all?
+
+  /// Board telemetry is live (a fresh, real frame within the last ~3 s).
+  bool get boardLive {
+    final t = _latestTelemetry;
+    if (t == null || !t.live) return false;
+    return DateTime.now().millisecondsSinceEpoch - _lastTelemetryMs < 3000;
+  }
+
+  /// Board speed normalised to km/h (telemetry.speed is in the board's unit).
+  double get _boardSpeedKmh {
+    final t = _latestTelemetry;
+    if (t == null) return 0;
+    return (t.mph ?? true) ? t.speed * _kmPerMile : t.speed;
+  }
+
+  /// The speed to trust right now — board when live, else GPS.
+  double get effectiveSpeedKmh => boardLive ? _boardSpeedKmh : _gpsSpeedKmh;
+
+  /// Which source is currently driving [effectiveSpeedKmh].
+  String get speedSource => boardLive ? 'BOARD' : 'GPS';
+
+  /// Trip distance (km): board wheel-odometry when a board rode with us (more
+  /// accurate than GPS path length), else the GPS-integrated distance.
+  double get effectiveTripKm =>
+      _boardEverLive ? _boardTripMiles * _kmPerMile : _gpsDistanceM / 1000.0;
+
+  /// Best max-speed estimate: board max when a board rode with us, else GPS max.
+  double get effectiveMaxKmh => _boardEverLive
+      ? ((_latestTelemetry?.mph ?? true) ? _boardMaxSpeed * _kmPerMile : _boardMaxSpeed)
+      : _gpsMaxSpeedKmh;
+
   StreamSubscription<Position>? _posSub;
   StreamSubscription<Telemetry>? _telSub;
   Timer? _logTimer;
@@ -229,6 +265,8 @@ class TripRecorder extends ChangeNotifier {
     _routeAnchorStale = false;
     _boardStartRange = -1;
     _boardMaxSpeed = _latestTelemetry?.speed ?? 0;
+    _lastTelemetryMs = 0;
+    _boardEverLive = false;
     _boardTripMiles = 0;
     _boardWattHours = 0;
     _boardRegenWh = 0;
@@ -250,6 +288,8 @@ class TripRecorder extends ChangeNotifier {
     // Board telemetry — kept fresh + max tracked even when no view shows it.
     _telSub = device.telemetry().listen((t) {
       _latestTelemetry = t;
+      _lastTelemetryMs = DateTime.now().millisecondsSinceEpoch;
+      if (t.live) _boardEverLive = true;
       if (_boardStartRange < 0) _boardStartRange = t.range;
       if (t.speed > _boardMaxSpeed) _boardMaxSpeed = t.speed;
       _captureBoardRangeStats(t, isMph: t.mph ?? isMph);
