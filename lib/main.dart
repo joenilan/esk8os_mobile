@@ -9,6 +9,7 @@ import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 
 import 'overlay/trip_overlay.dart';
 
+import 'ble/ble_errors.dart';
 import 'ble/companion_device.dart';
 import 'ble/esk8os_ble.dart';
 import 'ble/mock_device.dart';
@@ -151,34 +152,8 @@ class _ScanPageState extends State<ScanPage> {
     } catch (e) {
       setState(() => _error = e is FlutterBluePlusException
           ? 'Scan failed — is Bluetooth on?'
-          : _friendlyBleError(e));
+          : friendlyBleError(e));
     }
-  }
-
-  // Turn a raw BLE error into something a rider can read. Android's GATT stack
-  // reports most transient failures as the generic code 133 (a flaky connect
-  // handshake), which we retry before ever surfacing.
-  static String _friendlyBleError(Object e) {
-    if (e is FlutterBluePlusException) {
-      final code = e.code ?? 0;
-      if (code == 133) {
-        return "Couldn't connect — the board didn't answer. Move closer and "
-            'try again.';
-      }
-      if (code == 8 || code == 19) {
-        return 'The board dropped the connection. Make sure it’s powered '
-            'on and try again.';
-      }
-      if (e.description != null && e.description!.isNotEmpty) {
-        return 'Connection failed: ${e.description}';
-      }
-      return 'Connection failed. Try again.';
-    }
-    final s = e.toString();
-    if (s.contains('timeout') || s.contains('Timeout')) {
-      return 'Connection timed out. Bring the board closer and try again.';
-    }
-    return 'Connection failed. Try again.';
   }
 
   Future<void> _connect(BluetoothDevice device) async {
@@ -203,7 +178,7 @@ class _ScanPageState extends State<ScanPage> {
         context,
       ).push(MaterialPageRoute(builder: (_) => DashboardPage(dev: dev)));
     } catch (e) {
-      if (mounted) setState(() => _error = _friendlyBleError(e));
+      if (mounted) setState(() => _error = friendlyBleError(e));
     } finally {
       if (mounted) setState(() => _connecting = false);
     }
@@ -452,8 +427,8 @@ class _ScanPageState extends State<ScanPage> {
                   decoration: BoxDecoration(
                     border: Border.all(color: Esk8Theme.accent),
                   ),
-                  child: Icon(
-                    Vehicle.icon(vtype),
+                  child: Vehicle.iconWidget(
+                    vtype,
                     color: Esk8Theme.accent,
                     size: 24,
                   ),
@@ -959,8 +934,11 @@ class _DashboardPageState extends State<DashboardPage>
                       ),
                     ),
                     child: TopStatusBar(
-                      leadingIcon: Vehicle.icon(
+                      leadingWidget: Vehicle.iconWidget(
                         _boardSettings?.vehicleType ?? 0,
+                        size: 16,
+                        color: Esk8Theme.accent,
+                        customIcon: _boardSettings?.vehicleCustomIcon ?? 0,
                       ),
                       left: rider.isNotEmpty ? 'RIDER: $rider' : 'ESK8OS',
                       right: _clock(),

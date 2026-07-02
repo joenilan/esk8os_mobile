@@ -228,7 +228,9 @@ class BoardSettings {
   final String hudFace; // hud: speed | battery | volts | watts | safety
   final String batteryFocus; // bfocus: pct | volts
   final String deviceName; // name: BLE advertised name (settable; distinguishes boards)
-  final int vehicleType; // vtype: 0=skate 1=ebike 2=scooter 3=moped 4=car 5=other
+  final int vehicleType; // vtype: 0=skate 1=ebike 2=scooter 3=moped 4=car 5=custom 6=euc 7=onewheel
+  final String vehicleLabel; // vlabel: rider-typed name for a custom vehicle
+  final int vehicleCustomIcon; // vicon: icon index for a custom vehicle
   // Read-only AP credentials for the log/OTA transfer. Older firmware doesn't
   // send these; the defaults match its fixed legacy credentials.
   final String wifiSsid; // wifiSsid
@@ -273,6 +275,8 @@ class BoardSettings {
     this.batteryFocus = 'pct',
     this.deviceName = 'ESK8-BLE',
     this.vehicleType = 0,
+    this.vehicleLabel = '',
+    this.vehicleCustomIcon = 0,
     this.wifiSsid = Esk8WifiExport.ssid,
     this.wifiPass = Esk8WifiExport.legacyPassword,
     this.hasBoardCal = false,
@@ -315,6 +319,8 @@ class BoardSettings {
     batteryFocus: _settingString(j['bfocus'], {'pct', 'volts'}, 'pct'),
     deviceName: (j['name'] ?? 'ESK8-BLE').toString(),
     vehicleType: _i(j['vtype']),
+    vehicleLabel: (j['vlabel'] ?? '').toString(),
+    vehicleCustomIcon: _i(j['vicon']),
     wifiSsid: (j['wifiSsid'] ?? Esk8WifiExport.ssid).toString(),
     wifiPass: (j['wifiPass'] ?? Esk8WifiExport.legacyPassword).toString(),
     hasBoardCal: j.containsKey('calR'),
@@ -348,6 +354,8 @@ class BoardSettings {
     String? batteryFocus,
     String? deviceName,
     int? vehicleType,
+    String? vehicleLabel,
+    int? vehicleCustomIcon,
   }) {
     final m = <String, dynamic>{};
     if (mph != null) m['mph'] = mph;
@@ -367,6 +375,8 @@ class BoardSettings {
     if (batteryFocus != null) m['bfocus'] = batteryFocus;
     if (deviceName != null) m['name'] = deviceName;
     if (vehicleType != null) m['vtype'] = vehicleType;
+    if (vehicleLabel != null) m['vlabel'] = vehicleLabel;
+    if (vehicleCustomIcon != null) m['vicon'] = vehicleCustomIcon;
     return m;
   }
 
@@ -395,6 +405,8 @@ class BoardSettings {
     batteryFocus: batteryFocus,
     deviceName: deviceName,
     vehicleType: vehicleType,
+    vehicleLabel: vehicleLabel,
+    vehicleCustomIcon: vehicleCustomIcon,
     wifiSsid: wifiSsid,
     wifiPass: wifiPass,
     hasBoardCal: hasBoardCal,

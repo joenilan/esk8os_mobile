@@ -376,12 +376,14 @@ class TopStatusBar extends StatelessWidget {
   final String center;
   final String right;
   final IconData? leadingIcon;
+  final Widget? leadingWidget; // takes precedence over leadingIcon (for vectors)
   const TopStatusBar({
     super.key,
     this.left = 'ESK8OS',
     this.center = '',
     this.right = '',
     this.leadingIcon,
+    this.leadingWidget,
   });
 
   @override
@@ -394,7 +396,13 @@ class TopStatusBar extends StatelessWidget {
     );
     return Row(
       children: [
-        if (leadingIcon != null) ...[
+        if (leadingWidget != null) ...[
+          IconTheme(
+            data: IconThemeData(size: 16, color: Esk8Theme.accent),
+            child: leadingWidget!,
+          ),
+          const SizedBox(width: 6),
+        ] else if (leadingIcon != null) ...[
           Icon(leadingIcon, size: 16, color: Esk8Theme.accent),
           const SizedBox(width: 6),
         ],
@@ -621,37 +629,140 @@ class StatRow extends StatelessWidget {
   );
 }
 
-/// Maps the board's vehicle type (0..5) to a Material icon + label — the
-/// electric-vehicle icon variants.
+/// Maps the board's vehicle type to an icon + label. Values are the BLE `vtype`
+/// wire contract (see companion_api_spec §4): 0 skate · 1 e-bike · 2 scooter ·
+/// 3 moped · 4 car · 5 custom · 6 EUC · 7 onewheel. EUC and onewheel have no
+/// Material glyph, so they render as hand-drawn vectors; "custom" is a
+/// rider-named vehicle with a chosen icon from [customIcons].
 class Vehicle {
+  static const int custom = 5, euc = 6, onewheel = 7;
+
   static const _labels = [
-    'Skateboard',
-    'E-Bike',
-    'Scooter',
-    'Moped',
-    'Car',
-    'Other',
+    'Skateboard', 'E-Bike', 'Scooter', 'Moped', 'Car',
+    'Custom', 'EUC', 'Onewheel',
   ];
 
+  /// Picker display order — common PEVs first, custom last (enum values stay
+  /// the wire contract; only presentation is reordered).
+  static const List<int> order = [0, 6, 7, 1, 2, 3, 4, 5];
+
+  /// Icon choices offered for a Custom vehicle; `vicon` indexes this list.
+  static const List<IconData> customIcons = [
+    Icons.bolt, Icons.two_wheeler, Icons.pedal_bike, Icons.directions_bike,
+    Icons.sports_motorsports, Icons.electric_rickshaw, Icons.surfing,
+    Icons.downhill_skiing, Icons.rocket_launch, Icons.agriculture,
+    Icons.directions_boat, Icons.airport_shuttle,
+  ];
+
+  /// IconData fallback for places that can only take a glyph (e.g. a status
+  /// bar). EUC/onewheel fall back to the nearest Material glyph here.
   static IconData icon(int type) {
     switch (type) {
-      case 0:
-        return Icons.skateboarding;
-      case 1:
-        return Icons.electric_bike;
-      case 2:
-        return Icons.electric_scooter;
-      case 3:
-        return Icons.electric_moped;
-      case 4:
-        return Icons.electric_car;
-      default:
-        return Icons.bolt;
+      case 0: return Icons.skateboarding;
+      case 1: return Icons.electric_bike;
+      case 2: return Icons.electric_scooter;
+      case 3: return Icons.electric_moped;
+      case 4: return Icons.electric_car;
+      case euc: return Icons.trip_origin;   // single wheel
+      case onewheel: return Icons.surfing;  // board
+      default: return Icons.bolt;
     }
   }
 
-  static String label(int type) =>
-      (type >= 0 && type < _labels.length) ? _labels[type] : 'Other';
+  /// Full-fidelity icon widget: real vectors for EUC/onewheel, the chosen
+  /// glyph for a custom vehicle, Material icons otherwise.
+  static Widget iconWidget(int type, {double size = 24, Color? color, int customIcon = 0}) {
+    switch (type) {
+      case euc:
+        return _VehicleVector(size: size, color: color, make: (c) => _EucPainter(c));
+      case onewheel:
+        return _VehicleVector(size: size, color: color, make: (c) => _OnewheelPainter(c));
+      case custom:
+        final i = customIcon.clamp(0, customIcons.length - 1);
+        return Icon(customIcons[i], size: size, color: color);
+      default:
+        return Icon(icon(type), size: size, color: color);
+    }
+  }
+
+  /// Label for a type; a custom vehicle uses the rider's [customLabel] if set.
+  static String label(int type, [String customLabel = '']) {
+    if (type == custom && customLabel.trim().isNotEmpty) return customLabel.trim();
+    return (type >= 0 && type < _labels.length) ? _labels[type] : 'Custom';
+  }
 
   static int get count => _labels.length;
+}
+
+/// Renders a vehicle vector painter at a Material-icon-like size + color.
+/// [make] binds the resolved icon color to a painter at build time.
+class _VehicleVector extends StatelessWidget {
+  final double size;
+  final Color? color;
+  final CustomPainter Function(Color) make;
+  const _VehicleVector({required this.size, required this.color, required this.make});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? IconTheme.of(context).color ?? const Color(0xFFECECEC);
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: make(c)),
+    );
+  }
+}
+
+/// EUC: a single wheel with a vertical body/pad and two pedal stubs.
+class _EucPainter extends CustomPainter {
+  final Color color;
+  _EucPainter([this.color = const Color(0xFFECECEC)]);
+  @override
+  void paint(Canvas canvas, Size s) {
+    final p = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = s.width * 0.085
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final cx = s.width * 0.5;
+    final wheelR = s.width * 0.30;
+    final wheelCy = s.height * 0.62;
+    canvas.drawCircle(Offset(cx, wheelCy), wheelR, p);          // wheel
+    canvas.drawLine(Offset(cx, wheelCy - wheelR),
+        Offset(cx, s.height * 0.14), p);                        // body/pad stem
+    final pedalY = wheelCy + wheelR * 0.15;
+    canvas.drawLine(Offset(cx - wheelR - s.width * 0.12, pedalY),
+        Offset(cx - wheelR + s.width * 0.02, pedalY), p);        // left pedal
+    canvas.drawLine(Offset(cx + wheelR - s.width * 0.02, pedalY),
+        Offset(cx + wheelR + s.width * 0.12, pedalY), p);        // right pedal
+  }
+  @override
+  bool shouldRepaint(covariant _EucPainter old) => old.color != color;
+}
+
+/// Onewheel: a flat board with one large wheel through its centre.
+class _OnewheelPainter extends CustomPainter {
+  final Color color;
+  _OnewheelPainter([this.color = const Color(0xFFECECEC)]);
+  @override
+  void paint(Canvas canvas, Size s) {
+    final p = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = s.width * 0.085
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    // board — a rounded capsule across the upper-middle
+    final board = RRect.fromRectAndRadius(
+      Rect.fromLTWH(s.width * 0.12, s.height * 0.34, s.width * 0.76, s.height * 0.16),
+      Radius.circular(s.height * 0.08),
+    );
+    canvas.drawRRect(board, p);
+    // one centre wheel below the board
+    final fill = Paint()..color = color..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(s.width * 0.5, s.height * 0.62), s.width * 0.15, fill);
+  }
+  @override
+  bool shouldRepaint(covariant _OnewheelPainter old) => old.color != color;
 }

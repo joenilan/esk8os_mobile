@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+import '../ble/ble_errors.dart';
 import '../ble/esk8os_ble.dart';
 import '../database/trip_database.dart';
 import '../services/app_prefs.dart';
@@ -49,6 +50,7 @@ class _SettingsPageState extends State<SettingsPage> {
   Timer? _whPerMileSaveTimer;
   final _riderCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
+  final _vlabelCtrl = TextEditingController();
   String _appVersion = '';
 
   @override
@@ -70,6 +72,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _whPerMileSaveTimer?.cancel();
     _riderCtrl.dispose();
     _nameCtrl.dispose();
+    _vlabelCtrl.dispose();
     super.dispose();
   }
 
@@ -94,12 +97,13 @@ class _SettingsPageState extends State<SettingsPage> {
         _settings = s;
         _riderCtrl.text = s.rider;
         _nameCtrl.text = s.deviceName;
+        _vlabelCtrl.text = s.vehicleLabel;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = '$e';
+        _error = friendlyBleError(e);
         _loading = false;
       });
     }
@@ -456,7 +460,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Vehicle.icon(s.vehicleType), color: _accent),
+                        Vehicle.iconWidget(s.vehicleType,
+                            color: _accent, customIcon: s.vehicleCustomIcon),
                         const SizedBox(width: 16),
                         Expanded(
                           child: TextField(
@@ -517,10 +522,10 @@ class _SettingsPageState extends State<SettingsPage> {
                           child: SegmentedButton<int>(
                             showSelectedIcon: false,
                             segments: [
-                              for (var i = 0; i < Vehicle.count; i++)
+                              for (final i in Vehicle.order)
                                 ButtonSegment(
                                   value: i,
-                                  icon: Icon(Vehicle.icon(i)),
+                                  icon: Vehicle.iconWidget(i, size: 22),
                                   tooltip: Vehicle.label(i),
                                 ),
                             ],
@@ -549,12 +554,106 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         const SizedBox(height: 6),
                         Text(
-                          Vehicle.label(s.vehicleType),
+                          Vehicle.label(s.vehicleType, s.vehicleLabel),
                           style: TextStyle(
                             color: Colors.grey[400],
                             fontSize: 13,
                           ),
                         ),
+                        // Custom vehicle: rider names it and picks an icon.
+                        if (s.vehicleType == Vehicle.custom) ...[
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextField(
+                                  controller: _vlabelCtrl,
+                                  maxLength: 18,
+                                  textInputAction: TextInputAction.done,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Vehicle name',
+                                    helperText: 'e.g. Onewheel GT, DIY trike',
+                                    border: OutlineInputBorder(),
+                                    counterText: '',
+                                    isDense: true,
+                                  ),
+                                  onSubmitted: (v) => _write(
+                                    BoardSettings.writeJson(
+                                      vehicleLabel: v.trim(),
+                                    ),
+                                    'Vehicle name',
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                icon: Icon(Icons.check, color: _accent),
+                                tooltip: 'Save name',
+                                onPressed: () => _write(
+                                  BoardSettings.writeJson(
+                                    vehicleLabel: _vlabelCtrl.text.trim(),
+                                  ),
+                                  'Vehicle name',
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            'Icon',
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (
+                                var k = 0;
+                                k < Vehicle.customIcons.length;
+                                k++
+                              )
+                                InkWell(
+                                  onTap: () => _write(
+                                    BoardSettings.writeJson(
+                                      vehicleCustomIcon: k,
+                                    ),
+                                    'Vehicle icon',
+                                  ),
+                                  borderRadius: BorderRadius.circular(8),
+                                  child: Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(8),
+                                      border: Border.all(
+                                        color: s.vehicleCustomIcon == k
+                                            ? _accent
+                                            : Colors.grey.withValues(
+                                                alpha: 0.3,
+                                              ),
+                                        width: s.vehicleCustomIcon == k ? 2 : 1,
+                                      ),
+                                      color: s.vehicleCustomIcon == k
+                                          ? _accent.withValues(alpha: 0.15)
+                                          : null,
+                                    ),
+                                    child: Icon(
+                                      Vehicle.customIcons[k],
+                                      color: s.vehicleCustomIcon == k
+                                          ? _accent
+                                          : Colors.grey[400],
+                                      size: 22,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ],
                       ],
                     ),
                   ),
