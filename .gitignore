@@ -58,3 +58,4 @@ android/key.properties.ready
 # recovered personal ride data + scratch notes - never commit
 device_recovery/
 DESIGN_PASS_NOTES.md
+symbols_archive/

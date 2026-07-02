@@ -34,12 +34,23 @@ if (-not (Test-Path $adb)) {
     throw "adb.exe not found at $adb."
 }
 
-flutter build apk --release
+# --split-debug-info keeps the Dart AOT symbols out of the APK but SAVED, so a
+# production ANR/crash stack can be symbolized exactly (llvm-symbolizer against
+# the archived .symbols of the matching version). Without this, native frames
+# from the field are unreadable.
+flutter build apk --release --split-debug-info=build/symbols
 
 $apk = Join-Path $repo "build\app\outputs\flutter-apk\app-release.apk"
 if (-not (Test-Path $apk)) {
     throw "Release APK was not produced at $apk."
 }
+
+# Archive the symbols per app version so old installs stay symbolizable.
+$ver = ((Get-Content pubspec.yaml | Select-String '^version:').Line -split '\s+')[1]
+$symDest = Join-Path $repo "symbols_archive\$ver"
+New-Item -ItemType Directory -Force $symDest | Out-Null
+Copy-Item build\symbols\* $symDest -Force
+Write-Host "Symbols archived to symbols_archive\$ver"
 
 foreach ($device in $Devices) {
     Write-Host "Installing signed release APK on $device with adb install -r..."
