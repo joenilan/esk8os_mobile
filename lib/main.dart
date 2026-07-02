@@ -1104,12 +1104,50 @@ class _DashboardPageState extends State<DashboardPage>
                                       ),
                                     ),
 
-                                  // Headless boards need obvious phone navigation. The TRIP
-                                  // map also gets arrows because map gestures consume swipes.
+                                  // The TRIP map consumes horizontal drags, so the
+                                  // deck can't be swiped away from it. Narrow
+                                  // edge zones catch a horizontal fling that
+                                  // STARTS at either edge and change pages, while
+                                  // the map centre stays pannable — like an
+                                  // iOS-style edge swipe. A faint chevron marks
+                                  // each live edge so it's discoverable.
                                   if (!_contentPageOpen &&
-                                      (isHeadless ||
-                                          _pageName(_currentPage) ==
-                                              'TRIP')) ...[
+                                      _pageName(_currentPage) == 'TRIP') ...[
+                                    for (final onLeft in const [true, false])
+                                      Positioned(
+                                        left: onLeft ? 0 : null,
+                                        right: onLeft ? null : 0,
+                                        top: 0,
+                                        bottom: 0,
+                                        width: 30,
+                                        child: GestureDetector(
+                                          behavior: HitTestBehavior.translucent,
+                                          onHorizontalDragEnd: (d) {
+                                            final v = d.primaryVelocity ?? 0;
+                                            const dur = Duration(milliseconds: 280);
+                                            if (v < -120) {
+                                              _pageCtrl.nextPage(
+                                                  duration: dur, curve: Curves.easeOut);
+                                            } else if (v > 120) {
+                                              _pageCtrl.previousPage(
+                                                  duration: dur, curve: Curves.easeOut);
+                                            }
+                                          },
+                                          child: Center(
+                                            child: Icon(
+                                              onLeft
+                                                  ? Icons.chevron_left
+                                                  : Icons.chevron_right,
+                                              color: Colors.black26,
+                                              size: 26,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ]
+                                  // Headless boards have no map but still need
+                                  // obvious phone navigation — keep the buttons.
+                                  else if (!_contentPageOpen && isHeadless) ...[
                                     Positioned(
                                       left: 6,
                                       top: 0,
