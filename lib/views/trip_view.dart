@@ -392,7 +392,11 @@ class _TripViewState extends State<TripView>
     final double bigSpeedDisplay = isMph ? effSpeedKmh / 1.60934 : effSpeedKmh;
     final String speedSource = boardLive ? 'BOARD' : 'GPS';
     final elapsed = _rec.elapsed;
-    final gpsAvgKmh = elapsed.inSeconds > 0
+    // Averages need a few seconds of elapsed time to be meaningful — dividing a
+    // little distance by a ~1 s window otherwise spikes to absurd values in the
+    // first moments of a ride. Hold at 0 until the window is trustworthy.
+    const int avgMinSec = 5;
+    final gpsAvgKmh = elapsed.inSeconds >= avgMinSec
         ? _rec.gpsDistanceM * 3.6 / elapsed.inSeconds
         : 0.0;
     final gpsAvgDisplay = isMph ? gpsAvgKmh / 1.60934 : gpsAvgKmh;
@@ -402,7 +406,7 @@ class _TripViewState extends State<TripView>
     final boardMaxSpeedDisplay = _rec.boardMaxSpeed;
     final elapsedHours = elapsed.inMilliseconds / 3600000.0;
     final boardMovingHours = boardMovingTime.inMilliseconds / 3600000.0;
-    final boardAvgDisplay = elapsedHours > 0
+    final boardAvgDisplay = elapsed.inSeconds >= avgMinSec && elapsedHours > 0
         ? boardTripDisplay / elapsedHours
         : 0.0;
     final boardMovingAvgDisplay = boardMovingHours > 0
