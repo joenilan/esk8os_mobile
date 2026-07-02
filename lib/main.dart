@@ -149,8 +149,36 @@ class _ScanPageState extends State<ScanPage> {
     try {
       await CompanionScanner.start();
     } catch (e) {
-      setState(() => _error = '$e');
+      setState(() => _error = e is FlutterBluePlusException
+          ? 'Scan failed — is Bluetooth on?'
+          : _friendlyBleError(e));
     }
+  }
+
+  // Turn a raw BLE error into something a rider can read. Android's GATT stack
+  // reports most transient failures as the generic code 133 (a flaky connect
+  // handshake), which we retry before ever surfacing.
+  static String _friendlyBleError(Object e) {
+    if (e is FlutterBluePlusException) {
+      final code = e.code ?? 0;
+      if (code == 133) {
+        return "Couldn't connect — the board didn't answer. Move closer and "
+            'try again.';
+      }
+      if (code == 8 || code == 19) {
+        return 'The board dropped the connection. Make sure it’s powered '
+            'on and try again.';
+      }
+      if (e.description != null && e.description!.isNotEmpty) {
+        return 'Connection failed: ${e.description}';
+      }
+      return 'Connection failed. Try again.';
+    }
+    final s = e.toString();
+    if (s.contains('timeout') || s.contains('Timeout')) {
+      return 'Connection timed out. Bring the board closer and try again.';
+    }
+    return 'Connection failed. Try again.';
   }
 
   Future<void> _connect(BluetoothDevice device) async {
@@ -158,13 +186,24 @@ class _ScanPageState extends State<ScanPage> {
     setState(() => _connecting = true);
     final dev = CompanionDevice(device);
     try {
-      await dev.connect();
+      try {
+        await dev.connect();
+      } on FlutterBluePlusException catch (e) {
+        // Code 133 is Android's catch-all transient GATT failure; a single
+        // retry after a brief settle almost always succeeds.
+        if (e.code == 133) {
+          await Future.delayed(const Duration(milliseconds: 600));
+          await dev.connect();
+        } else {
+          rethrow;
+        }
+      }
       if (!mounted) return;
       await Navigator.of(
         context,
       ).push(MaterialPageRoute(builder: (_) => DashboardPage(dev: dev)));
     } catch (e) {
-      if (mounted) setState(() => _error = 'Connect failed: $e');
+      if (mounted) setState(() => _error = _friendlyBleError(e));
     } finally {
       if (mounted) setState(() => _connecting = false);
     }
