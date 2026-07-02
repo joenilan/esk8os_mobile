@@ -6,10 +6,14 @@ library;
 class Esk8Uuids {
   static const String service = '5043697a-0000-4682-93cb-33bb0a149f7e';
   static const String telemetry =
-      '5043697a-0001-4682-93cb-33bb0a149f7e'; // NOTIFY
+      '5043697a-0001-4682-93cb-33bb0a149f7e'; // NOTIFY (5 Hz core)
   static const String settings =
       '5043697a-0002-4682-93cb-33bb0a149f7e'; // READ | WRITE
   static const String command = '5043697a-0003-4682-93cb-33bb0a149f7e'; // WRITE
+
+  /// 1 Hz session/trip stats (fw 0.9.4+). Older firmware sends everything on
+  /// [telemetry]; the merge in CompanionDevice handles both.
+  static const String session = '5043697a-0004-4682-93cb-33bb0a149f7e'; // NOTIFY
 }
 
 /// Command strings written to the command characteristic (spec §5).
@@ -30,11 +34,13 @@ class Esk8Commands {
 }
 
 /// The board's WiFi AP for the hybrid log/OTA transfer (spec §6). The board
-/// raises this after WIFI_EXPORT_START (or in bridge mode); the user joins it and
-/// the app fetches over HTTP.
+/// raises this after WIFI_EXPORT_START is confirmed on-board; the user joins it
+/// and the app fetches over HTTP. The password is per-device since fw 0.9.4
+/// (read it from [BoardSettings.wifiPass]); [legacyPassword] only matches
+/// older firmware that still ships the fixed key.
 class Esk8WifiExport {
   static const String ssid = 'ESK8-BRIDGE';
-  static const String password = 'esk8bridge';
+  static const String legacyPassword = 'esk8bridge';
   static const String baseUrl = 'http://192.168.4.1';
 }
 
@@ -223,6 +229,10 @@ class BoardSettings {
   final String batteryFocus; // bfocus: pct | volts
   final String deviceName; // name: BLE advertised name (settable; distinguishes boards)
   final int vehicleType; // vtype: 0=skate 1=ebike 2=scooter 3=moped 4=car 5=other
+  // Read-only AP credentials for the log/OTA transfer. Older firmware doesn't
+  // send these; the defaults match its fixed legacy credentials.
+  final String wifiSsid; // wifiSsid
+  final String wifiPass; // wifiPass (per-device since fw 0.9.4)
 
   const BoardSettings({
     this.hardware = 'tdisplay-s3',
@@ -249,6 +259,8 @@ class BoardSettings {
     this.batteryFocus = 'pct',
     this.deviceName = 'ESK8-BLE',
     this.vehicleType = 0,
+    this.wifiSsid = Esk8WifiExport.ssid,
+    this.wifiPass = Esk8WifiExport.legacyPassword,
   });
 
   factory BoardSettings.fromJson(Map<String, dynamic> j) => BoardSettings(
@@ -282,6 +294,8 @@ class BoardSettings {
     batteryFocus: _settingString(j['bfocus'], {'pct', 'volts'}, 'pct'),
     deviceName: (j['name'] ?? 'ESK8-BLE').toString(),
     vehicleType: _i(j['vtype']),
+    wifiSsid: (j['wifiSsid'] ?? Esk8WifiExport.ssid).toString(),
+    wifiPass: (j['wifiPass'] ?? Esk8WifiExport.legacyPassword).toString(),
   );
 
   /// Build a partial-update map for the writable fields only. Pass just what you
@@ -351,6 +365,8 @@ class BoardSettings {
     batteryFocus: batteryFocus,
     deviceName: deviceName,
     vehicleType: vehicleType,
+    wifiSsid: wifiSsid,
+    wifiPass: wifiPass,
   );
 }
 

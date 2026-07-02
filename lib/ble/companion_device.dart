@@ -46,6 +46,14 @@ class CompanionDevice implements Esk8Device {
   BluetoothCharacteristic? _telemetry;
   BluetoothCharacteristic? _settings;
   BluetoothCharacteristic? _command;
+  BluetoothCharacteristic? _sessionChar; // fw 0.9.4+: 1 Hz session stats
+
+  // Latest session-stats frame; folded under every 5 Hz core frame so the
+  // Telemetry object the app sees stays whole. Old firmware (no session
+  // characteristic) sends everything on the core notify, which then simply
+  // overrides this empty map.
+  Map<String, dynamic> _sessionCache = {};
+  StreamSubscription<List<int>>? _sessionSub;
 
   CompanionDevice(this.device);
 
@@ -66,6 +74,11 @@ class CompanionDevice implements Esk8Device {
   /// and bind the three companion characteristics.
   @override
   Future<void> connect() async {
+    // Reconnect replaces every characteristic object; the old session
+    // subscription (if any) is dead — drop it so telemetry() re-attaches.
+    await _sessionSub?.cancel();
+    _sessionSub = null;
+
     // flutter_blue_plus 2.x requires declaring a license at connect; nonprofit =
     // free tier for personal/hobby use (this app). Switch to commercial if sold.
     await device.connect(
@@ -86,6 +99,7 @@ class CompanionDevice implements Esk8Device {
       if (c.uuid == Guid(Esk8Uuids.telemetry)) _telemetry = c;
       if (c.uuid == Guid(Esk8Uuids.settings)) _settings = c;
       if (c.uuid == Guid(Esk8Uuids.command)) _command = c;
+      if (c.uuid == Guid(Esk8Uuids.session)) _sessionChar = c;
     }
     if (!isReady) {
       throw StateError('ESK8OS companion characteristics missing');
@@ -93,21 +107,38 @@ class CompanionDevice implements Esk8Device {
   }
 
   @override
-  Future<void> disconnect() => device.disconnect();
+  Future<void> disconnect() async {
+    await _sessionSub?.cancel();
+    _sessionSub = null;
+    await device.disconnect();
+  }
 
-  /// 5 Hz telemetry. Enables notifications and decodes each JSON notify.
+  /// 5 Hz telemetry. Enables notifications on the core characteristic (and the
+  /// 1 Hz session characteristic when the firmware has it) and folds the latest
+  /// session frame under each core frame.
   @override
   Stream<Telemetry> telemetry() async* {
     final c = _telemetry!;
     await c.setNotifyValue(true);
-    yield* c.onValueReceived.map(_decodeTelemetry).where((t) => t != null).cast<Telemetry>();
+    final ses = _sessionChar;
+    if (ses != null && _sessionSub == null) {
+      await ses.setNotifyValue(true);
+      _sessionSub = ses.onValueReceived.listen((bytes) {
+        final m = _decodeMap(bytes);
+        if (m != null) _sessionCache = m;
+      });
+    }
+    yield* c.onValueReceived
+        .map(_decodeMap)
+        .where((m) => m != null)
+        .map((m) => Telemetry.fromJson({..._sessionCache, ...m!}));
   }
 
-  static Telemetry? _decodeTelemetry(List<int> bytes) {
+  static Map<String, dynamic>? _decodeMap(List<int> bytes) {
     if (bytes.isEmpty) return null;
     try {
       final obj = jsonDecode(utf8.decode(bytes));
-      if (obj is Map<String, dynamic>) return Telemetry.fromJson(obj);
+      if (obj is Map<String, dynamic>) return obj;
     } catch (_) {/* partial/garbled notify — skip */}
     return null;
   }

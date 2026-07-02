@@ -25,6 +25,28 @@ class _WifiExportPageState extends State<WifiExportPage> {
   List<String>? _logs;
   bool _uploading = false;
 
+  // AP credentials read from the board (per-device password since fw 0.9.4).
+  String _ssid = Esk8WifiExport.ssid;
+  String _pass = Esk8WifiExport.legacyPassword;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchCredentials();
+  }
+
+  Future<void> _fetchCredentials() async {
+    try {
+      final s = await widget.dev.readSettings();
+      if (s != null && mounted) {
+        setState(() {
+          _ssid = s.wifiSsid;
+          _pass = s.wifiPass;
+        });
+      }
+    } catch (_) {/* keep legacy defaults */}
+  }
+
   @override
   void dispose() {
     // Ensure we stop export mode on the board when exiting.
@@ -164,7 +186,10 @@ class _WifiExportPageState extends State<WifiExportPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'This will command the board to raise its high-speed WiFi network for file transfers.',
+                'This asks the board to raise its high-speed WiFi network for '
+                'file transfers.\n\n'
+                'The board will show "ALLOW WIFI?" — press its LEFT button '
+                '(within 30 s) to approve.',
               ),
               const SizedBox(height: 16),
               if (_error != null && _step == 0)
@@ -189,10 +214,12 @@ class _WifiExportPageState extends State<WifiExportPage> {
           content: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                '1. Open your phone\'s WiFi settings.\n'
-                '2. Connect to the network: ESK8-BRIDGE\n'
-                '3. Password: esk8bridge\n\n'
+              Text(
+                '1. Approve on the board if you haven\'t (LEFT button).\n'
+                '2. Open your phone\'s WiFi settings.\n'
+                '3. Connect to the network: $_ssid\n'
+                '4. Password: $_pass\n'
+                '   (also shown on the board\'s bridge screen)\n\n'
                 'IMPORTANT: If Android asks if you want to stay connected to a network with no internet, tap YES.',
               ),
               const SizedBox(height: 16),

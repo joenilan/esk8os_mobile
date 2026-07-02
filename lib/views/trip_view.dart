@@ -49,12 +49,15 @@ class _TripViewState extends State<TripView>
 
   // Smooth marker: GPS fixes arrive ~every few metres, so we tween the marker
   // (and the followed camera) between fixes instead of snapping/teleporting.
+  // The interpolated position is a ValueNotifier so each animation frame only
+  // rebuilds the marker layer — a page-level setState at ~60 fps rebuilt the
+  // whole map (full-route polyline included), which janked on long rides.
   late final AnimationController _anim = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
   )..addListener(_onAnimTick);
   LatLng _mStart = const LatLng(0, 0), _mEnd = const LatLng(0, 0);
-  LatLng? _smoothPos; // interpolated marker position currently displayed
+  final ValueNotifier<LatLng?> _smoothPos = ValueNotifier(null);
   DateTime? _lastFixAt; // arrival time of the previous fix — paces the glide
 
   // Heading-up rotation: sensor handlers just set _targetHeading; a Ticker eases
@@ -78,6 +81,7 @@ class _TripViewState extends State<TripView>
   @override
   void dispose() {
     _anim.dispose();
+    _smoothPos.dispose();
     _rotTicker?.dispose();
     _compassSub?.cancel();
     _rec.removeListener(_onRec);
@@ -137,7 +141,7 @@ class _TripViewState extends State<TripView>
     // keeps a post-gap catch-up brisk (not a slow multi-second crawl) yet still a
     // glide rather than a teleport.
     _anim.duration = Duration(milliseconds: gapMs.clamp(250, 1500));
-    _mStart = _smoothPos ?? dest;
+    _mStart = _smoothPos.value ?? dest;
     _mEnd = dest;
     _anim.forward(from: 0);
   }
@@ -148,9 +152,9 @@ class _TripViewState extends State<TripView>
     ); // steady glide between fixes
     final lat = _mStart.latitude + (_mEnd.latitude - _mStart.latitude) * t;
     final lng = _mStart.longitude + (_mEnd.longitude - _mStart.longitude) * t;
-    _smoothPos = LatLng(lat, lng);
-    if (_followMode) _mapController.move(_smoothPos!, _currentZoom);
-    setState(() {}); // redraw marker at the interpolated position
+    final p = LatLng(lat, lng);
+    _smoothPos.value = p; // rebuilds only the marker layer (no page setState)
+    if (_followMode) _mapController.move(p, _currentZoom);
   }
 
   void _toggleHeadingUp() {
@@ -235,7 +239,7 @@ class _TripViewState extends State<TripView>
   }
 
   void _recenter() {
-    final p = _smoothPos ?? _rec.currentPosition ?? _initialCenter;
+    final p = _smoothPos.value ?? _rec.currentPosition ?? _initialCenter;
     if (p != null) {
       _mapController.move(p, _currentZoom);
       setState(() => _followMode = true);
@@ -352,9 +356,12 @@ class _TripViewState extends State<TripView>
     final pos = _rec.currentPosition ?? _initialCenter;
     // Draw the traveled line ENDING at the smoothed marker (not the raw latest
     // fix), so the line tip and the marker glide together instead of the line
-    // snapping ahead and the marker visibly chasing it.
-    final linePoints = (_smoothPos != null && route.length >= 2)
-        ? [...route.sublist(0, route.length - 1), _smoothPos!]
+    // snapping ahead and the marker visibly chasing it. (The tip now advances
+    // per GPS fix rather than per animation frame — the polyline is too heavy
+    // to rebuild at 60 fps on a long ride.)
+    final smoothNow = _smoothPos.value;
+    final linePoints = (smoothNow != null && route.length >= 2)
+        ? [...route.sublist(0, route.length - 1), smoothNow]
         : route;
 
     // ── TRIP DISTANCE + TIME come from the BOARD (canonical, matches the board
@@ -474,28 +481,46 @@ class _TripViewState extends State<TripView>
                     ),
                   ],
                 ),
-              MarkerLayer(
-                markers: [
-                  Marker(
-                    point: _smoothPos ?? pos,
-                    width: 20,
-                    height: 20,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: Esk8Theme.accent,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: Colors.white, width: 2),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Esk8Theme.accent.withValues(alpha: 0.5),
-                            blurRadius: 8,
-                            spreadRadius: 2,
-                          ),
-                        ],
+              // Marker rebuilds alone on each glide frame — everything above
+              // (tiles, polyline) only rebuilds on page setState (per GPS fix).
+              ValueListenableBuilder<LatLng?>(
+                valueListenable: _smoothPos,
+                builder: (_, smooth, _) => MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: smooth ?? pos,
+                      width: 20,
+                      height: 20,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Esk8Theme.accent,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 2),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Esk8Theme.accent.withValues(alpha: 0.5),
+                              blurRadius: 8,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
                       ),
                     ),
+                  ],
+                ),
+              ),
+              // Tile-license requirement: OSM data + CARTO basemap attribution.
+              SimpleAttributionWidget(
+                source: Text(
+                  '© OpenStreetMap contributors · © CARTO',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: _mapLight ? Colors.black54 : Colors.white54,
                   ),
-                ],
+                ),
+                backgroundColor: _mapLight
+                    ? const Color(0xAAFFFFFF)
+                    : const Color(0xAA1E1E1E),
               ),
             ],
           )
