@@ -241,6 +241,9 @@ class BoardSettings {
   final double calTypicalAmps; // calA: typical riding battery draw, A
   final double calWhPerMile; // calWhmi: learned consumption (0 = not yet)
   final int calPackWh; // calWh: measured deliverable pack Wh (0 = not yet)
+  // ESK8OS firmware version string, e.g. "v0.9.5 9fc0918" (fw 0.9.5+; empty on
+  // older firmware). Shown on the app's About card.
+  final String firmwareVersion; // fwv
 
   const BoardSettings({
     this.hardware = 'tdisplay-s3',
@@ -274,6 +277,7 @@ class BoardSettings {
     this.calTypicalAmps = 0.0,
     this.calWhPerMile = 0.0,
     this.calPackWh = 0,
+    this.firmwareVersion = '',
   });
 
   factory BoardSettings.fromJson(Map<String, dynamic> j) => BoardSettings(
@@ -314,6 +318,7 @@ class BoardSettings {
     calTypicalAmps: _d(j['calA']),
     calWhPerMile: _d(j['calWhmi']),
     calPackWh: _i(j['calWh']),
+    firmwareVersion: (j['fwv'] ?? '').toString(),
   );
 
   /// Build a partial-update map for the writable fields only. Pass just what you
@@ -390,6 +395,7 @@ class BoardSettings {
     calTypicalAmps: calTypicalAmps,
     calWhPerMile: calWhPerMile,
     calPackWh: calPackWh,
+    firmwareVersion: firmwareVersion,
   );
 }
 

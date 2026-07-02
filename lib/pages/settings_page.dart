@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
 import '../ble/esk8os_ble.dart';
 import '../database/trip_database.dart';
@@ -48,12 +49,20 @@ class _SettingsPageState extends State<SettingsPage> {
   Timer? _whPerMileSaveTimer;
   final _riderCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
+  String _appVersion = '';
 
   @override
   void initState() {
     super.initState();
     _read();
     _readLastTripCalibration();
+    PackageInfo.fromPlatform().then((info) {
+      if (mounted) {
+        setState(
+          () => _appVersion = 'v${info.version} (build ${info.buildNumber})',
+        );
+      }
+    });
   }
 
   @override
@@ -1308,6 +1317,69 @@ class _SettingsPageState extends State<SettingsPage> {
                       onEnd: (v) => setState(
                         () => AppPrefs.speedAlert = v.roundToDouble(),
                       ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            _SectionHeader('ABOUT'),
+            Card(
+              child: Column(
+                children: [
+                  ListTile(
+                    leading: Icon(Icons.smartphone, color: _accent),
+                    title: const Text(
+                      'App',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'ESK8OS Companion ${_appVersion.isEmpty ? '…' : _appVersion}',
+                    ),
+                  ),
+                  ListTile(
+                    leading: Icon(Icons.developer_board, color: _accent),
+                    title: const Text(
+                      'Board firmware',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: Text(
+                      s.firmwareVersion.isNotEmpty
+                          ? 'ESK8OS ${s.firmwareVersion} · ${_hardwareLabel(s)}'
+                          : '${_hardwareLabel(s)} · version readout needs fw 0.9.5+',
+                    ),
+                  ),
+                  if ((widget.telemetry?.vescFw ?? '').isNotEmpty)
+                    ListTile(
+                      leading: Icon(Icons.settings_input_component,
+                          color: _accent),
+                      title: const Text(
+                        'VESC firmware',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text('v${widget.telemetry!.vescFw}'),
+                    ),
+                  ListTile(
+                    leading: Icon(Icons.copyright, color: _accent),
+                    title: const Text(
+                      'Developer',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    subtitle: const Text(
+                      'EVEE / ESK8OS · DreadedZombie\n'
+                      'evee.zombie.digital · github.com/joenilan/Esk8OS',
                     ),
                   ),
                 ],

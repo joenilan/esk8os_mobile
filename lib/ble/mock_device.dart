@@ -75,6 +75,7 @@ class MockDevice implements Esk8Device {
     calTypicalAmps: 16.4,
     calWhPerMile: 23.8,
     calPackWh: 452,
+    firmwareVersion: 'v0.9.5 mock',
   );
 
   @override
@@ -210,6 +211,7 @@ class MockDevice implements Esk8Device {
       calTypicalAmps: _settings.calTypicalAmps,
       calWhPerMile: _settings.calWhPerMile,
       calPackWh: _settings.calPackWh,
+      firmwareVersion: _settings.firmwareVersion,
     );
     await _saveSettings(); // mock persists like the real board's NVS
   }
@@ -251,6 +253,7 @@ class MockDevice implements Esk8Device {
       calTypicalAmps: _settings.calTypicalAmps,
       calWhPerMile: _settings.calWhPerMile,
       calPackWh: _settings.calPackWh,
+      firmwareVersion: _settings.firmwareVersion,
     );
   }
 
