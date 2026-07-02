@@ -886,7 +886,13 @@ class _DashboardPageState extends State<DashboardPage>
         if (nav != null && nav.canPop()) {
           nav.pop(); // back out of settings / history / playback first
         } else {
-          Navigator.of(context).maybePop(); // then leave the dashboard
+          // At the dashboard root: hand back to the OS (background the app).
+          // NOT Navigator.of(context).maybePop() — this PopScope IS that
+          // navigator's current route with canPop:false, so maybePop re-invokes
+          // this same callback, recursing through maybePop/findAncestorStateOfType
+          // as an unbounded microtask chain that pins the UI thread at 100% and
+          // ANRs (reproduced: rapid back presses at the root).
+          SystemNavigator.pop();
         }
       },
       child: Scaffold(
