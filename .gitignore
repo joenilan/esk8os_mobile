@@ -54,3 +54,7 @@ android/key.properties
 android/key.properties.ready
 *.jks
 *.keystore
+
+# recovered personal ride data + scratch notes - never commit
+device_recovery/
+DESIGN_PASS_NOTES.md

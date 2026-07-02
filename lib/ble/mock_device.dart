@@ -68,6 +68,13 @@ class MockDevice implements Esk8Device {
     batteryFocus: 'pct',
     deviceName: "Joe's Deck",
     vehicleType: 1, // E-Bike (shows a non-default icon in mock mode)
+    // Mimic fw 0.9.5+ on-board adaptive calibration so the settings page's
+    // "Board-learned calibration" tile shows in mock mode.
+    hasBoardCal: true,
+    calPackROhm: 78,
+    calTypicalAmps: 16.4,
+    calWhPerMile: 23.8,
+    calPackWh: 452,
   );
 
   @override
@@ -198,6 +205,11 @@ class MockDevice implements Esk8Device {
       batteryFocus: partial['bfocus'] ?? _settings.batteryFocus,
       deviceName: partial['name'] ?? _settings.deviceName,
       vehicleType: partial['vtype'] ?? _settings.vehicleType,
+      hasBoardCal: _settings.hasBoardCal,
+      calPackROhm: _settings.calPackROhm,
+      calTypicalAmps: _settings.calTypicalAmps,
+      calWhPerMile: _settings.calWhPerMile,
+      calPackWh: _settings.calPackWh,
     );
     await _saveSettings(); // mock persists like the real board's NVS
   }
@@ -234,6 +246,11 @@ class MockDevice implements Esk8Device {
       batteryFocus: m['bfocus'] ?? _settings.batteryFocus,
       deviceName: m['name'] ?? _settings.deviceName,
       vehicleType: m['vtype'] ?? _settings.vehicleType,
+      hasBoardCal: _settings.hasBoardCal,
+      calPackROhm: _settings.calPackROhm,
+      calTypicalAmps: _settings.calTypicalAmps,
+      calWhPerMile: _settings.calWhPerMile,
+      calPackWh: _settings.calPackWh,
     );
   }
 

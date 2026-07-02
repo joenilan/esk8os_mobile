@@ -298,6 +298,18 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
+  String _boardCalSummary(BoardSettings s) {
+    final whmi = s.calWhPerMile > 0
+        ? '${s.calWhPerMile.toStringAsFixed(1)} Wh/mi learned'
+        : 'Wh/mi not learned yet';
+    final pack = s.calPackWh > 0
+        ? '${s.calPackWh} Wh usable pack'
+        : 'pack energy pending a 10%+ ride';
+    return '$whmi · $pack · '
+        '${s.calPackROhm} mΩ pack R · '
+        '${s.calTypicalAmps.toStringAsFixed(1)} A typical';
+  }
+
   String _hardwareLabel(BoardSettings s) {
     if (s.hardware == 'tdisplay-s3') return 'LILYGO T-Display S3';
     if (s.hardware == 'esp32s3-oled') return 'ESP32-S3 OLED';
@@ -745,6 +757,18 @@ class _SettingsPageState extends State<SettingsPage> {
                           _queueWhPerMile(rangeWhPerMile + delta),
                       onExact: () => _editWhPerMile(rangeWhPerMile),
                     ),
+                    if (s.hasBoardCal) ...[
+                      const Divider(height: 1),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.memory, color: _accent),
+                        title: const Text(
+                          'Board-learned calibration',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(_boardCalSummary(s)),
+                      ),
+                    ],
                     const Divider(height: 1),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
@@ -753,12 +777,15 @@ class _SettingsPageState extends State<SettingsPage> {
                         'Auto-learn range',
                         style: TextStyle(fontWeight: FontWeight.w600),
                       ),
-                      subtitle: const Text(
-                        'Starts at 22.0 Wh/mi, then learns from 2+ mi / 20+ Wh trips',
+                      subtitle: Text(
+                        s.hasBoardCal
+                            ? 'Board learns on-device (fw 0.9.5+) — app push off'
+                            : 'Starts at 22.0 Wh/mi, then learns from 2+ mi / 20+ Wh trips',
                       ),
-                      value: AppPrefs.autoLearnRange,
-                      onChanged: (v) =>
-                          setState(() => AppPrefs.autoLearnRange = v),
+                      value: s.hasBoardCal ? false : AppPrefs.autoLearnRange,
+                      onChanged: s.hasBoardCal
+                          ? null
+                          : (v) => setState(() => AppPrefs.autoLearnRange = v),
                     ),
                     const Divider(height: 1),
                     ListTile(

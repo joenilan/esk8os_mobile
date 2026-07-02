@@ -407,6 +407,15 @@ class TripRecorder extends ChangeNotifier {
   Future<void> _autoLearnRangeModel() async {
     final device = _device;
     if (device == null || !AppPrefs.autoLearnRange) return;
+    // fw 0.9.5+ learns its range model on-board (consumption AND pack IR /
+    // deliverable energy, which the app can't measure). Never push whmi over
+    // it — this path only calibrates older firmware that can't self-learn.
+    try {
+      final s = await device.readSettings();
+      if (s != null && s.hasBoardCal) return;
+    } catch (_) {
+      return; // can't confirm the firmware generation -> don't write blind
+    }
     final trips = await TripDatabase.instance.getRecentRangeCalibrationTrips();
     double miles = 0;
     double wh = 0;

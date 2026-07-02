@@ -233,6 +233,14 @@ class BoardSettings {
   // send these; the defaults match its fixed legacy credentials.
   final String wifiSsid; // wifiSsid
   final String wifiPass; // wifiPass (per-device since fw 0.9.4)
+  // Read-only on-board adaptive battery calibration (fw 0.9.5+). When
+  // [hasBoardCal] the BOARD learns its own range model while riding — the app
+  // must not push a learned whmi over it (manual writes stay allowed).
+  final bool hasBoardCal; // calR present in the settings JSON
+  final int calPackROhm; // calR: learned pack internal resistance, mohm
+  final double calTypicalAmps; // calA: typical riding battery draw, A
+  final double calWhPerMile; // calWhmi: learned consumption (0 = not yet)
+  final int calPackWh; // calWh: measured deliverable pack Wh (0 = not yet)
 
   const BoardSettings({
     this.hardware = 'tdisplay-s3',
@@ -261,6 +269,11 @@ class BoardSettings {
     this.vehicleType = 0,
     this.wifiSsid = Esk8WifiExport.ssid,
     this.wifiPass = Esk8WifiExport.legacyPassword,
+    this.hasBoardCal = false,
+    this.calPackROhm = 0,
+    this.calTypicalAmps = 0.0,
+    this.calWhPerMile = 0.0,
+    this.calPackWh = 0,
   });
 
   factory BoardSettings.fromJson(Map<String, dynamic> j) => BoardSettings(
@@ -296,6 +309,11 @@ class BoardSettings {
     vehicleType: _i(j['vtype']),
     wifiSsid: (j['wifiSsid'] ?? Esk8WifiExport.ssid).toString(),
     wifiPass: (j['wifiPass'] ?? Esk8WifiExport.legacyPassword).toString(),
+    hasBoardCal: j.containsKey('calR'),
+    calPackROhm: _i(j['calR']),
+    calTypicalAmps: _d(j['calA']),
+    calWhPerMile: _d(j['calWhmi']),
+    calPackWh: _i(j['calWh']),
   );
 
   /// Build a partial-update map for the writable fields only. Pass just what you
@@ -367,6 +385,11 @@ class BoardSettings {
     vehicleType: vehicleType,
     wifiSsid: wifiSsid,
     wifiPass: wifiPass,
+    hasBoardCal: hasBoardCal,
+    calPackROhm: calPackROhm,
+    calTypicalAmps: calTypicalAmps,
+    calWhPerMile: calWhPerMile,
+    calPackWh: calPackWh,
   );
 }
 
