@@ -226,8 +226,10 @@ class BoardSettings {
   final int profile;
   // --- fw 0.9.0 ---
   final double packAh; // packAh
-  final double homeCellV; // homeCell
-  final double stopCellV; // stopCell
+  final double homeCellV; // homeCell (resting floor you set)
+  final double stopCellV; // stopCell (resting floor you set)
+  final double homeEffCellV; // homeEff: sag-lifted LOADED floor the estimate actually stops at
+  final double stopEffCellV; // stopEff: sag-lifted LOADED limp floor
   final double whPerMile; // whmi
   final int brightness; // bright (%)
   final bool statusRgb; // rgb
@@ -275,6 +277,8 @@ class BoardSettings {
     this.packAh = 0.0,
     this.homeCellV = 0.0,
     this.stopCellV = 0.0,
+    this.homeEffCellV = 0.0,
+    this.stopEffCellV = 0.0,
     this.whPerMile = 0.0,
     this.brightness = 100,
     this.statusRgb = true,
@@ -314,6 +318,8 @@ class BoardSettings {
     packAh: _d(j['packAh']),
     homeCellV: _d(j['homeCell']),
     stopCellV: _d(j['stopCell']),
+    homeEffCellV: _d(j['homeEff']),
+    stopEffCellV: _d(j['stopEff']),
     whPerMile: _d(j['whmi']),
     brightness: j.containsKey('bright') ? _i(j['bright']) : 100,
     statusRgb: j.containsKey('rgb') ? j['rgb'] == true : true,
@@ -409,6 +415,8 @@ class BoardSettings {
     packAh: packAh,
     homeCellV: homeCellV,
     stopCellV: stopCellV,
+    homeEffCellV: homeEffCellV,
+    stopEffCellV: stopEffCellV,
     whPerMile: whPerMile,
     brightness: brightness,
     statusRgb: statusRgb,

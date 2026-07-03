@@ -886,8 +886,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       min: s.stopCellV,
                       max: 4.2,
                       divisions: ((4.2 - s.stopCellV) / 0.05).round(),
-                      display:
-                          '${s.homeCellV.toStringAsFixed(2)} V/cell  ${(s.homeCellV * s.batterySeries).toStringAsFixed(1)} V pack',
+                      display: s.homeEffCellV > s.homeCellV + 0.005
+                          ? '${s.homeCellV.toStringAsFixed(2)} → ~${(s.homeEffCellV * s.batterySeries).toStringAsFixed(1)}V loaded'
+                          : '${s.homeCellV.toStringAsFixed(2)} V/cell  ${(s.homeCellV * s.batterySeries).toStringAsFixed(1)} V pack',
                       onEnd: (v) => _write(
                         BoardSettings.writeJson(
                           homeCellV: double.parse(v.toStringAsFixed(2)),
@@ -902,8 +903,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       min: 3.0,
                       max: 3.6,
                       divisions: 12,
-                      display:
-                          '${s.stopCellV.toStringAsFixed(2)} V/cell  ${(s.stopCellV * s.batterySeries).toStringAsFixed(1)} V pack',
+                      display: s.stopEffCellV > s.stopCellV + 0.005
+                          ? '${s.stopCellV.toStringAsFixed(2)} → stops ~${(s.stopEffCellV * s.batterySeries).toStringAsFixed(1)}V loaded'
+                          : '${s.stopCellV.toStringAsFixed(2)} V/cell  ${(s.stopCellV * s.batterySeries).toStringAsFixed(1)} V pack',
                       onEnd: (v) => _write(
                         BoardSettings.writeJson(
                           stopCellV: double.parse(v.toStringAsFixed(2)),
