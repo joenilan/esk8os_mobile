@@ -35,6 +35,8 @@ class MockDevice implements Esk8Device {
   // fw 0.9.0 expansion
   double _minVolts = 50.4;
   int _peakWatts = 0;
+  double _maxMotorA = 0.0;
+  double _maxBattA = 0.0;
   double _regenWh = 0;
   double _avgSpeed = 0.0;
   double _trip = 0.0;
@@ -114,6 +116,8 @@ class MockDevice implements Esk8Device {
 
       final motorAmps = max(0.0, _watts / max(1.0, _volts) * 1.15);
       final batteryAmps = _watts / max(1.0, _volts);
+      if (motorAmps > _maxMotorA) _maxMotorA = motorAmps;
+      if (batteryAmps > _maxBattA) _maxBattA = batteryAmps;
       final eff = _trip > 0.05 ? (_wattHours / _trip) : 22.0;
 
       _telemetry.add(
@@ -157,6 +161,8 @@ class MockDevice implements Esk8Device {
           slaveMotorAmps: motorAmps / 2,
           vescFw: '6.2',
           maxWattsSession: _peakWatts,
+          maxBatteryAmps: _maxBattA,
+          maxMotorAmps: _maxMotorA,
         ),
       );
     });

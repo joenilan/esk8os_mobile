@@ -64,8 +64,87 @@ class GraphsView extends StatelessWidget {
               color: Esk8Theme.yellow,
             ),
           ),
+          const SizedBox(height: 12),
+          _SessionPeaks(t: telemetry!, speedUnit: speedUnit),
         ],
       ),
+    );
+  }
+}
+
+/// A glanceable strip of this session's records — the peaks that don't fit the
+/// live cards: top speed, biggest power draw, peak motor + battery current, and
+/// the lowest loaded voltage (worst sag). Reset with the board trip.
+class _SessionPeaks extends StatelessWidget {
+  final Telemetry t;
+  final String speedUnit;
+
+  const _SessionPeaks({required this.t, required this.speedUnit});
+
+  @override
+  Widget build(BuildContext context) {
+    final minV = t.minLoadedVolts > 0 ? t.minLoadedVolts : t.minVolts;
+    final cells = <Widget>[
+      _cell('MAX SPD', _fmt(t.maxSpeed, 1), speedUnit, Esk8Theme.accent),
+      _cell(
+        'MAX PWR',
+        t.maxWattsSession > 0 ? '${t.maxWattsSession}' : '—',
+        'W',
+        const Color(0xFF4FC3F7),
+      ),
+      _cell('PK MOTOR', _fmt(t.maxMotorAmps, 0), 'A', Esk8Theme.orange),
+      _cell('PK BATT', _fmt(t.maxBatteryAmps, 0), 'A', Esk8Theme.green),
+      _cell('MIN V', _fmt(minV, 1), 'V', Esk8Theme.yellow),
+    ];
+    return Container(
+      decoration: Esk8Theme.panelBox(),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      child: Row(
+        children: [
+          for (var i = 0; i < cells.length; i++) ...[
+            if (i > 0)
+              Container(width: 1, height: 34, color: Esk8Theme.border),
+            Expanded(child: cells[i]),
+          ],
+        ],
+      ),
+    );
+  }
+
+  static String _fmt(double v, int dp) => v > 0 ? v.toStringAsFixed(dp) : '—';
+
+  Widget _cell(String label, String value, String unit, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            color: Esk8Theme.textMuted,
+            letterSpacing: 0.8,
+          ),
+        ),
+        const SizedBox(height: 3),
+        RichText(
+          textAlign: TextAlign.center,
+          text: TextSpan(
+            text: value,
+            style: Esk8Theme.number(20, color: color),
+            children: [
+              TextSpan(
+                text: ' $unit',
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Esk8Theme.textMuted,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

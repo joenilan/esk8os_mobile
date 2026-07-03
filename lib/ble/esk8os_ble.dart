@@ -89,6 +89,7 @@ class Telemetry {
   final double
   minLoadedVolts; // minvl (lowest loaded/discharge voltage this session)
   final double maxBatteryAmps; // mba
+  final double maxMotorAmps; // mpa (session peak motor pull)
   final double cellVolts; // cellv (loaded V/cell)
   final int rangeWarning; // rwarn: 0 ok, 1 turn-home, 2 sag, 3 limp
   final int sagEvents; // sagc
@@ -138,6 +139,7 @@ class Telemetry {
     this.efficiency = 0.0,
     this.minLoadedVolts = 0.0,
     this.maxBatteryAmps = 0.0,
+    this.maxMotorAmps = 0.0,
     this.cellVolts = 0.0,
     this.rangeWarning = 0,
     this.sagEvents = 0,
@@ -185,6 +187,7 @@ class Telemetry {
     efficiency: _d(j['eff']),
     minLoadedVolts: _d(j['minvl']),
     maxBatteryAmps: _d(j['mba']),
+    maxMotorAmps: _d(j['mpa']),
     cellVolts: _d(j['cellv']),
     rangeWarning: _i(j['rwarn']),
     sagEvents: _i(j['sagc']),
