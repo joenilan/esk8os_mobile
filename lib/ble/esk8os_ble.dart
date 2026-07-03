@@ -211,7 +211,8 @@ class BoardSettings {
   final bool mph;
   final String theme;
   final int poles; // read-only
-  final int wheelMm; // read-only
+  final int wheelMm; // effective diameter used for speed/distance (preset or override)
+  final int wheelOverrideMm; // wheelmm: rider calibration, 0 = using the preset's nominal
   final double gear; // read-only
   final int batterySeries; // bat_s
   final int profile;
@@ -259,6 +260,7 @@ class BoardSettings {
     required this.theme,
     required this.poles,
     required this.wheelMm,
+    this.wheelOverrideMm = 0,
     required this.gear,
     required this.batterySeries,
     required this.profile,
@@ -297,6 +299,7 @@ class BoardSettings {
     theme: (j['theme'] ?? '').toString(),
     poles: _i(j['poles']),
     wheelMm: _i(j['wheel']),
+    wheelOverrideMm: _i(j['wheelmm']),
     gear: _d(j['gear']),
     batterySeries: _i(j['bat_s']),
     profile: _i(j['profile']),
@@ -341,6 +344,7 @@ class BoardSettings {
     String? theme,
     int? batterySeries,
     int? profile,
+    int? wheelOverrideMm,
     double? packAh,
     double? homeCellV,
     double? stopCellV,
@@ -362,6 +366,7 @@ class BoardSettings {
     if (theme != null) m['theme'] = theme;
     if (batterySeries != null) m['bat_s'] = batterySeries;
     if (profile != null) m['profile'] = profile;
+    if (wheelOverrideMm != null) m['wheelmm'] = wheelOverrideMm;
     if (packAh != null) m['packAh'] = packAh;
     if (homeCellV != null) m['homeCell'] = homeCellV;
     if (stopCellV != null) m['stopCell'] = stopCellV;
@@ -389,6 +394,7 @@ class BoardSettings {
     theme: theme,
     poles: poles,
     wheelMm: wheelMm,
+    wheelOverrideMm: wheelOverrideMm,
     gear: gear,
     batterySeries: batterySeries,
     profile: profile,

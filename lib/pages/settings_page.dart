@@ -47,6 +47,7 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _writing = false;
   String? _error;
   double? _pendingWhPerMile;
+  int? _pendingWheelMm; // slider preview while dragging the wheel-size control
   Timer? _whPerMileSaveTimer;
   final _riderCtrl = TextEditingController();
   final _nameCtrl = TextEditingController();
@@ -1272,10 +1273,110 @@ class _SettingsPageState extends State<SettingsPage> {
                       label: 'Motor Poles',
                       value: '${s.poles}',
                     ),
-                    _ReadOnlyField(
-                      icon: Icons.trip_origin,
-                      label: 'Wheel Diameter',
-                      value: '${s.wheelMm} mm',
+                    // Wheel diameter — rider-tunable like an e-bike computer.
+                    // Overrides the preset so a worn/soft pneumatic reads true;
+                    // this value drives ALL speed and distance math.
+                    Builder(
+                      builder: (_) {
+                        final shown = _pendingWheelMm ?? s.wheelMm;
+                        // mm <= 0 clears the override (back to the preset);
+                        // any real value is clamped to a sane wheel range.
+                        void writeMm(int mm) => _write(
+                          BoardSettings.writeJson(
+                            wheelOverrideMm: mm <= 0 ? 0 : mm.clamp(120, 350),
+                          ),
+                          'Wheel size',
+                        );
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(Icons.trip_origin, color: _accent),
+                                const SizedBox(width: 16),
+                                const Text(
+                                  'Wheel diameter',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const Spacer(),
+                                if (s.wheelOverrideMm > 0)
+                                  Padding(
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: Text(
+                                      'TUNED',
+                                      style: TextStyle(
+                                        color: _accent,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ),
+                                Text(
+                                  '$shown mm',
+                                  style: Esk8Theme.number(18, color: _accent),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.remove),
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () => writeMm(s.wheelMm - 1),
+                                ),
+                                Expanded(
+                                  child: Slider(
+                                    value: shown.clamp(120, 350).toDouble(),
+                                    min: 120,
+                                    max: 350,
+                                    divisions: 230,
+                                    activeColor: _accent,
+                                    onChanged: (v) => setState(
+                                      () => _pendingWheelMm = v.round(),
+                                    ),
+                                    onChangeEnd: (v) {
+                                      writeMm(v.round());
+                                      _pendingWheelMm = null;
+                                    },
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.add),
+                                  visualDensity: VisualDensity.compact,
+                                  onPressed: () => writeMm(s.wheelMm + 1),
+                                ),
+                              ],
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.only(left: 4, bottom: 4),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      s.wheelOverrideMm > 0
+                                          ? 'Calibrated. Roll 5 loaded revs, ÷5 ÷π for the exact size.'
+                                          : 'Using the preset. Tune if speed/distance reads high or low.',
+                                      style: TextStyle(
+                                        color: Colors.grey[500],
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                  if (s.wheelOverrideMm > 0)
+                                    TextButton(
+                                      onPressed: () => writeMm(0),
+                                      child: const Text('Reset'),
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        );
+                      },
                     ),
                     _ReadOnlyField(
                       icon: Icons.sync,

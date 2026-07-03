@@ -52,6 +52,7 @@ class MockDevice implements Esk8Device {
     theme: 'CYBER',
     poles: 14,
     wheelMm: 105,
+    wheelOverrideMm: 0,
     gear: 2.5,
     batterySeries: 12,
     profile: 0,
@@ -189,7 +190,10 @@ class MockDevice implements Esk8Device {
       mph: partial['mph'] ?? _settings.mph,
       theme: partial['theme'] ?? _settings.theme,
       poles: _settings.poles,
-      wheelMm: _settings.wheelMm,
+      wheelMm: (partial['wheelmm'] != null && (partial['wheelmm'] as int) > 0)
+          ? partial['wheelmm']
+          : _settings.wheelMm,
+      wheelOverrideMm: partial['wheelmm'] ?? _settings.wheelOverrideMm,
       gear: _settings.gear,
       batterySeries: partial['bat_s'] ?? _settings.batterySeries,
       profile: partial['profile'] ?? _settings.profile,
@@ -236,6 +240,7 @@ class MockDevice implements Esk8Device {
       theme: m['theme'] ?? _settings.theme,
       poles: _settings.poles,
       wheelMm: _settings.wheelMm,
+      wheelOverrideMm: _settings.wheelOverrideMm,
       gear: _settings.gear,
       batterySeries: m['bat_s'] ?? _settings.batterySeries,
       profile: m['profile'] ?? _settings.profile,
