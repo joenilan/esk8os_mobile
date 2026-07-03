@@ -243,6 +243,66 @@ class _SettingsPageState extends State<SettingsPage> {
     if (ok == true) await _command(command, label);
   }
 
+  /// Offer to wipe the board's learned range calibration (pack resistance,
+  /// deliverable energy, Wh/mi) so it re-learns from scratch. Used as a manual
+  /// action and auto-offered after a battery-config change. Re-reads settings
+  /// so the Board-learned tile updates.
+  Future<void> _offerCalReset({required String message}) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset range calibration?'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Not now'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+    if (ok == true) {
+      await _command(Esk8Commands.calReset, 'Reset calibration');
+      final s = await widget.dev.readSettings();
+      if (s != null && mounted) setState(() => _settings = s);
+    }
+  }
+
+  /// Write pack capacity; a big change is almost always a new battery, so offer
+  /// to reset the pack-specific calibration.
+  Future<void> _writePackAh(double v) async {
+    final old = _settings?.packAh ?? v;
+    final val = double.parse(v.toStringAsFixed(1));
+    await _write(BoardSettings.writeJson(packAh: val), 'Pack capacity');
+    if (mounted &&
+        old > 0 &&
+        (val - old).abs() / old > 0.25 &&
+        (_settings?.hasBoardCal ?? false)) {
+      await _offerCalReset(
+        message:
+            'Pack capacity changed a lot — new battery? The learned range '
+            'model was tuned to the old pack. Reset it to re-learn this one.',
+      );
+    }
+  }
+
+  /// Write cell count; a series change is an unambiguous pack swap.
+  Future<void> _writeCells(int n) async {
+    final old = _settings?.batterySeries ?? n;
+    await _write(BoardSettings.writeJson(batterySeries: n), 'Battery cells');
+    if (mounted && n != old && (_settings?.hasBoardCal ?? false)) {
+      await _offerCalReset(
+        message:
+            'Cell count changed — that means a new pack. Reset the learned '
+            'range model so it re-learns for this battery.',
+      );
+    }
+  }
+
   double _cleanWhPerMile(double value) =>
       double.parse(value.clamp(14.0, 40.0).toStringAsFixed(1));
 
@@ -790,10 +850,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       label: '${s.batterySeries}S',
                       activeColor: _accent,
                       onChanged: (v) {}, // preview only; write on change end
-                      onChangeEnd: (v) => _write(
-                        BoardSettings.writeJson(batterySeries: v.round()),
-                        'Battery cells',
-                      ),
+                      onChangeEnd: (v) => _writeCells(v.round()),
                     ),
                   ],
                 ),
@@ -820,12 +877,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       max: 40,
                       divisions: 72,
                       display: '${s.packAh.toStringAsFixed(1)} Ah',
-                      onEnd: (v) => _write(
-                        BoardSettings.writeJson(
-                          packAh: double.parse(v.toStringAsFixed(1)),
-                        ),
-                        'Pack capacity',
-                      ),
+                      onEnd: (v) => _writePackAh(v),
                     ),
                     _SliderRow(
                       icon: Icons.home,
@@ -877,6 +929,16 @@ class _SettingsPageState extends State<SettingsPage> {
                         subtitle: Text(
                           '${_boardCalSummary(s)}\n'
                           'The board tunes this automatically while you ride.',
+                        ),
+                        trailing: TextButton(
+                          onPressed: () => _offerCalReset(
+                            message:
+                                'This wipes the learned pack resistance, '
+                                'deliverable energy and Wh/mi so the board '
+                                're-learns from scratch — use it after a '
+                                'battery change.',
+                          ),
+                          child: const Text('Reset'),
                         ),
                       ),
                     if (!s.hasBoardCal) ...[

@@ -31,6 +31,11 @@ class Esk8Commands {
   static const String wifiExportStart = 'WIFI_EXPORT_START';
   static const String wifiExportStop = 'WIFI_EXPORT_STOP';
   static const String reboot = 'REBOOT';
+
+  /// fw 0.9.5+: wipe the board's learned range calibration (pack resistance,
+  /// deliverable energy, Wh/mi) so it re-learns from scratch — e.g. after a
+  /// battery swap.
+  static const String calReset = 'CAL_RESET';
 }
 
 /// The board's WiFi AP for the hybrid log/OTA transfer (spec §6). The board
