@@ -55,11 +55,27 @@ class _SettingsPageState extends State<SettingsPage> {
   final _vlabelCtrl = TextEditingController();
   String _appVersion = '';
 
+  StreamSubscription<DeviceConnectionState>? _connSub;
+  bool _wasConnected = true; // page opens on a live connection
+
   @override
   void initState() {
     super.initState();
     _read();
     _readLastTripCalibration();
+    // Re-read everything when the link comes BACK — a board reboot (settings
+    // written in VESC Tool, power cycle) otherwise leaves this page showing
+    // pre-reboot values, most visibly a stale "VESC base config" tile. The
+    // short delay lets the reconnect flow rebind characteristics first.
+    _connSub = widget.dev.connectionState.listen((s) {
+      final connected = s == DeviceConnectionState.connected;
+      if (connected && !_wasConnected && mounted) {
+        Future.delayed(const Duration(milliseconds: 1500), () {
+          if (mounted) _read();
+        });
+      }
+      _wasConnected = connected;
+    });
     PackageInfo.fromPlatform().then((info) {
       if (mounted) {
         setState(
@@ -71,6 +87,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   void dispose() {
+    _connSub?.cancel();
     _whPerMileSaveTimer?.cancel();
     _riderCtrl.dispose();
     _nameCtrl.dispose();
