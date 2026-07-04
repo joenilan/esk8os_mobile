@@ -7,8 +7,13 @@ import '../wifi/wifi_service.dart';
 /// Wireless serial console (fw 0.10.3+). Its own entry point, separate from
 /// Export/OTA: the board can't be on USB while the vehicle powers it, so this
 /// is the way to reach `stat`, `diag`, `vesc faults`, `set`, `json` etc. with
-/// the ESC awake. It rides the board's export AP (same per-device password),
-/// but is presented as a distinct action so Export/OTA stays about files.
+/// the ESC awake.
+///
+/// The job here is simply to RAISE the board's WiFi and leave it up, so any
+/// device — this phone, a laptop, a PC — can connect and use the console at
+/// http://192.168.4.1/console (or /cmd?c=... for scripts). It does NOT tear
+/// the network down when you leave; the firmware auto-stops it after 10 min
+/// idle. An optional in-app terminal is offered for driving it from the phone.
 class ConsolePage extends StatefulWidget {
   final Esk8Device dev;
   const ConsolePage({super.key, required this.dev});
@@ -18,7 +23,7 @@ class ConsolePage extends StatefulWidget {
 }
 
 class _ConsolePageState extends State<ConsolePage> {
-  int _step = 0; // 0 enable, 1 connect, 2 terminal
+  bool _enabled = false;
   bool _loading = false;
   String? _error;
   String _ssid = Esk8WifiExport.ssid;
@@ -26,7 +31,7 @@ class _ConsolePageState extends State<ConsolePage> {
 
   final _inputCtrl = TextEditingController();
   final _scrollCtrl = ScrollController();
-  final _lines = <String>['EVEE wireless console — type a command (try: help)'];
+  final _lines = <String>[];
   bool _running = false;
 
   @override
@@ -49,7 +54,8 @@ class _ConsolePageState extends State<ConsolePage> {
 
   @override
   void dispose() {
-    widget.dev.sendCommand(Esk8Commands.wifiExportStop).catchError((_) {});
+    // Intentionally does NOT stop the AP — the whole point is to raise it and
+    // walk to another device. The firmware idle-timeout (10 min) cleans up.
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -63,7 +69,7 @@ class _ConsolePageState extends State<ConsolePage> {
     try {
       await widget.dev.sendCommand(Esk8Commands.wifiExportStart);
       setState(() {
-        _step = 1;
+        _enabled = true;
         _loading = false;
       });
     } catch (e) {
@@ -72,6 +78,13 @@ class _ConsolePageState extends State<ConsolePage> {
         _loading = false;
       });
     }
+  }
+
+  Future<void> _turnOff() async {
+    try {
+      await widget.dev.sendCommand(Esk8Commands.wifiExportStop);
+    } catch (_) {/* best effort */}
+    if (mounted) Navigator.of(context).pop();
   }
 
   Future<void> _run() async {
@@ -87,7 +100,9 @@ class _ConsolePageState extends State<ConsolePage> {
       final out = await WifiService.runCommand(cmd);
       setState(() => _lines.add(out.trimRight()));
     } catch (e) {
-      setState(() => _lines.add('(request failed — connected to $_ssid? $e)'));
+      setState(
+        () => _lines.add('(no reply — is THIS phone joined to $_ssid? $e)'),
+      );
     } finally {
       if (mounted) setState(() => _running = false);
       _scrollToEnd();
@@ -106,72 +121,159 @@ class _ConsolePageState extends State<ConsolePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Wireless Console')),
-      body: _step < 2 ? _buildSetup() : _buildTerminal(),
+      body: _enabled ? _buildLive() : _buildEnable(),
     );
   }
 
-  Widget _buildSetup() {
-    return Stepper(
-      currentStep: _step,
-      controlsBuilder: (context, details) => const SizedBox.shrink(),
-      steps: [
-        Step(
-          title: const Text('Enable Board WiFi'),
-          isActive: _step >= 0,
-          state: _step > 0 ? StepState.complete : StepState.indexed,
-          content: Column(
+  Widget _buildEnable() {
+    return Padding(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Turns on the board\'s WiFi so any device — your PC, a laptop, or '
+            'this phone — can reach the console. Same console as USB serial, '
+            'but usable while the vehicle is powered (when USB can\'t be '
+            'plugged in).\n\n'
+            'The board shows "ALLOW WIFI?" — press its LEFT button within 30 s '
+            'to approve. Buttonless boards approve automatically.',
+          ),
+          const SizedBox(height: 20),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Text(
+                _error!,
+                style: const TextStyle(color: Colors.redAccent),
+              ),
+            ),
+          FilledButton.icon(
+            onPressed: _loading ? null : _enable,
+            icon: _loading
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.wifi_tethering),
+            label: const Text('Turn On Console WiFi'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLive() {
+    return Column(
+      children: [
+        // Status + how to connect — the primary content, since the usual
+        // client is a separate device, not this phone.
+        Container(
+          width: double.infinity,
+          color: Colors.green.withValues(alpha: 0.10),
+          padding: const EdgeInsets.all(16),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Row(
+                children: const [
+                  Icon(Icons.wifi_tethering, color: Colors.green, size: 20),
+                  SizedBox(width: 8),
+                  Text(
+                    'CONSOLE WiFi ON',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              _copyRow('network', _ssid),
+              _copyRow('password', _pass),
+              _copyRow('browser', 'http://192.168.4.1/console'),
+              _copyRow('scripts', 'http://192.168.4.1/cmd?c=<command>'),
+              const SizedBox(height: 8),
               const Text(
-                'Raises the board\'s WiFi so your phone can reach the console — '
-                'the same console as USB serial, but usable while the vehicle '
-                'is powered (when USB can\'t be plugged in).\n\n'
-                'The board shows "ALLOW WIFI?" — press its LEFT button within '
-                '30 s to approve. Buttonless boards approve automatically.',
+                'Connect any device to that network, then open the browser URL '
+                '(or curl the scripts URL). Stays on for 10 min of no activity.',
+                style: TextStyle(color: Colors.grey, fontSize: 12.5),
               ),
-              const SizedBox(height: 16),
-              if (_error != null)
-                Text(_error!, style: const TextStyle(color: Colors.redAccent)),
-              FilledButton(
-                onPressed: _loading ? null : _enable,
-                child: _loading
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('Enable Console WiFi'),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: _turnOff,
+                icon: const Icon(Icons.wifi_off, size: 18),
+                label: const Text('Turn Off'),
               ),
             ],
           ),
         ),
-        Step(
-          title: const Text('Connect Phone to Board'),
-          isActive: _step >= 1,
-          state: _step > 1 ? StepState.complete : StepState.indexed,
-          content: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '1. Approve on the board if you haven\'t (LEFT button).\n'
-                '2. Open your phone\'s WiFi settings.\n'
-                '3. Connect to: $_ssid\n'
-                '4. Password: $_pass\n\n'
-                'If Android warns about no internet, tap YES to stay connected.',
-              ),
-              const SizedBox(height: 16),
-              FilledButton(
-                onPressed: () => setState(() => _step = 2),
-                child: const Text('I\'m Connected — Open Console'),
+        const Divider(height: 1),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+          child: Row(
+            children: const [
+              Icon(Icons.smartphone, size: 15, color: Colors.grey),
+              SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  'Or run from this phone (requires THIS phone joined to the '
+                  'board WiFi):',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
               ),
             ],
           ),
         ),
+        Expanded(child: _terminal()),
       ],
     );
   }
 
-  Widget _buildTerminal() {
+  Widget _copyRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 74,
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.grey, fontSize: 12.5),
+            ),
+          ),
+          Expanded(
+            child: SelectableText(
+              value,
+              style: const TextStyle(
+                fontFamily: 'monospace',
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: () {
+              Clipboard.setData(ClipboardData(text: value));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('copied $label'),
+                  duration: const Duration(seconds: 1),
+                ),
+              );
+            },
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(Icons.copy, size: 16, color: Colors.grey),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _terminal() {
     return Column(
       children: [
         Expanded(
@@ -182,18 +284,21 @@ class _ConsolePageState extends State<ConsolePage> {
             child: SingleChildScrollView(
               controller: _scrollCtrl,
               child: SelectableText(
-                _lines.join('\n\n'),
-                style: const TextStyle(
+                _lines.isEmpty
+                    ? 'type a command (try: help)'
+                    : _lines.join('\n\n'),
+                style: TextStyle(
                   fontFamily: 'monospace',
                   fontSize: 12.5,
                   height: 1.4,
-                  color: Color(0xFFE8E8E8),
+                  color: _lines.isEmpty
+                      ? const Color(0xFF666666)
+                      : const Color(0xFFE8E8E8),
                 ),
               ),
             ),
           ),
         ),
-        // Quick chips for the commands you actually want on the bench.
         SizedBox(
           height: 44,
           child: ListView(
@@ -210,7 +315,10 @@ class _ConsolePageState extends State<ConsolePage> {
                 'help',
               ])
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 4,
+                    vertical: 6,
+                  ),
                   child: ActionChip(
                     label: Text(c),
                     onPressed: _running
