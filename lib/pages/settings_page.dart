@@ -1703,7 +1703,8 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     subtitle: const Text(
                       'EVEE / ESK8OS · DreadedZombie\n'
-                      'evee.zombie.digital · github.com/joenilan/Esk8OS',
+                      'evee.zombie.digital · github.com/joenilan/Esk8OS\n'
+                      'Manual & wiring: evee.zombie.digital/manual.html',
                     ),
                   ),
                 ],
