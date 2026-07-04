@@ -1239,6 +1239,38 @@ class _DashboardPageState extends State<DashboardPage>
                                               ],
                                             ),
                                             const SizedBox(height: 14),
+                                            // A board with a screen but no buttons (0.91" OLED
+                                            // builds) can't change its own face — these are its
+                                            // only navigation. Button boards self-navigate.
+                                            if (_boardSettings?.hasButtons == false &&
+                                                _boardSettings?.display != 'none') ...[
+                                              Row(
+                                                children: [
+                                                  Expanded(
+                                                    child: _controlAction(
+                                                      Icons.chevron_left,
+                                                      'PREV FACE',
+                                                      () => _cmd(
+                                                        Esk8Commands.pagePrev,
+                                                        'Board face',
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 10),
+                                                  Expanded(
+                                                    child: _controlAction(
+                                                      Icons.chevron_right,
+                                                      'NEXT FACE',
+                                                      () => _cmd(
+                                                        Esk8Commands.pageNext,
+                                                        'Board face',
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 10),
+                                            ],
                                             _controlAction(
                                               Icons.settings,
                                               'EDIT SETTINGS',
