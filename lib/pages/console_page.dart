@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -23,9 +25,12 @@ class ConsolePage extends StatefulWidget {
 }
 
 class _ConsolePageState extends State<ConsolePage> {
-  bool _enabled = false;
-  bool _loading = false;
+  // 0 = not started, 1 = waiting for the on-board L-press approval, 2 = live
+  int _phase = 0;
+  bool _timedOut = false;
   String? _error;
+  Timer? _poll;
+  int _elapsed = 0;
   String _ssid = Esk8WifiExport.ssid;
   String _pass = Esk8WifiExport.legacyPassword;
 
@@ -56,6 +61,7 @@ class _ConsolePageState extends State<ConsolePage> {
   void dispose() {
     // Intentionally does NOT stop the AP — the whole point is to raise it and
     // walk to another device. The firmware idle-timeout (10 min) cleans up.
+    _poll?.cancel();
     _inputCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -63,21 +69,43 @@ class _ConsolePageState extends State<ConsolePage> {
 
   Future<void> _enable() async {
     setState(() {
-      _loading = true;
+      _phase = 1; // waiting for approval
+      _timedOut = false;
       _error = null;
+      _elapsed = 0;
     });
     try {
       await widget.dev.sendCommand(Esk8Commands.wifiExportStart);
-      setState(() {
-        _enabled = true;
-        _loading = false;
-      });
     } catch (e) {
       setState(() {
+        _phase = 0;
         _error = 'Failed to enable board WiFi: $e';
-        _loading = false;
       });
+      return;
     }
+    // Advance to the live screen ONLY when the board reports the AP is really
+    // up (wifiOn flips true after the on-board L-press). Never advance on the
+    // send alone — an unapproved request leaves nothing to connect to.
+    _poll = Timer.periodic(const Duration(milliseconds: 1500), (t) async {
+      _elapsed += 1500;
+      try {
+        final s = await widget.dev.readSettings();
+        if (!mounted) return;
+        if (s != null) {
+          _ssid = s.wifiSsid;
+          _pass = s.wifiPass;
+          if (s.wifiOn) {
+            t.cancel();
+            setState(() => _phase = 2);
+            return;
+          }
+        }
+      } catch (_) {/* keep polling */}
+      if (_elapsed >= 33000 && mounted) {
+        t.cancel();
+        setState(() => _timedOut = true); // show "approve on board / continue"
+      }
+    });
   }
 
   Future<void> _turnOff() async {
@@ -121,11 +149,12 @@ class _ConsolePageState extends State<ConsolePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Wireless Console')),
-      body: _enabled ? _buildLive() : _buildEnable(),
+      body: _phase == 2 ? _buildLive() : _buildEnable(),
     );
   }
 
   Widget _buildEnable() {
+    final waiting = _phase == 1 && !_timedOut;
     return Padding(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -140,25 +169,63 @@ class _ConsolePageState extends State<ConsolePage> {
             'to approve. Buttonless boards approve automatically.',
           ),
           const SizedBox(height: 20),
-          if (_error != null)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Text(
-                _error!,
-                style: const TextStyle(color: Colors.redAccent),
-              ),
+          if (waiting) ...[
+            Row(
+              children: const [
+                SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                ),
+                SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Press the board\'s LEFT button to approve — waiting for '
+                    'the network to come up…',
+                  ),
+                ),
+              ],
             ),
-          FilledButton.icon(
-            onPressed: _loading ? null : _enable,
-            icon: _loading
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.wifi_tethering),
-            label: const Text('Turn On Console WiFi'),
-          ),
+          ] else if (_timedOut) ...[
+            const Text(
+              'The board never reported its WiFi on. Approve on the board '
+              '(LEFT button) and try again — or, on older firmware that can\'t '
+              'report status, continue once you\'ve approved it.',
+              style: TextStyle(color: Colors.orangeAccent),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton(
+                    onPressed: _enable,
+                    child: const Text('Try Again'),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => setState(() => _phase = 2),
+                    child: const Text('Continue Anyway'),
+                  ),
+                ),
+              ],
+            ),
+          ] else ...[
+            if (_error != null)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Text(
+                  _error!,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
+              ),
+            FilledButton.icon(
+              onPressed: _enable,
+              icon: const Icon(Icons.wifi_tethering),
+              label: const Text('Turn On Console WiFi'),
+            ),
+          ],
         ],
       ),
     );
