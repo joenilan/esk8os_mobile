@@ -40,6 +40,7 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   BoardSettings? _settings;
+  BaseConfig? _base; // VESC base config + provenance (fw 0.10.1+; null = older fw)
   _RangeCalibration? _lastTripCalibration;
   _RangeCalibration? _learnedCalibration;
   bool _loading = true;
@@ -94,8 +95,11 @@ class _SettingsPageState extends State<SettingsPage> {
       } else {
         Esk8Theme.applyTheme(AppPrefs.phoneTheme);
       }
+      final base = await widget.dev.readBaseConfig();
+      if (!mounted) return;
       setState(() {
         _settings = s;
+        _base = base;
         _riderCtrl.text = s.rider;
         _nameCtrl.text = s.deviceName;
         _vlabelCtrl.text = s.vehicleLabel;
@@ -370,6 +374,22 @@ class _SettingsPageState extends State<SettingsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
     );
+  }
+
+  /// One-tile summary of the ESC-read base config + where each effective
+  /// value currently comes from (r = your override, v = VESC, d = default).
+  String _baseSummary(BaseConfig b) {
+    String tag(String k) => switch (b.src[k]) {
+      'r' => 'override',
+      'v' => 'VESC',
+      _ => 'default',
+    };
+    return '${b.cells}S ${b.packAh.toStringAsFixed(1)}Ah · '
+        'cut ${b.cutStartV.toStringAsFixed(1)}→${b.cutEndV.toStringAsFixed(1)}V · '
+        '${b.poles} poles · gear ${b.gearRatio.toStringAsFixed(2)} · ${b.wheelMm}mm\n'
+        'sources — cells: ${tag('cells')} · pack: ${tag('ah')} · '
+        'home: ${tag('home')} · limp: ${tag('stop')} · '
+        'Wh/mi: ${tag('whmi')} · wheel: ${tag('wheel')}';
   }
 
   String _boardCalSummary(BoardSettings s) {
@@ -942,6 +962,19 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                           child: const Text('Reset'),
                         ),
+                      ),
+                    // Three-tier config surface (fw 0.10.1+): the ESC's own
+                    // mcconf is the base truth under these sliders; anything
+                    // you set here becomes an explicit override on top of it.
+                    if (_base?.valid == true)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: Icon(Icons.verified_outlined, color: _accent),
+                        title: const Text(
+                          'VESC base config',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text(_baseSummary(_base!)),
                       ),
                     if (!s.hasBoardCal) ...[
                       _RangeModelControl(

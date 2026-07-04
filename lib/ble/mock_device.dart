@@ -186,6 +186,33 @@ class MockDevice implements Esk8Device {
   }
 
   @override
+  Future<BaseConfig?> readBaseConfig() async {
+    await Future.delayed(const Duration(milliseconds: 60));
+    // Mirrors a real dual-FW6.5 capture so the tier UI is exercisable in mock.
+    return const BaseConfig(
+      valid: true,
+      cells: 10,
+      packAh: 16.5,
+      cutStartV: 34.0,
+      cutEndV: 31.0,
+      poles: 14,
+      gearRatio: 4.5,
+      wheelMm: 203,
+      motorAmpMax: 57,
+      battAmpMax: 15,
+      battAmpRegen: -5,
+      src: {
+        'cells': 'r',
+        'ah': 'v',
+        'home': 'v',
+        'stop': 'r',
+        'whmi': 'r',
+        'wheel': 'v',
+      },
+    );
+  }
+
+  @override
   Future<void> writeSettings(Map<String, dynamic> partial) async {
     await Future.delayed(const Duration(milliseconds: 100));
     _settings = BoardSettings(

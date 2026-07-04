@@ -47,6 +47,7 @@ class CompanionDevice implements Esk8Device {
   BluetoothCharacteristic? _settings;
   BluetoothCharacteristic? _command;
   BluetoothCharacteristic? _sessionChar; // fw 0.9.4+: 1 Hz session stats
+  BluetoothCharacteristic? _baseConf; // fw 0.10.1+: VESC base + provenance
 
   // Latest session-stats frame; folded under every 5 Hz core frame so the
   // Telemetry object the app sees stays whole. Old firmware (no session
@@ -100,6 +101,7 @@ class CompanionDevice implements Esk8Device {
       if (c.uuid == Guid(Esk8Uuids.settings)) _settings = c;
       if (c.uuid == Guid(Esk8Uuids.command)) _command = c;
       if (c.uuid == Guid(Esk8Uuids.session)) _sessionChar = c;
+      if (c.uuid == Guid(Esk8Uuids.baseConf)) _baseConf = c;
     }
     if (!isReady) {
       throw StateError('ESK8OS companion characteristics missing');
@@ -152,6 +154,21 @@ class CompanionDevice implements Esk8Device {
       final obj = jsonDecode(utf8.decode(bytes));
       if (obj is Map<String, dynamic>) return BoardSettings.fromJson(obj);
     } catch (_) {/* ignore */}
+    return null;
+  }
+
+  /// VESC base config + provenance (fw 0.10.1+). Null on older firmware
+  /// (characteristic absent) or an unreadable/garbled payload.
+  @override
+  Future<BaseConfig?> readBaseConfig() async {
+    final c = _baseConf;
+    if (c == null) return null;
+    try {
+      final bytes = await c.read();
+      if (bytes.isEmpty) return null;
+      final obj = jsonDecode(utf8.decode(bytes));
+      if (obj is Map<String, dynamic>) return BaseConfig.fromJson(obj);
+    } catch (_) {/* old firmware / bad read */}
     return null;
   }
 

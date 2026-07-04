@@ -14,6 +14,67 @@ class Esk8Uuids {
   /// 1 Hz session/trip stats (fw 0.9.4+). Older firmware sends everything on
   /// [telemetry]; the merge in CompanionDevice handles both.
   static const String session = '5043697a-0004-4682-93cb-33bb0a149f7e'; // NOTIFY
+
+  /// VESC-read base config + per-value provenance (fw 0.10.1+, spec §2b).
+  static const String baseConf =
+      '5043697a-0005-4682-93cb-33bb0a149f7e'; // READ
+}
+
+/// The board's three-tier config surface (characteristic 0005, fw 0.10.1+):
+/// what the ESC's own mcconf says (base tier) and which tier each effective
+/// settings value currently comes from. Read-only.
+class BaseConfig {
+  final bool valid; // false = no firmware-matched mcconf ever parsed
+  final int cells;
+  final double packAh;
+  final double cutStartV, cutEndV; // pack volts (VESC ramps between them)
+  final int poles;
+  final double gearRatio; // wheel:motor, e.g. 72/16 = 4.5
+  final int wheelMm;
+  final double motorAmpMax, battAmpMax, battAmpRegen;
+
+  /// Per-field source: 'r' rider override, 'v' VESC base, 'd' generic default.
+  /// Keys: cells, ah, home, stop, whmi, wheel.
+  final Map<String, String> src;
+
+  const BaseConfig({
+    required this.valid,
+    this.cells = 0,
+    this.packAh = 0,
+    this.cutStartV = 0,
+    this.cutEndV = 0,
+    this.poles = 0,
+    this.gearRatio = 0,
+    this.wheelMm = 0,
+    this.motorAmpMax = 0,
+    this.battAmpMax = 0,
+    this.battAmpRegen = 0,
+    this.src = const {},
+  });
+
+  factory BaseConfig.fromJson(Map<String, dynamic> j) => BaseConfig(
+    valid: j['valid'] == true,
+    cells: (j['cells'] as num?)?.toInt() ?? 0,
+    packAh: (j['ah'] as num?)?.toDouble() ?? 0,
+    cutStartV: (j['cutS'] as num?)?.toDouble() ?? 0,
+    cutEndV: (j['cutE'] as num?)?.toDouble() ?? 0,
+    poles: (j['poles'] as num?)?.toInt() ?? 0,
+    gearRatio: (j['gear'] as num?)?.toDouble() ?? 0,
+    wheelMm: (j['wheel'] as num?)?.toInt() ?? 0,
+    motorAmpMax: (j['motA'] as num?)?.toDouble() ?? 0,
+    battAmpMax: (j['batA'] as num?)?.toDouble() ?? 0,
+    battAmpRegen: (j['regA'] as num?)?.toDouble() ?? 0,
+    src: (j['src'] is Map)
+        ? (j['src'] as Map).map((k, v) => MapEntry(k.toString(), v.toString()))
+        : const {},
+  );
+
+  /// Human label for a src code, for chips next to settings fields.
+  static String sourceLabel(String? code) => switch (code) {
+    'r' => 'YOUR OVERRIDE',
+    'v' => 'FROM VESC',
+    _ => 'DEFAULT',
+  };
 }
 
 /// Command strings written to the command characteristic (spec §5).
@@ -468,4 +529,7 @@ abstract class Esk8Device {
   Future<BoardSettings?> readSettings();
   Future<void> writeSettings(Map<String, dynamic> partial);
   Future<void> sendCommand(String command);
+
+  /// VESC base config + provenance (fw 0.10.1+). Null on older firmware.
+  Future<BaseConfig?> readBaseConfig();
 }
