@@ -45,6 +45,17 @@ class WifiService {
     }
   }
 
+  /// Run one console command over the board's WiFi (fw 0.10.3+ `/cmd`
+  /// endpoint) and return its plain-text output. Same console as USB serial.
+  static Future<String> runCommand(String line) async {
+    final uri = Uri.parse('$baseUrl/cmd').replace(queryParameters: {'c': line});
+    final response = await http
+        .get(uri)
+        .timeout(const Duration(seconds: 8));
+    if (response.statusCode == 200) return response.body;
+    throw Exception('console returned ${response.statusCode}');
+  }
+
   /// Download a specific log file and save it to the device's downloads or docs dir.
   static Future<File> downloadLog(String filename) async {
     final uri = Uri.parse(

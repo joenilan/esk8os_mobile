@@ -16,6 +16,7 @@ import 'ble/mock_device.dart';
 import 'database/trip_database.dart';
 import 'pages/settings_page.dart';
 import 'pages/wifi_export_page.dart';
+import 'pages/console_page.dart';
 import 'services/app_prefs.dart';
 import 'services/trip_recorder.dart';
 import 'views/dash_view.dart';
@@ -1353,6 +1354,22 @@ class _DashboardPageState extends State<DashboardPage>
                                                   ),
                                                 ),
                                               ],
+                                            ),
+                                            const SizedBox(height: 10),
+                                            // Wireless serial console — its own
+                                            // entry, separate from Export/OTA:
+                                            // reach stat/diag/vesc-faults/set
+                                            // with the ESC awake (no USB).
+                                            _controlAction(
+                                              Icons.terminal,
+                                              'CONSOLE',
+                                              () => Navigator.of(context).push(
+                                                MaterialPageRoute(
+                                                  builder: (_) => ConsolePage(
+                                                    dev: widget.dev,
+                                                  ),
+                                                ),
+                                              ),
                                             ),
                                           ],
                                         ),
