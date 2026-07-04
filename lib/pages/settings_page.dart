@@ -1679,19 +1679,10 @@ class _SettingsPageState extends State<SettingsPage> {
                           : '${_hardwareLabel(s)} · version readout needs fw 0.9.5+',
                     ),
                   ),
-                  if ((widget.telemetry?.vescFw ?? '').isNotEmpty)
-                    ListTile(
-                      leading: Icon(Icons.settings_input_component,
-                          color: _accent),
-                      title: const Text(
-                        'VESC firmware',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      subtitle: Text('v${widget.telemetry!.vescFw}'),
-                    ),
+                  // VESC firmware deliberately NOT shown here: DIAG owns VESC
+                  // identity (live-updating). This page only gets a telemetry
+                  // snapshot from open time, so a row here shows stale/absent
+                  // values depending on when Settings was opened.
                   ListTile(
                     leading: Icon(Icons.copyright, color: _accent),
                     title: const Text(
