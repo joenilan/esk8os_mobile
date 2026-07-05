@@ -89,16 +89,14 @@ class _ConsolePageState extends State<ConsolePage> {
     _poll = Timer.periodic(const Duration(milliseconds: 1500), (t) async {
       _elapsed += 1500;
       try {
-        final s = await widget.dev.readSettings();
+        // wifiOn lives on the base-config characteristic (0005), not settings —
+        // the settings JSON has no room and adding it there broke the app.
+        final base = await widget.dev.readBaseConfig();
         if (!mounted) return;
-        if (s != null) {
-          _ssid = s.wifiSsid;
-          _pass = s.wifiPass;
-          if (s.wifiOn) {
-            t.cancel();
-            setState(() => _phase = 2);
-            return;
-          }
+        if (base != null && base.wifiOn) {
+          t.cancel();
+          setState(() => _phase = 2);
+          return;
         }
       } catch (_) {/* keep polling */}
       if (_elapsed >= 33000 && mounted) {

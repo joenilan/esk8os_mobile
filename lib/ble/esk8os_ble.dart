@@ -33,12 +33,17 @@ class BaseConfig {
   final int wheelMm;
   final double motorAmpMax, battAmpMax, battAmpRegen;
 
+  /// Export AP actually up (moved here from settings, fw 0.10.9+). The console
+  /// page polls this after WIFI_EXPORT_START to know the network is really up.
+  final bool wifiOn;
+
   /// Per-field source: 'r' rider override, 'v' VESC base, 'd' generic default.
   /// Keys: cells, ah, home, stop, whmi, wheel.
   final Map<String, String> src;
 
   const BaseConfig({
     required this.valid,
+    this.wifiOn = false,
     this.cells = 0,
     this.packAh = 0,
     this.cutStartV = 0,
@@ -54,6 +59,7 @@ class BaseConfig {
 
   factory BaseConfig.fromJson(Map<String, dynamic> j) => BaseConfig(
     valid: j['valid'] == true,
+    wifiOn: j['wifiOn'] == true,
     cells: (j['cells'] as num?)?.toInt() ?? 0,
     packAh: (j['ah'] as num?)?.toDouble() ?? 0,
     cutStartV: (j['cutS'] as num?)?.toDouble() ?? 0,
@@ -307,7 +313,6 @@ class BoardSettings {
   // send these; the defaults match its fixed legacy credentials.
   final String wifiSsid; // wifiSsid
   final String wifiPass; // wifiPass (per-device since fw 0.9.4)
-  final bool wifiOn; // export AP actually up (fw 0.10.5+; false on older fw)
   // Read-only on-board adaptive battery calibration (fw 0.9.5+). When
   // [hasBoardCal] the BOARD learns its own range model while riding — the app
   // must not push a learned whmi over it (manual writes stay allowed).
@@ -355,7 +360,6 @@ class BoardSettings {
     this.vehicleCustomIcon = 0,
     this.wifiSsid = Esk8WifiExport.ssid,
     this.wifiPass = Esk8WifiExport.legacyPassword,
-    this.wifiOn = false,
     this.hasBoardCal = false,
     this.calPackROhm = 0,
     this.calTypicalAmps = 0.0,
@@ -403,7 +407,6 @@ class BoardSettings {
     vehicleCustomIcon: _i(j['vicon']),
     wifiSsid: (j['wifiSsid'] ?? Esk8WifiExport.ssid).toString(),
     wifiPass: (j['wifiPass'] ?? Esk8WifiExport.legacyPassword).toString(),
-    wifiOn: j['wifiOn'] == true,
     hasBoardCal: j.containsKey('calR'),
     calPackROhm: _i(j['calR']),
     calTypicalAmps: _d(j['calA']),
@@ -495,7 +498,6 @@ class BoardSettings {
     vehicleCustomIcon: vehicleCustomIcon,
     wifiSsid: wifiSsid,
     wifiPass: wifiPass,
-    wifiOn: wifiOn,
     hasBoardCal: hasBoardCal,
     calPackROhm: calPackROhm,
     calTypicalAmps: calTypicalAmps,
