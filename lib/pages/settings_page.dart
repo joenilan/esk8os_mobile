@@ -106,7 +106,10 @@ class _SettingsPageState extends State<SettingsPage> {
       final s = await widget.dev.readSettings();
       if (s == null) throw StateError('Empty response from board');
       if (!mounted) return;
-      if (AppPrefs.themeSyncWithBoard) {
+      // Only follow the board's theme when it actually has one (TFT). OLED is
+      // monochrome and headless has no display, so they send no theme — the
+      // phone keeps its own.
+      if (AppPrefs.themeSyncWithBoard && s.hasColorTheme) {
         AppPrefs.phoneTheme = s.theme;
         Esk8Theme.applyTheme(s.theme);
       } else {
@@ -790,56 +793,67 @@ class _SettingsPageState extends State<SettingsPage> {
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
                 child: Column(
                   children: [
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Sync with Board',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+                    // Board-theme sync only when the board HAS a color theme
+                    // (TFT). OLED (mono) and headless send none, so the phone
+                    // just manages its own theme.
+                    if (s.hasColorTheme) ...[
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text(
+                          'Sync with Board',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
+                        subtitle: Text(
+                          AppPrefs.themeSyncWithBoard
+                              ? 'Phone follows the ESP32 theme'
+                              : 'Phone and ESP32 themes are separate',
+                        ),
+                        secondary: Icon(Icons.sync, color: _accent),
+                        value: AppPrefs.themeSyncWithBoard,
+                        activeThumbColor: _accent,
+                        onChanged: _setThemeSync,
                       ),
-                      subtitle: Text(
-                        AppPrefs.themeSyncWithBoard
-                            ? 'Phone follows the ESP32 theme'
-                            : 'Phone and ESP32 themes are separate',
-                      ),
-                      secondary: Icon(Icons.sync, color: _accent),
-                      value: AppPrefs.themeSyncWithBoard,
-                      activeThumbColor: _accent,
-                      onChanged: _setThemeSync,
-                    ),
-                    const Divider(height: 18),
-                    _themePicker(
-                      label: AppPrefs.themeSyncWithBoard
-                          ? 'Board + Phone Theme'
-                          : 'Phone Theme',
-                      value: AppPrefs.themeSyncWithBoard
-                          ? s.theme
-                          : AppPrefs.phoneTheme,
-                      icon: AppPrefs.themeSyncWithBoard
-                          ? Icons.palette
-                          : Icons.phone_android,
-                      onChanged: (v) {
-                        if (AppPrefs.themeSyncWithBoard) {
-                          _write(BoardSettings.writeJson(theme: v), 'Theme');
-                        } else {
-                          _setPhoneTheme(v);
-                        }
-                      },
-                    ),
-                    if (!AppPrefs.themeSyncWithBoard) ...[
                       const Divider(height: 18),
                       _themePicker(
-                        label: 'Board Theme',
-                        value: s.theme,
-                        icon: Icons.developer_board,
-                        onChanged: (v) => _write(
-                          BoardSettings.writeJson(theme: v),
-                          'Board theme',
-                        ),
+                        label: AppPrefs.themeSyncWithBoard
+                            ? 'Board + Phone Theme'
+                            : 'Phone Theme',
+                        value: AppPrefs.themeSyncWithBoard
+                            ? s.theme
+                            : AppPrefs.phoneTheme,
+                        icon: AppPrefs.themeSyncWithBoard
+                            ? Icons.palette
+                            : Icons.phone_android,
+                        onChanged: (v) {
+                          if (AppPrefs.themeSyncWithBoard) {
+                            _write(BoardSettings.writeJson(theme: v), 'Theme');
+                          } else {
+                            _setPhoneTheme(v);
+                          }
+                        },
                       ),
-                    ],
+                      if (!AppPrefs.themeSyncWithBoard) ...[
+                        const Divider(height: 18),
+                        _themePicker(
+                          label: 'Board Theme',
+                          value: s.theme,
+                          icon: Icons.developer_board,
+                          onChanged: (v) => _write(
+                            BoardSettings.writeJson(theme: v),
+                            'Board theme',
+                          ),
+                        ),
+                      ],
+                    ] else
+                      _themePicker(
+                        label: 'Phone Theme',
+                        value: AppPrefs.phoneTheme,
+                        icon: Icons.phone_android,
+                        onChanged: _setPhoneTheme,
+                      ),
                   ],
                 ),
               ),

@@ -285,6 +285,7 @@ class BoardSettings {
   final bool hasButtons; // buttons
   final bool mph;
   final String theme;
+  final bool hasColorTheme; // board sends a color theme (TFT only; OLED is mono, headless has none)
   final int poles; // read-only
   final int wheelMm; // effective diameter used for speed/distance (preset or override)
   final int wheelOverrideMm; // wheelmm: rider calibration, 0 = using the preset's nominal
@@ -335,6 +336,7 @@ class BoardSettings {
     this.hasButtons = true,
     required this.mph,
     required this.theme,
+    this.hasColorTheme = false,
     required this.poles,
     required this.wheelMm,
     this.wheelOverrideMm = 0,
@@ -376,6 +378,7 @@ class BoardSettings {
     hasButtons: j.containsKey('buttons') ? j['buttons'] == true : true,
     mph: j['mph'] == true,
     theme: (j['theme'] ?? '').toString(),
+    hasColorTheme: (j['theme'] ?? '').toString().isNotEmpty,
     poles: _i(j['poles']),
     wheelMm: _i(j['wheel']),
     wheelOverrideMm: _i(j['wheelmm']),
@@ -473,6 +476,7 @@ class BoardSettings {
     hasButtons: hasButtons,
     mph: mph ?? this.mph,
     theme: theme,
+    hasColorTheme: hasColorTheme,
     poles: poles,
     wheelMm: wheelMm,
     wheelOverrideMm: wheelOverrideMm,
