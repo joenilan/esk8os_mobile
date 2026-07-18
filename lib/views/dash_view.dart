@@ -76,7 +76,9 @@ class DashView extends StatelessWidget {
                 value: t.volts.toStringAsFixed(1),
                 unit: 'V',
                 valueSize: 40,
-                valueColor: Esk8Theme.green,
+                // White, matching the HUD — green stays reserved for the safety
+                // zones on this page (current/temp/range), where it means "safe".
+                valueColor: Esk8Theme.textPrimary,
               ),
               StatTile(
                 label: 'Watts',
