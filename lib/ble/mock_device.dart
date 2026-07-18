@@ -22,6 +22,9 @@ class MockDevice implements Esk8Device {
   Timer? _telemetryTimer;
   final _telemetry = StreamController<Telemetry>.broadcast();
 
+  Timer? _bmsTimer;
+  final _bms = StreamController<BmsData>.broadcast();
+
   // Mock state
   double _speed = 0.0;
   final int _battery = 100;
@@ -166,17 +169,70 @@ class MockDevice implements Esk8Device {
         ),
       );
     });
+
+    // 1 Hz synthetic Daly pack — mirrors the firmware's simulateBms(): a 10S
+    // pack with one deliberately weak cell (#7, ~70 mV low) so the imbalance
+    // view (the reason to read a BMS) is exercisable with no hardware.
+    _bmsTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _bms.add(_mockBms());
+    });
+  }
+
+  BmsData _mockBms() {
+    final time = DateTime.now().millisecondsSinceEpoch / 1000.0;
+    final wave = sin(time * 0.3);
+    final soc = (70 + 15 * wave).round();
+    final nominal = (3600 + (soc - 55) / 30.0 * 400).round();
+    final cells = <int>[];
+    for (var c = 0; c < 10; c++) {
+      var mv = nominal + ((c * 7) % 15) - 7;
+      if (c == 6) mv -= 70; // the weak cell (#7)
+      cells.add(mv);
+    }
+    final minMv = cells.reduce(min);
+    final maxMv = cells.reduce(max);
+    final packV = cells.fold<int>(0, (a, b) => a + b) / 1000.0;
+    final t0 = 26 + (4 * wave).round();
+    final t1 = 28 + (3 * wave).round();
+    return BmsData(
+      link: true,
+      packVolts: packV,
+      current: -(10 + 8 * wave), // discharging
+      soc: soc,
+      remainingAh: 10.0 * soc / 100.0,
+      cycles: 42,
+      cellCount: 10,
+      cellsMv: cells,
+      minMv: minMv,
+      minCell: cells.indexOf(minMv) + 1,
+      maxMv: maxMv,
+      maxCell: cells.indexOf(maxMv) + 1,
+      deltaMv: maxMv - minMv,
+      temps: [t0, t1],
+      tempMin: min(t0, t1),
+      tempMax: max(t0, t1),
+      chargeMos: true,
+      dischargeMos: true,
+      fault: false,
+    );
   }
 
   @override
   Future<void> disconnect() async {
     _telemetryTimer?.cancel();
+    _bmsTimer?.cancel();
     _isConnected = false;
     _connectionState.add(DeviceConnectionState.disconnected);
   }
 
   @override
   Stream<Telemetry> telemetry() => _telemetry.stream;
+
+  @override
+  bool get hasBms => true;
+
+  @override
+  Stream<BmsData> bms() => _bms.stream;
 
   @override
   Future<BoardSettings?> readSettings() async {

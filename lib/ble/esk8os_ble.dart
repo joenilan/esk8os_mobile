@@ -18,6 +18,10 @@ class Esk8Uuids {
   /// VESC-read base config + per-value provenance (fw 0.10.1+, spec §2b).
   static const String baseConf =
       '5043697a-0005-4682-93cb-33bb0a149f7e'; // READ
+
+  /// Daly BMS pack + per-cell (spec §2c). Present only on BMS-build boards;
+  /// absent = no BMS integration, so the app hides the pack view.
+  static const String bms = '5043697a-0006-4682-93cb-33bb0a149f7e'; // NOTIFY 1 Hz
 }
 
 /// The board's three-tier config surface (characteristic 0005, fw 0.10.1+):
@@ -81,6 +85,88 @@ class BaseConfig {
     'v' => 'FROM VESC',
     _ => 'DEFAULT',
   };
+}
+
+/// Daly BMS snapshot (characteristic 0006, spec §2c). The per-cell voltages the
+/// VESC can't provide — the reason to read the BMS at all. Only BMS-build boards
+/// send it; [Esk8Device.hasBms] tells the app whether to show the pack view.
+///
+/// A stale cell (its 0x95 frame dropped) keeps its old mV but its [cellStale]
+/// bit is set — render it as unknown, never as a live reading.
+class BmsData {
+  final bool link; // link: BMS answered within the staleness window
+  final double packVolts; // pv
+  final double current; // cur: + charging, - discharging
+  final int soc; // soc (%)
+  final double remainingAh; // rah
+  final int cycles; // cyc
+  final int cellCount; // n
+  final List<int> cellsMv; // cv: per-cell millivolts, index 0 = cell 1
+  final int balMask; // bal: bit c set = cell (c+1) balancing
+  final int staleMask; // st: bit c set = cell (c+1) mV is stale
+  final int minMv, minCell; // mn / mnc (1-based)
+  final int maxMv, maxCell; // mx / mxc (1-based)
+  final int deltaMv; // dv: max - min, the imbalance to watch
+  final List<int> temps; // t (°C)
+  final int tempMin, tempMax; // tmn / tmx
+  final bool chargeMos; // cmos
+  final bool dischargeMos; // dmos
+  final bool fault; // flt
+
+  const BmsData({
+    this.link = false,
+    this.packVolts = 0,
+    this.current = 0,
+    this.soc = 0,
+    this.remainingAh = 0,
+    this.cycles = 0,
+    this.cellCount = 0,
+    this.cellsMv = const [],
+    this.balMask = 0,
+    this.staleMask = 0,
+    this.minMv = 0,
+    this.minCell = 0,
+    this.maxMv = 0,
+    this.maxCell = 0,
+    this.deltaMv = 0,
+    this.temps = const [],
+    this.tempMin = 0,
+    this.tempMax = 0,
+    this.chargeMos = false,
+    this.dischargeMos = false,
+    this.fault = false,
+  });
+
+  bool cellBalancing(int i) => (balMask & (1 << i)) != 0;
+  bool cellStale(int i) => (staleMask & (1 << i)) != 0;
+
+  factory BmsData.fromJson(Map<String, dynamic> j) => BmsData(
+        link: j['link'] == true,
+        packVolts: _d(j['pv']),
+        current: _d(j['cur']),
+        soc: _i(j['soc']),
+        remainingAh: _d(j['rah']),
+        cycles: _i(j['cyc']),
+        cellCount: _i(j['n']),
+        cellsMv: (j['cv'] is List)
+            ? (j['cv'] as List).map((e) => (e as num).toInt()).toList()
+            : const [],
+        balMask: _i(j['bal']),
+        staleMask: _i(j['st']),
+        minMv: _i(j['mn']),
+        minCell: _i(j['mnc']),
+        maxMv: _i(j['mx']),
+        maxCell: _i(j['mxc']),
+        deltaMv: _i(j['dv']),
+        temps: (j['t'] is List)
+            ? (j['t'] as List).map((e) => (e as num).toInt()).toList()
+            : const [],
+        tempMin: _i(j['tmn']),
+        tempMax: _i(j['tmx']),
+        chargeMos: j['cmos'] == true,
+        dischargeMos: j['dmos'] == true,
+        fault: j['flt'] == true,
+      );
 }
 
 /// Command strings written to the command characteristic (spec §5).
@@ -535,6 +621,15 @@ abstract class Esk8Device {
   Future<void> disconnect();
 
   Stream<Telemetry> telemetry();
+
+  /// True when the connected board exposes the BMS characteristic (0006) — i.e.
+  /// it's a BMS build. Drives whether the app shows the pack view. Valid after
+  /// [connect].
+  bool get hasBms;
+
+  /// 1 Hz Daly pack + per-cell stream. Empty (never emits) when [hasBms] is
+  /// false, so callers can subscribe unconditionally.
+  Stream<BmsData> bms();
 
   Future<BoardSettings?> readSettings();
   Future<void> writeSettings(Map<String, dynamic> partial);

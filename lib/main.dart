@@ -19,6 +19,7 @@ import 'pages/wifi_export_page.dart';
 import 'pages/console_page.dart';
 import 'services/app_prefs.dart';
 import 'services/trip_recorder.dart';
+import 'views/bms_view.dart';
 import 'views/dash_view.dart';
 import 'views/diag_view.dart';
 import 'views/graphs_view.dart';
@@ -777,14 +778,18 @@ class _DashboardPageState extends State<DashboardPage>
   // Consolidated phone deck (the device keeps its own 8 pages; the app no longer
   // mirrors them 1:1). DASH absorbed POWER; TRIP is the map + stats + history;
   // DIAG absorbed SYSTEM.
-  static const _pageNames = [
-    'HUD',
-    'DASH',
-    'TRIP',
-    'GRAPHS',
-    'DIAG',
-    'SETTINGS',
-  ];
+  // Instance getter (not const): a BMS-build board exposes characteristic 0006,
+  // and only then does the pack view appear. Appended before SETTINGS so it
+  // reads as a board page, not a config page. Boards without a BMS never see it.
+  List<String> get _pageNames => [
+        'HUD',
+        'DASH',
+        'TRIP',
+        'GRAPHS',
+        'DIAG',
+        if (widget.dev.hasBms) 'BMS',
+        'SETTINGS',
+      ];
 
   void _onPageChanged(int index) {
     // App pages independently of the device now — the device self-navigates with its
@@ -793,8 +798,10 @@ class _DashboardPageState extends State<DashboardPage>
     setState(() => _currentPage = index);
   }
 
-  String _pageName(int i) =>
-      (i >= 0 && i < _pageNames.length) ? _pageNames[i] : '';
+  String _pageName(int i) {
+    final names = _pageNames;
+    return (i >= 0 && i < names.length) ? names[i] : '';
+  }
 
   static String _clock() {
     final now = DateTime.now();
@@ -1028,32 +1035,40 @@ class _DashboardPageState extends State<DashboardPage>
                                       onPageChanged: (i) =>
                                           _onPageChanged(i % _pageNames.length),
                                       itemBuilder: (_, i) {
-                                        switch (i % _pageNames.length) {
-                                          case 0:
+                                        // Name-based so an optional page (BMS)
+                                        // can slot in without reshuffling indices.
+                                        final names = _pageNames;
+                                        switch (names[i % names.length]) {
+                                          case 'HUD':
                                             return HudView(
                                               telemetry: t,
                                               settings: _boardSettings,
                                             );
-                                          case 1:
+                                          case 'DASH':
                                             return DashView(
                                               telemetry: t,
                                               settings: _boardSettings,
                                             );
-                                          case 2:
+                                          case 'TRIP':
                                             return TripView(
                                               dev: widget.dev,
                                               telemetry: t,
                                               settings: _boardSettings,
                                             );
-                                          case 3:
+                                          case 'GRAPHS':
                                             return GraphsView(
                                               telemetry: t,
                                               history: _telemetryHistory,
                                               settings: _boardSettings,
                                             );
-                                          case 4:
+                                          case 'DIAG':
                                             return DiagView(
                                               telemetry: t,
+                                              settings: _boardSettings,
+                                            );
+                                          case 'BMS':
+                                            return BmsView(
+                                              dev: widget.dev,
                                               settings: _boardSettings,
                                             );
                                           default:

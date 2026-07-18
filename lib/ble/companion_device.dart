@@ -48,6 +48,7 @@ class CompanionDevice implements Esk8Device {
   BluetoothCharacteristic? _command;
   BluetoothCharacteristic? _sessionChar; // fw 0.9.4+: 1 Hz session stats
   BluetoothCharacteristic? _baseConf; // fw 0.10.1+: VESC base + provenance
+  BluetoothCharacteristic? _bms; // BMS builds only: 1 Hz Daly pack + per-cell
 
   // Latest session-stats frame; folded under every 5 Hz core frame so the
   // Telemetry object the app sees stays whole. Old firmware (no session
@@ -102,6 +103,7 @@ class CompanionDevice implements Esk8Device {
       if (c.uuid == Guid(Esk8Uuids.command)) _command = c;
       if (c.uuid == Guid(Esk8Uuids.session)) _sessionChar = c;
       if (c.uuid == Guid(Esk8Uuids.baseConf)) _baseConf = c;
+      if (c.uuid == Guid(Esk8Uuids.bms)) _bms = c;
     }
     if (!isReady) {
       throw StateError('EVEE companion characteristics missing');
@@ -134,6 +136,22 @@ class CompanionDevice implements Esk8Device {
         .map(_decodeMap)
         .where((m) => m != null)
         .map((m) => Telemetry.fromJson({..._sessionCache, ...m!}));
+  }
+
+  @override
+  bool get hasBms => _bms != null;
+
+  /// 1 Hz Daly pack + per-cell. Empty stream on boards without the BMS
+  /// characteristic, so the app can subscribe unconditionally.
+  @override
+  Stream<BmsData> bms() async* {
+    final c = _bms;
+    if (c == null) return;
+    await c.setNotifyValue(true);
+    yield* c.onValueReceived
+        .map(_decodeMap)
+        .where((m) => m != null)
+        .map((m) => BmsData.fromJson(m!));
   }
 
   static Map<String, dynamic>? _decodeMap(List<int> bytes) {
