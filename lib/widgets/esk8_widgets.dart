@@ -127,6 +127,81 @@ class SpeedHero extends StatelessWidget {
 /// Segmented battery gauge — a 1:1 port of `drawBatteryCellsRow`: [cells] bordered
 /// segments, filled (green→yellow→orange→red by level) up to a continuous level
 /// with the boundary segment partially filled by width.
+/// HUD battery — one sharp meter with the % built in, replacing the old row of
+/// chunky cell-boxes plus a separate big number (which stated the charge twice).
+/// Faint ticks nod to the pack without the clutter; the % takes the battery
+/// zone colour so health reads at a glance.
+class BatteryMeter extends StatelessWidget {
+  final int percent;
+  final int cells;
+  const BatteryMeter({super.key, required this.percent, this.cells = 10});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = Esk8Theme.batteryColor(percent.clamp(0, 100));
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text('$percent', style: Esk8Theme.number(50, color: c)),
+        Padding(
+          padding: const EdgeInsets.only(left: 1, bottom: 7),
+          child: Text('%', style: Esk8Theme.number(24, color: c)),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: SizedBox(
+            height: 24,
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(end: percent.clamp(0, 100).toDouble()),
+              duration: const Duration(milliseconds: 700),
+              curve: Curves.easeOut,
+              builder: (_, v, __) => CustomPaint(
+                painter: _MeterPainter(v, cells, c),
+                size: Size.infinite,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _MeterPainter extends CustomPainter {
+  final double percent; // fractional so the fill glides between readings
+  final int cells;
+  final Color fill;
+  _MeterPainter(this.percent, this.cells, this.fill);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width * (percent / 100.0).clamp(0.0, 1.0);
+    if (w > 0) {
+      canvas.drawRect(
+          Rect.fromLTWH(0, 0, w, size.height), Paint()..color = fill);
+    }
+    // page-bg ticks cut the fill into `cells` slices — the pack, minus the bulk
+    final tick = Paint()
+      ..color = Esk8Theme.scaffold
+      ..strokeWidth = 2.5;
+    for (var i = 1; i < cells; i++) {
+      final x = size.width * i / cells;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), tick);
+    }
+    canvas.drawRect(
+      (Offset.zero & size).deflate(0.75),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.5
+        ..color = Esk8Theme.border,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_MeterPainter old) =>
+      old.percent != percent || old.fill != fill;
+}
+
 class SegmentedBattery extends StatelessWidget {
   final int percent;
   final int cells;
@@ -379,7 +454,7 @@ class TopStatusBar extends StatelessWidget {
   final Widget? leadingWidget; // takes precedence over leadingIcon (for vectors)
   const TopStatusBar({
     super.key,
-    this.left = 'ESK8OS',
+    this.left = 'EVEE',
     this.center = '',
     this.right = '',
     this.leadingIcon,

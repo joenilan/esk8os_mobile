@@ -37,12 +37,16 @@ class HudView extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
       child: Column(
         children: [
-          // Speed — the hero. Given as much room as the layout allows (the
-          // surrounding gaps are tight) so the FittedBox scales it up large.
-          Expanded(child: Center(child: SpeedHero(value: '${t.speed.toInt()}', unit: speedUnit))),
+          // Speed — the hero. A big fixed size with balanced slack above/below
+          // (spacers) so it reads as a composed layout, not a number adrift in a
+          // void. The lower cluster anchors to the bottom.
+          const Spacer(flex: 2),
+          SpeedHero(value: '${t.speed.toInt()}', unit: speedUnit, maxSize: 212),
+          const Spacer(flex: 2),
           Divider(height: 1, thickness: 1, color: Esk8Theme.border),
-          const SizedBox(height: 6),
+          const SizedBox(height: 10),
           // Remote throttle/brake + signal-present icon (decoded PPM from the VESC).
+          // Labelled so the bar isn't cryptic; the icon colour is the link state.
           Row(
             children: [
               Icon(
@@ -51,17 +55,19 @@ class HudView extends StatelessWidget {
                 color: t.remoteConnected ? Esk8Theme.green : Esk8Theme.dim,
               ),
               const SizedBox(width: 8),
+              Text('THROTTLE', style: Esk8Theme.labelStyle),
+              const SizedBox(width: 12),
               Expanded(child: ThrottleBar(throttle: t.remoteConnected ? t.throttle : 0, height: 14)),
             ],
           ),
-          const SizedBox(height: 8),
-          SegmentedBattery(percent: t.battery, cells: cells),
-          const SizedBox(height: 2),
-          Text('${t.battery}%', style: Esk8Theme.number(38)),
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
+          BatteryMeter(percent: t.battery, cells: cells),
+          const SizedBox(height: 14),
           StatRow([
             StatTile(label: 'Watts', value: '${t.watts}', unit: 'W', valueSize: cellSize, padding: cellPad, valueColor: Esk8Theme.wattsColor(t.watts)),
-            StatTile(label: 'Volts', value: t.volts.toStringAsFixed(1), unit: 'V', valueSize: cellSize, padding: cellPad, valueColor: Esk8Theme.green),
+            // White, not green — green is reserved for genuine "good" signals
+            // (battery zone, cool temps), so it stays meaningful rather than decor.
+            StatTile(label: 'Volts', value: t.volts.toStringAsFixed(1), unit: 'V', valueSize: cellSize, padding: cellPad, valueColor: Esk8Theme.textPrimary),
           ]),
           const SizedBox(height: 8),
           StatRow([
