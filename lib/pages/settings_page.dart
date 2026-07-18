@@ -13,7 +13,7 @@ import 'wifi_export_page.dart';
 import '../widgets/esk8_widgets.dart';
 import '../widgets/esk8_theme.dart';
 
-/// Board theme names — the firmware recognises these (case-insensitive).
+/// Device theme names — the firmware recognises these (case-insensitive).
 const _themeNames = [
   'CAM',
   'EMBER',
@@ -25,7 +25,7 @@ const _themeNames = [
   'FOREST',
 ];
 
-Color get _accent => Esk8Theme.accent; // follows the board's selected theme
+Color get _accent => Esk8Theme.accent; // follows the device's selected theme
 const _hudFaces = ['speed', 'battery', 'volts', 'watts', 'safety'];
 const _batteryFocuses = ['pct', 'volts'];
 
@@ -104,9 +104,9 @@ class _SettingsPageState extends State<SettingsPage> {
     });
     try {
       final s = await widget.dev.readSettings();
-      if (s == null) throw StateError('Empty response from board');
+      if (s == null) throw StateError('Empty response from device');
       if (!mounted) return;
-      // Only follow the board's theme when it actually has one (TFT). OLED is
+      // Only follow the device's theme when it actually has one (TFT). OLED is
       // monochrome and headless has no display, so they send no theme — the
       // phone keeps its own.
       if (AppPrefs.themeSyncWithBoard && s.hasColorTheme) {
@@ -160,7 +160,7 @@ class _SettingsPageState extends State<SettingsPage> {
     setState(() => _writing = true);
     try {
       await widget.dev.writeSettings(partial);
-      // Re-read to confirm the board accepted the value.
+      // Re-read to confirm the device accepted the value.
       final s = await widget.dev.readSettings();
       if (s != null && mounted) {
         if (AppPrefs.themeSyncWithBoard) {
@@ -267,10 +267,10 @@ class _SettingsPageState extends State<SettingsPage> {
     if (ok == true) await _command(command, label);
   }
 
-  /// Offer to wipe the board's learned range calibration (pack resistance,
+  /// Offer to wipe the device's learned range calibration (pack resistance,
   /// deliverable energy, Wh/mi) so it re-learns from scratch. Used as a manual
   /// action and auto-offered after a battery-config change. Re-reads settings
-  /// so the Board-learned tile updates.
+  /// so the Device-learned tile updates.
   Future<void> _offerCalReset({required String message}) async {
     final ok = await showDialog<bool>(
       context: context,
@@ -570,7 +570,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             maxLength: 18,
                             textInputAction: TextInputAction.done,
                             decoration: const InputDecoration(
-                              labelText: 'Board name',
+                              labelText: 'Device name',
                               helperText:
                                   'Shown in the scan list · reboot to re-advertise',
                               border: InputBorder.none,
@@ -578,7 +578,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             onSubmitted: (v) => _write(
                               BoardSettings.writeJson(deviceName: v.trim()),
-                              'Board name',
+                              'Device name',
                             ),
                           ),
                         ),
@@ -589,7 +589,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             BoardSettings.writeJson(
                               deviceName: _nameCtrl.text.trim(),
                             ),
-                            'Board name',
+                            'Device name',
                           ),
                         ),
                       ],
@@ -793,14 +793,14 @@ class _SettingsPageState extends State<SettingsPage> {
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
                 child: Column(
                   children: [
-                    // Board-theme sync only when the board HAS a color theme
+                    // Board-theme sync only when the device HAS a color theme
                     // (TFT). OLED (mono) and headless send none, so the phone
                     // just manages its own theme.
                     if (s.hasColorTheme) ...[
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         title: const Text(
-                          'Sync with Board',
+                          'Sync with Device',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
@@ -819,7 +819,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       const Divider(height: 18),
                       _themePicker(
                         label: AppPrefs.themeSyncWithBoard
-                            ? 'Board + Phone Theme'
+                            ? 'Device + Phone Theme'
                             : 'Phone Theme',
                         value: AppPrefs.themeSyncWithBoard
                             ? s.theme
@@ -838,12 +838,12 @@ class _SettingsPageState extends State<SettingsPage> {
                       if (!AppPrefs.themeSyncWithBoard) ...[
                         const Divider(height: 18),
                         _themePicker(
-                          label: 'Board Theme',
+                          label: 'Device Theme',
                           value: s.theme,
                           icon: Icons.developer_board,
                           onChanged: (v) => _write(
                             BoardSettings.writeJson(theme: v),
-                            'Board theme',
+                            'Device theme',
                           ),
                         ),
                       ],
@@ -964,7 +964,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         'Limp floor',
                       ),
                     ),
-                    // On a self-learning board (fw 0.9.5+) the board owns the
+                    // On a self-learning board (fw 0.9.5+) the device owns the
                     // range model — it learns Wh/mi, pack resistance and real
                     // deliverable energy while riding, and IGNORES any whmi the
                     // app writes. So show only the read-only learned summary
@@ -976,18 +976,18 @@ class _SettingsPageState extends State<SettingsPage> {
                         contentPadding: EdgeInsets.zero,
                         leading: Icon(Icons.memory, color: _accent),
                         title: const Text(
-                          'Board-learned range model',
+                          'Device-learned range model',
                           style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                         subtitle: Text(
                           '${_boardCalSummary(s)}\n'
-                          'The board tunes this automatically while you ride.',
+                          'The device tunes this automatically while you ride.',
                         ),
                         trailing: TextButton(
                           onPressed: () => _offerCalReset(
                             message:
                                 'This wipes the learned pack resistance, '
-                                'deliverable energy and Wh/mi so the board '
+                                'deliverable energy and Wh/mi so the device '
                                 're-learns from scratch — use it after a '
                                 'battery change.',
                           ),
@@ -1089,7 +1089,7 @@ class _SettingsPageState extends State<SettingsPage> {
                           _loadingLastTrip
                               ? 'Checking trip history'
                               : lastTripCalibration?.subtitle ??
-                                    'No recorded trip with board energy yet',
+                                    'No recorded trip with device energy yet',
                         ),
                         trailing: FilledButton(
                           onPressed:
@@ -1162,7 +1162,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     _SegmentedStringRow(
                       icon: Icons.dashboard_customize,
-                      label: s.display == 'oled' ? 'OLED face' : 'Board HUD',
+                      label: s.display == 'oled' ? 'OLED face' : 'Device HUD',
                       values: _hudFaces,
                       selected: _hudFaces.contains(s.hudFace)
                           ? s.hudFace
@@ -1176,7 +1176,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       },
                       onChanged: (v) => _write(
                         BoardSettings.writeJson(hudFace: v),
-                        s.display == 'oled' ? 'OLED face' : 'Board HUD',
+                        s.display == 'oled' ? 'OLED face' : 'Device HUD',
                       ),
                     ),
                     if (s.display != 'oled')
@@ -1225,7 +1225,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                       subtitle: Text(
                         hasOnboardDisplay
-                            ? 'On-board status indicator light'
+                            ? 'On-device status indicator light'
                             : 'Headless status indicator light',
                       ),
                       secondary: Icon(Icons.lightbulb_outline, color: _accent),
@@ -1267,15 +1267,15 @@ class _SettingsPageState extends State<SettingsPage> {
                   ListTile(
                     leading: Icon(Icons.restart_alt, color: _accent),
                     title: const Text(
-                      'Reset board trip',
+                      'Reset device trip',
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                     subtitle: const Text(
-                      'Clears the board trip distance, moving time, and session stats',
+                      'Clears the device trip distance, moving time, and session stats',
                     ),
                     onTap: () => _confirmCommand(
                       command: Esk8Commands.tripReset,
-                      label: 'Reset board trip',
+                      label: 'Reset device trip',
                       message:
                           'This clears the trip counters stored on the ESP32. Recorded phone trips are not deleted.',
                       confirmText: 'Reset',
@@ -1288,7 +1288,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                     subtitle: const Text(
-                      'Start the board WiFi AP for session files and firmware updates',
+                      'Start the device WiFi AP for session files and firmware updates',
                     ),
                     trailing: const Icon(Icons.chevron_right),
                     onTap: () => Navigator.of(context).push(
@@ -1304,13 +1304,13 @@ class _SettingsPageState extends State<SettingsPage> {
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                     subtitle: const Text(
-                      'Starts the board TCP bridge; stop the board before using it',
+                      'Starts the device TCP bridge; stop the device before using it',
                     ),
                     onTap: () => _confirmCommand(
                       command: Esk8Commands.bridgeMode,
                       label: 'Start VESC bridge',
                       message:
-                          'Only use bridge mode while stopped. The board will expose ESK8-BRIDGE for desktop VESC Tool at 192.168.4.1:65102.',
+                          'Only use bridge mode while stopped. The device will expose ESK8-BRIDGE for desktop VESC Tool at 192.168.4.1:65102.',
                       confirmText: 'Start',
                     ),
                   ),
@@ -1321,7 +1321,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         OutlinedButton.icon(
                           onPressed: () => _command(
                             Esk8Commands.pagePrev,
-                            'Board page previous',
+                            'Device page previous',
                           ),
                           icon: const Icon(Icons.chevron_left),
                           label: const Text('Prev page'),
@@ -1329,7 +1329,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         OutlinedButton.icon(
                           onPressed: () => _command(
                             Esk8Commands.pageNext,
-                            'Board page next',
+                            'Device page next',
                           ),
                           icon: const Icon(Icons.chevron_right),
                           label: const Text('Next page'),
@@ -1340,13 +1340,13 @@ class _SettingsPageState extends State<SettingsPage> {
                   ListTile(
                     leading: Icon(Icons.power_settings_new, color: _accent),
                     title: const Text(
-                      'Reboot board',
+                      'Reboot device',
                       style: TextStyle(fontWeight: FontWeight.w600),
                     ),
                     subtitle: const Text('Restarts the ESP32 controller only'),
                     onTap: () => _confirmCommand(
                       command: Esk8Commands.reboot,
-                      label: 'Reboot board',
+                      label: 'Reboot device',
                       message:
                           'The phone will disconnect briefly while the ESP32 restarts.',
                       confirmText: 'Reboot',
@@ -1610,7 +1610,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         alignment: OverlayAlignment.center,
                         enableDrag: true,
                         positionGravity: PositionGravity.none,
-                        overlayTitle: 'ESK8OS trip',
+                        overlayTitle: 'EVEE trip',
                         flag: OverlayFlag.defaultFlag,
                       );
                       await Future.delayed(const Duration(milliseconds: 300));
@@ -1675,13 +1675,13 @@ class _SettingsPageState extends State<SettingsPage> {
                       ),
                     ),
                     subtitle: Text(
-                      'ESK8OS Companion ${_appVersion.isEmpty ? '…' : _appVersion}',
+                      'EVEE Companion ${_appVersion.isEmpty ? '…' : _appVersion}',
                     ),
                   ),
                   ListTile(
                     leading: Icon(Icons.developer_board, color: _accent),
                     title: const Text(
-                      'Board firmware',
+                      'Device firmware',
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -1744,7 +1744,7 @@ class _RangeCalibration {
     if (telemetry == null) {
       return const _RangeCalibration._(
         whPerMile: 0,
-        subtitle: 'Waiting for live board telemetry',
+        subtitle: 'Waiting for live device telemetry',
         canUse: false,
       );
     }
@@ -1794,7 +1794,7 @@ class _RangeCalibration {
     if (trip == null) {
       return const _RangeCalibration._(
         whPerMile: 0,
-        subtitle: 'No recorded trip with board energy yet',
+        subtitle: 'No recorded trip with device energy yet',
         canUse: false,
       );
     }

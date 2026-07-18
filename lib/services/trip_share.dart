@@ -34,7 +34,7 @@ class TripShare {
       final dir = await getTemporaryDirectory();
       final file = File('${dir.path}/esk8_ride_card.png');
       await file.writeAsBytes(bytes!.buffer.asUint8List());
-      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: 'My ESK8OS ride'));
+      await SharePlus.instance.share(ShareParams(files: [XFile(file.path)], subject: 'My EVEE ride'));
     } finally {
       entry.remove();
     }
@@ -89,7 +89,7 @@ class _TripCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text('ESK8OS', style: TextStyle(color: Esk8Theme.accent, fontWeight: FontWeight.bold, letterSpacing: 3, fontSize: 18)),
+              Text('EVEE', style: TextStyle(color: Esk8Theme.accent, fontWeight: FontWeight.bold, letterSpacing: 3, fontSize: 18)),
               Text(DateFormat('MMM d, yyyy · h:mm a').format(start), style: TextStyle(color: Esk8Theme.dim, fontSize: 13)),
             ],
           ),

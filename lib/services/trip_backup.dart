@@ -36,7 +36,7 @@ class TripBackup {
     await file.writeAsString(jsonEncode(out));
 
     await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path)], subject: 'ESK8OS trip backup'),
+      ShareParams(files: [XFile(file.path)], subject: 'EVEE trip backup'),
     );
     return trips.length;
   }
@@ -47,8 +47,8 @@ class TripBackup {
     final pts = await TripDatabase.instance.getTripTelemetry(tripId);
     final sb = StringBuffer()
       ..writeln('<?xml version="1.0" encoding="UTF-8"?>')
-      ..writeln('<gpx version="1.1" creator="ESK8OS" xmlns="http://www.topografix.com/GPX/1/1">')
-      ..writeln('<trk><name>ESK8OS ride ${start.toIso8601String()}</name><trkseg>');
+      ..writeln('<gpx version="1.1" creator="EVEE" xmlns="http://www.topografix.com/GPX/1/1">')
+      ..writeln('<trk><name>EVEE ride ${start.toIso8601String()}</name><trkseg>');
     for (final p in pts) {
       final t = DateTime.fromMillisecondsSinceEpoch(p['timestamp'] as int).toUtc().toIso8601String();
       sb
@@ -62,7 +62,7 @@ class TripBackup {
     final file = File('${dir.path}/esk8_ride_$tripId.gpx');
     await file.writeAsString(sb.toString());
     await SharePlus.instance.share(
-      ShareParams(files: [XFile(file.path)], subject: 'ESK8OS ride (GPX)'),
+      ShareParams(files: [XFile(file.path)], subject: 'EVEE ride (GPX)'),
     );
   }
 
@@ -75,7 +75,7 @@ class TripBackup {
 
     final data = jsonDecode(await picked.readAsString());
     if (data is! Map || data['trips'] is! List) {
-      throw const FormatException('Not a valid ESK8OS trip backup');
+      throw const FormatException('Not a valid EVEE trip backup');
     }
     final db = TripDatabase.instance;
     var count = 0;

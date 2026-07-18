@@ -6,7 +6,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 import 'esk8os_ble.dart';
 
-/// Scanning + connection wrapper around flutter_blue_plus for the ESK8OS
+/// Scanning + connection wrapper around flutter_blue_plus for the EVEE
 /// companion service. Build one [CompanionDevice] per connected board.
 class CompanionScanner {
   /// Request the runtime BLE permissions needed to scan/connect. On Android 12+
@@ -39,7 +39,7 @@ class CompanionScanner {
   static Future<void> stop() => FlutterBluePlus.stopScan();
 }
 
-/// A connected ESK8OS board: owns the GATT characteristics and exposes the
+/// A connected EVEE board: owns the GATT characteristics and exposes the
 /// telemetry stream plus settings/command helpers.
 class CompanionDevice implements Esk8Device {
   final BluetoothDevice device;
@@ -94,7 +94,7 @@ class CompanionDevice implements Esk8Device {
     final services = await device.discoverServices();
     final svc = services.firstWhere(
       (s) => s.uuid == Guid(Esk8Uuids.service),
-      orElse: () => throw StateError('ESK8OS companion service not found'),
+      orElse: () => throw StateError('EVEE companion service not found'),
     );
     for (final c in svc.characteristics) {
       if (c.uuid == Guid(Esk8Uuids.telemetry)) _telemetry = c;
@@ -104,7 +104,7 @@ class CompanionDevice implements Esk8Device {
       if (c.uuid == Guid(Esk8Uuids.baseConf)) _baseConf = c;
     }
     if (!isReady) {
-      throw StateError('ESK8OS companion characteristics missing');
+      throw StateError('EVEE companion characteristics missing');
     }
   }
 

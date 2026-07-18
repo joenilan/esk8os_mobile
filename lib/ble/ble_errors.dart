@@ -7,10 +7,10 @@ String friendlyBleError(Object e) {
   if (e is FlutterBluePlusException) {
     final code = e.code ?? 0;
     if (code == 133) {
-      return "The board didn't respond. Move closer and try again.";
+      return "The device didn't respond. Move closer and try again.";
     }
     if (code == 8 || code == 19) {
-      return 'The board dropped the connection. Make sure it’s powered on '
+      return 'The device dropped the connection. Make sure it’s powered on '
           'and try again.';
     }
     if (e.description != null && e.description!.isNotEmpty) {
@@ -20,7 +20,7 @@ String friendlyBleError(Object e) {
   }
   final s = e.toString();
   if (s.contains('timeout') || s.contains('Timeout')) {
-    return 'Timed out. Bring the board closer and try again.';
+    return 'Timed out. Bring the device closer and try again.';
   }
   return 'Something went wrong. Try again.';
 }

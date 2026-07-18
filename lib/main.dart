@@ -28,6 +28,7 @@ import 'views/trip_view.dart';
 import 'widgets/confirm_dialog.dart';
 import 'widgets/esk8_theme.dart';
 import 'widgets/esk8_widgets.dart';
+import 'widgets/evee_mark.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,14 +49,14 @@ void overlayMain() {
   );
 }
 
-Color get _accent => Esk8Theme.accent; // follows the board's selected theme
+Color get _accent => Esk8Theme.accent; // follows the device's selected theme
 
 class Esk8App extends StatelessWidget {
   const Esk8App({super.key});
 
   @override
   Widget build(BuildContext context) {
-    // Rebuild the whole app whenever the board's theme changes so the
+    // Rebuild the whole app whenever the device's theme changes so the
     // MaterialApp chrome (scaffold bg, colour scheme, light/dark) re-themes.
     return ValueListenableBuilder<int>(
       valueListenable: Esk8Theme.revision,
@@ -64,7 +65,7 @@ class Esk8App extends StatelessWidget {
             ? Brightness.light
             : Brightness.dark;
         return MaterialApp(
-          title: 'ESK8OS',
+          title: 'EVEE',
           debugShowCheckedModeBanner: false,
           theme: ThemeData(
             useMaterial3: true,
@@ -74,7 +75,7 @@ class Esk8App extends StatelessWidget {
               seedColor: Esk8Theme.accent,
               brightness: brightness,
             ),
-            // Board look everywhere: sharp corners (the board never rounds), flat
+            // Board look everywhere: sharp corners (the device never rounds), flat
             // bordered cards that share the bg. Applied globally so the Material
             // pages (settings, wifi, dialogs, inputs) match the dashboard.
             cardTheme: CardThemeData(
@@ -266,15 +267,10 @@ class _ScanPageState extends State<ScanPage> {
     ),
     child: Row(
       children: [
-        Expanded(
-          child: Text(
-            'ESK8OS',
-            style: TextStyle(
-              color: Esk8Theme.textPrimary,
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 2,
-            ),
+        const Expanded(
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: EveeWordmark(markSize: 20, fontSize: 24),
           ),
         ),
         IconButton(
@@ -293,24 +289,14 @@ class _ScanPageState extends State<ScanPage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 96,
-            height: 96,
-            alignment: Alignment.center,
-            decoration: Esk8Theme.panelBox(
-              borderColor: scanning ? Esk8Theme.accent : Esk8Theme.border,
-            ),
-            child: Icon(
-              scanning ? Icons.bluetooth_searching : Icons.skateboarding,
-              size: 44,
-              color: scanning ? Esk8Theme.accent : Esk8Theme.dim,
-            ),
-          ),
-          const SizedBox(height: 24),
+          // Brand front door — the app's first impression when nothing is
+          // paired yet. The wordmark is the hero; connection status sits under.
+          const EveeLockup(),
+          const SizedBox(height: 44),
           Text(
-            scanning ? 'SCANNING…' : 'NO BOARD CONNECTED',
+            scanning ? 'SCANNING…' : 'NO DEVICE CONNECTED',
             style: TextStyle(
-              fontSize: 18,
+              fontSize: 15,
               letterSpacing: 2.5,
               fontWeight: FontWeight.bold,
               color: Esk8Theme.textMuted,
@@ -319,8 +305,8 @@ class _ScanPageState extends State<ScanPage> {
           const SizedBox(height: 8),
           Text(
             scanning
-                ? 'Looking for nearby ESK8OS boards'
-                : 'Scan to pair your board over Bluetooth',
+                ? 'Looking for nearby EVEE devices'
+                : 'Scan to pair your EVEE device over Bluetooth',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, color: Esk8Theme.dim),
           ),
@@ -331,7 +317,7 @@ class _ScanPageState extends State<ScanPage> {
     ),
   );
 
-  /// Sharp accent-bordered SCAN button — mirrors the board's boxed labels.
+  /// Sharp accent-bordered SCAN button — mirrors the device's boxed labels.
   Widget _scanButton(bool scanning) => Material(
     color: Esk8Theme.panel,
     child: InkWell(
@@ -377,7 +363,7 @@ class _ScanPageState extends State<ScanPage> {
     children: [
       Padding(
         padding: const EdgeInsets.only(left: 4, bottom: 12),
-        child: const SectionTitle('Select your board'),
+        child: const SectionTitle('Select your device'),
       ),
       ...results.map(_resultRow),
       const SizedBox(height: 20),
@@ -385,7 +371,7 @@ class _ScanPageState extends State<ScanPage> {
     ],
   );
 
-  /// One scan result as a tappable bordered panel. The board advertises
+  /// One scan result as a tappable bordered panel. The device advertises
   /// [vtype, macHi, macLo] in manufacturer data (company 0xFFFF), so we show the
   /// right vehicle icon + pair code before connecting; fall back to the MAC tail.
   Widget _resultRow(ScanResult r) {
@@ -595,7 +581,7 @@ class _DashboardPageState extends State<DashboardPage>
           alignment: OverlayAlignment.center,
           enableDrag: true,
           positionGravity: PositionGravity.none,
-          overlayTitle: 'ESK8OS trip',
+          overlayTitle: 'EVEE trip',
           flag: OverlayFlag.defaultFlag,
         );
         _overlayShown = true;
@@ -708,7 +694,7 @@ class _DashboardPageState extends State<DashboardPage>
     }, onError: (_) {});
   }
 
-  /// On a BLE drop, retry connect() with backoff (the board is usually still
+  /// On a BLE drop, retry connect() with backoff (the device is usually still
   /// nearby — range blip, or a reboot taking a few seconds) before giving up and
   /// returning to the scan screen. The last telemetry frame stays on screen.
   Future<void> _handleReconnect() async {
@@ -786,9 +772,9 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  // App page -> board PageId. Mirrors the board's 8-page deck, plus the GPS MAP
-  // which is app-only (-1 = no board sync; it leaves the board where it is).
-  // Consolidated phone deck (the board keeps its own 8 pages; the app no longer
+  // App page -> board PageId. Mirrors the device's 8-page deck, plus the GPS MAP
+  // which is app-only (-1 = no board sync; it leaves the device where it is).
+  // Consolidated phone deck (the device keeps its own 8 pages; the app no longer
   // mirrors them 1:1). DASH absorbed POWER; TRIP is the map + stats + history;
   // DIAG absorbed SYSTEM.
   static const _pageNames = [
@@ -801,7 +787,7 @@ class _DashboardPageState extends State<DashboardPage>
   ];
 
   void _onPageChanged(int index) {
-    // App pages independently of the board now — the board self-navigates with its
+    // App pages independently of the device now — the device self-navigates with its
     // LEFT button. (PAGE_SET is still available as a command if we ever want an
     // explicit remote-control toggle; we just don't fire it on every swipe.)
     setState(() => _currentPage = index);
@@ -935,13 +921,11 @@ class _DashboardPageState extends State<DashboardPage>
                       ),
                     ),
                     child: TopStatusBar(
-                      leadingWidget: Vehicle.iconWidget(
-                        _boardSettings?.vehicleType ?? 0,
-                        size: 16,
-                        color: Esk8Theme.accent,
-                        customIcon: _boardSettings?.vehicleCustomIcon ?? 0,
+                      leadingWidget: const EveeWordmark(
+                        markSize: 15,
+                        fontSize: 18,
                       ),
-                      left: rider.isNotEmpty ? 'RIDER: $rider' : 'ESK8OS',
+                      left: rider.isNotEmpty ? '·  $rider' : '',
                       right: _clock(),
                     ),
                   ),
@@ -966,7 +950,7 @@ class _DashboardPageState extends State<DashboardPage>
                           ),
                           SizedBox(width: 8),
                           Text(
-                            'Reconnecting to board…',
+                            'Reconnecting to device…',
                             style: TextStyle(
                               color: Esk8Theme.yellow,
                               fontSize: 12,
@@ -1253,7 +1237,7 @@ class _DashboardPageState extends State<DashboardPage>
                                                       'PREV FACE',
                                                       () => _cmd(
                                                         Esk8Commands.pagePrev,
-                                                        'Board face',
+                                                        'Device face',
                                                       ),
                                                     ),
                                                   ),
@@ -1264,7 +1248,7 @@ class _DashboardPageState extends State<DashboardPage>
                                                       'NEXT FACE',
                                                       () => _cmd(
                                                         Esk8Commands.pageNext,
-                                                        'Board face',
+                                                        'Device face',
                                                       ),
                                                     ),
                                                   ),
@@ -1287,7 +1271,7 @@ class _DashboardPageState extends State<DashboardPage>
                                                     () => _cmdConfirm(
                                                       Esk8Commands.tripReset,
                                                       'Trip Reset',
-                                                      'Zeros the board\'s trip distance and moving-time. The lifetime odometer is unaffected.',
+                                                      'Zeros the device\'s trip distance and moving-time. The lifetime odometer is unaffected.',
                                                     ),
                                                   ),
                                                 ),
@@ -1330,7 +1314,7 @@ class _DashboardPageState extends State<DashboardPage>
                                                           : 'Bridge Mode',
                                                       _bridgeModeRequested
                                                           ? 'Stops VESC passthrough and returns the ESP32 to normal dashboard telemetry.'
-                                                          : 'Puts the board into VESC passthrough. Use Stop Bridge here when you are done.',
+                                                          : 'Puts the device into VESC passthrough. Use Stop Bridge here when you are done.',
                                                       confirmLabel:
                                                           _bridgeModeRequested
                                                           ? 'Stop'
@@ -1348,7 +1332,7 @@ class _DashboardPageState extends State<DashboardPage>
                                                     () => _cmdConfirm(
                                                       Esk8Commands.reboot,
                                                       'Reboot',
-                                                      'Restarts the board now. Telemetry will drop for a few seconds.',
+                                                      'Restarts the device now. Telemetry will drop for a few seconds.',
                                                     ),
                                                     danger: true,
                                                   ),

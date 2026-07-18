@@ -8,7 +8,7 @@ import 'esk8os_ble.dart';
 
 class MockDevice implements Esk8Device {
   @override
-  String get name => 'Mock ESK8 Board';
+  String get name => 'Mock EVEE';
 
   final _connectionState = StreamController<DeviceConnectionState>.broadcast();
   bool _isConnected = false;
@@ -74,7 +74,7 @@ class MockDevice implements Esk8Device {
     vehicleLabel: '',
     vehicleCustomIcon: 0,
     // Mimic fw 0.9.5+ on-board adaptive calibration so the settings page's
-    // "Board-learned calibration" tile shows in mock mode.
+    // "Device-learned calibration" tile shows in mock mode.
     hasBoardCal: true,
     calPackROhm: 78,
     calTypicalAmps: 16.4,

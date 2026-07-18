@@ -98,7 +98,7 @@ class TripRecorder extends ChangeNotifier {
     FlutterForegroundTask.addTaskDataCallback(_onFgData);
     await FlutterForegroundTask.startService(
       serviceId: 4242,
-      notificationTitle: 'ESK8OS — recording',
+      notificationTitle: 'EVEE — recording',
       notificationText: 'Tap to open',
       notificationButtons: _fgButtons(),
       callback: startTripTaskCallback,
@@ -108,7 +108,7 @@ class TripRecorder extends ChangeNotifier {
   void _updateFgNotification() {
     if (!_isRecording) return;
     FlutterForegroundTask.updateService(
-      notificationTitle: _paused ? 'ESK8OS — paused' : 'ESK8OS — recording',
+      notificationTitle: _paused ? 'EVEE — paused' : 'EVEE — recording',
       notificationText: 'Tap to open',
       notificationButtons: _fgButtons(),
     );

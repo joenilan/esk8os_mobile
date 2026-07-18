@@ -7,11 +7,11 @@ import '../ble/esk8os_ble.dart';
 import '../wifi/wifi_service.dart';
 
 /// Wireless serial console (fw 0.10.3+). Its own entry point, separate from
-/// Export/OTA: the board can't be on USB while the vehicle powers it, so this
+/// Export/OTA: the device can't be on USB while the vehicle powers it, so this
 /// is the way to reach `stat`, `diag`, `vesc faults`, `set`, `json` etc. with
 /// the ESC awake.
 ///
-/// The job here is simply to RAISE the board's WiFi and leave it up, so any
+/// The job here is simply to RAISE the device's WiFi and leave it up, so any
 /// device — this phone, a laptop, a PC — can connect and use the console at
 /// http://192.168.4.1/console (or /cmd?c=... for scripts). It does NOT tear
 /// the network down when you leave; the firmware auto-stops it after 10 min
@@ -79,11 +79,11 @@ class _ConsolePageState extends State<ConsolePage> {
     } catch (e) {
       setState(() {
         _phase = 0;
-        _error = 'Failed to enable board WiFi: $e';
+        _error = 'Failed to enable device WiFi: $e';
       });
       return;
     }
-    // Advance to the live screen ONLY when the board reports the AP is really
+    // Advance to the live screen ONLY when the device reports the AP is really
     // up (wifiOn flips true after the on-board L-press). Never advance on the
     // send alone — an unapproved request leaves nothing to connect to.
     _poll = Timer.periodic(const Duration(milliseconds: 1500), (t) async {
@@ -159,12 +159,12 @@ class _ConsolePageState extends State<ConsolePage> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text(
-            'Turns on the board\'s WiFi so any device — your PC, a laptop, or '
+            'Turns on the device\'s WiFi so any device — your PC, a laptop, or '
             'this phone — can reach the console. Same console as USB serial, '
             'but usable while the vehicle is powered (when USB can\'t be '
             'plugged in).\n\n'
-            'The board shows "ALLOW WIFI?" — press its LEFT button within 30 s '
-            'to approve. Buttonless boards approve automatically.',
+            'The device shows "ALLOW WIFI?" — press its LEFT button within 30 s '
+            'to approve. Buttonless devices approve automatically.',
           ),
           const SizedBox(height: 20),
           if (waiting) ...[
@@ -178,7 +178,7 @@ class _ConsolePageState extends State<ConsolePage> {
                 SizedBox(width: 12),
                 Expanded(
                   child: Text(
-                    'Press the board\'s LEFT button to approve — waiting for '
+                    'Press the device\'s LEFT button to approve — waiting for '
                     'the network to come up…',
                   ),
                 ),
@@ -186,7 +186,7 @@ class _ConsolePageState extends State<ConsolePage> {
             ),
           ] else if (_timedOut) ...[
             const Text(
-              'The board never reported its WiFi on. Approve on the board '
+              'The device never reported its WiFi on. Approve on the device '
               '(LEFT button) and try again — or, on older firmware that can\'t '
               'report status, continue once you\'ve approved it.',
               style: TextStyle(color: Colors.orangeAccent),
@@ -284,7 +284,7 @@ class _ConsolePageState extends State<ConsolePage> {
               Expanded(
                 child: Text(
                   'Or run from this phone (requires THIS phone joined to the '
-                  'board WiFi):',
+                  'device WiFi):',
                   style: TextStyle(color: Colors.grey, fontSize: 12),
                 ),
               ),
