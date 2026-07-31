@@ -50,24 +50,29 @@ class DiagView extends StatelessWidget {
     final t = telemetry;
     if (t == null) return const WaitingForTelemetry();
 
-    final connected = t.remoteConnected;
+    final driveLive = t.live;
+    final connected = driveLive && t.remoteConnected;
     final pct = (t.throttle.abs() * 100).round();
     final isBrake = t.throttle < -0.02;
     final isAccel = t.throttle > 0.02;
-    final throttleLabel = !connected
+    final throttleLabel = !driveLive
+        ? 'DRIVE OFF'
+        : !connected
         ? 'NO SIGNAL'
         : isAccel
-            ? 'ACCEL $pct%'
-            : isBrake
-                ? 'BRAKE $pct%'
-                : 'CENTER';
-    final throttleColor = !connected
+        ? 'ACCEL $pct%'
+        : isBrake
+        ? 'BRAKE $pct%'
+        : 'CENTER';
+    final throttleColor = !driveLive
+        ? Esk8Theme.dim
+        : !connected
         ? Esk8Theme.dim
         : isAccel
-            ? Esk8Theme.green
-            : isBrake
-                ? Esk8Theme.danger
-                : Esk8Theme.textPrimary;
+        ? Esk8Theme.green
+        : isBrake
+        ? Esk8Theme.danger
+        : Esk8Theme.textPrimary;
 
     final faultOk = t.fault == 0;
 
@@ -83,25 +88,51 @@ class DiagView extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('BRAKE',
-                          style: TextStyle(fontSize: 11, color: Esk8Theme.danger, letterSpacing: 1)),
-                      Text('ACCEL',
-                          style: TextStyle(fontSize: 11, color: Esk8Theme.green, letterSpacing: 1)),
+                      Text(
+                        'BRAKE',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Esk8Theme.danger,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      Text(
+                        'ACCEL',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Esk8Theme.green,
+                          letterSpacing: 1,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 4),
                   ThrottleBar(throttle: connected ? t.throttle : 0),
                   const SizedBox(height: 6),
-                  Text(throttleLabel,
-                      style: TextStyle(
-                          fontSize: 16, color: throttleColor, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                  Text(
+                    throttleLabel,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: throttleColor,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1,
+                    ),
+                  ),
                 ],
               ),
             ),
             FieldRow(
               label: 'Signal',
-              value: connected ? 'CONNECTED' : 'NO SIGNAL',
-              valueColor: connected ? Esk8Theme.green : Esk8Theme.danger,
+              value: !driveLive
+                  ? '--'
+                  : connected
+                  ? 'CONNECTED'
+                  : 'NO SIGNAL',
+              valueColor: !driveLive
+                  ? Esk8Theme.dim
+                  : connected
+                  ? Esk8Theme.green
+                  : Esk8Theme.danger,
               valueSize: 20,
             ),
           ],
@@ -111,8 +142,16 @@ class DiagView extends StatelessWidget {
           rows: [
             FieldRow(
               label: 'Fault',
-              value: faultOk ? 'OK' : _faultName(t.fault),
-              valueColor: faultOk ? Esk8Theme.green : Esk8Theme.danger,
+              value: !driveLive
+                  ? '--'
+                  : faultOk
+                  ? 'OK'
+                  : _faultName(t.fault),
+              valueColor: !driveLive
+                  ? Esk8Theme.dim
+                  : faultOk
+                  ? Esk8Theme.green
+                  : Esk8Theme.danger,
               valueSize: 20,
             ),
             if (t.lastFault != 0)
@@ -129,8 +168,14 @@ class DiagView extends StatelessWidget {
             ),
             FieldRow(
               label: '2nd motor (CAN)',
-              value: t.slaveOnline ? 'ONLINE' : 'OFFLINE',
-              valueColor: t.slaveOnline ? Esk8Theme.green : Esk8Theme.dim,
+              value: !driveLive
+                  ? '--'
+                  : t.slaveOnline
+                  ? 'ONLINE'
+                  : 'OFFLINE',
+              valueColor: driveLive && t.slaveOnline
+                  ? Esk8Theme.green
+                  : Esk8Theme.dim,
               valueSize: 20,
             ),
           ],
@@ -138,15 +183,42 @@ class DiagView extends StatelessWidget {
         FieldSection(
           title: 'Motors',
           rows: [
-            FieldRow(label: 'Master current', value: t.masterMotorAmps.toStringAsFixed(1), unit: 'A'),
-            FieldRow(label: 'Slave current', value: t.slaveMotorAmps.toStringAsFixed(1), unit: 'A'),
+            FieldRow(
+              label: 'Master current',
+              value: driveLive ? t.masterMotorAmps.toStringAsFixed(1) : '--',
+              unit: 'A',
+              valueColor: driveLive ? null : Esk8Theme.dim,
+            ),
+            FieldRow(
+              label: 'Slave current',
+              value: driveLive ? t.slaveMotorAmps.toStringAsFixed(1) : '--',
+              unit: 'A',
+              valueColor: driveLive ? null : Esk8Theme.dim,
+            ),
           ],
         ),
         FieldSection(
           title: 'System',
           rows: [
-            FieldRow(label: 'Runtime', value: _hms(t.rideSeconds), valueSize: 22),
-            FieldRow(label: 'Link', value: 'BLE', valueColor: Esk8Theme.green, valueSize: 20),
+            FieldRow(
+              label: 'Runtime',
+              value: _hms(t.rideSeconds),
+              valueSize: 22,
+            ),
+            FieldRow(
+              label: 'Link',
+              value: 'BLE',
+              valueColor: Esk8Theme.green,
+              valueSize: 20,
+            ),
+            FieldRow(
+              label: 'Battery data',
+              value: t.batteryLive ? 'LIVE' : 'UNAVAILABLE',
+              valueColor: t.batteryLive ? Esk8Theme.green : Esk8Theme.dim,
+              trailing: t.batteryLive ? t.batterySourceLabel : null,
+              trailingColor: Esk8Theme.yellow,
+              valueSize: 20,
+            ),
           ],
         ),
       ],
@@ -155,7 +227,9 @@ class DiagView extends StatelessWidget {
 
   static String _hms(int s) {
     final h = s ~/ 3600, m = (s % 3600) ~/ 60, sec = s % 60;
-    if (h > 0) return '$h:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+    if (h > 0) {
+      return '$h:${m.toString().padLeft(2, '0')}:${sec.toString().padLeft(2, '0')}';
+    }
     return '$m:${sec.toString().padLeft(2, '0')}';
   }
 }

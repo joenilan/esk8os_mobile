@@ -15,6 +15,8 @@ import 'ble/esk8os_ble.dart';
 import 'ble/mock_device.dart';
 import 'database/trip_database.dart';
 import 'pages/settings_page.dart';
+import 'pages/phone_ride_page.dart';
+import 'pages/trip_history_page.dart';
 import 'pages/wifi_export_page.dart';
 import 'pages/console_page.dart';
 import 'services/app_prefs.dart';
@@ -38,7 +40,7 @@ void main() async {
   Esk8Theme.applyTheme(AppPrefs.phoneTheme);
   TripDatabase.instance
       .recoverOrphans(); // finalize any trip left open by a kill
-  SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   runApp(const Esk8App());
 }
 
@@ -142,6 +144,46 @@ class ScanPage extends StatefulWidget {
 class _ScanPageState extends State<ScanPage> {
   String? _error;
   bool _connecting = false;
+  int? _tripCount;
+  int? _trailCount;
+  int? _waypointCount;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTripCount();
+  }
+
+  Future<void> _loadTripCount() async {
+    final trips = await TripDatabase.instance.getAllTrips();
+    final trails = await TripDatabase.instance.getTrailCount();
+    final waypoints = await TripDatabase.instance.getAllWaypoints();
+    if (mounted) {
+      setState(() {
+        _tripCount = trips.length;
+        _trailCount = trails;
+        _waypointCount = waypoints.length;
+      });
+    }
+  }
+
+  Future<void> _openRideLibrary() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TripHistoryPage(isMph: AppPrefs.preferredMph),
+      ),
+    );
+    await _loadTripCount();
+  }
+
+  Future<void> _openPhoneRide() async {
+    await CompanionScanner.stop();
+    if (!mounted) return;
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const PhoneRidePage()));
+    await _loadTripCount();
+  }
 
   Future<void> _scan() async {
     setState(() => _error = null);
@@ -153,9 +195,11 @@ class _ScanPageState extends State<ScanPage> {
     try {
       await CompanionScanner.start();
     } catch (e) {
-      setState(() => _error = e is FlutterBluePlusException
-          ? 'Scan failed — is Bluetooth on?'
-          : friendlyBleError(e));
+      setState(
+        () => _error = e is FlutterBluePlusException
+            ? 'Scan failed — is Bluetooth on?'
+            : friendlyBleError(e),
+      );
     }
   }
 
@@ -163,6 +207,7 @@ class _ScanPageState extends State<ScanPage> {
     await CompanionScanner.stop();
     setState(() => _connecting = true);
     final dev = CompanionDevice(device);
+    var scanForAnother = false;
     try {
       try {
         await dev.connect();
@@ -177,82 +222,98 @@ class _ScanPageState extends State<ScanPage> {
         }
       }
       if (!mounted) return;
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => DashboardPage(dev: dev)));
+      scanForAnother =
+          await Navigator.of(context).push<bool>(
+            MaterialPageRoute(builder: (_) => DashboardPage(dev: dev)),
+          ) ??
+          false;
     } catch (e) {
       if (mounted) setState(() => _error = friendlyBleError(e));
     } finally {
       if (mounted) setState(() => _connecting = false);
     }
+    if (scanForAnother && mounted) await _scan();
   }
 
   Future<void> _startMockMode() async {
     await CompanionScanner.stop();
     setState(() => _connecting = true);
     final dev = MockDevice();
+    var scanForAnother = false;
     try {
       await dev.connect();
       if (!mounted) return;
-      await Navigator.of(
-        context,
-      ).push(MaterialPageRoute(builder: (_) => DashboardPage(dev: dev)));
+      scanForAnother =
+          await Navigator.of(context).push<bool>(
+            MaterialPageRoute(builder: (_) => DashboardPage(dev: dev)),
+          ) ??
+          false;
     } catch (e) {
       if (mounted) setState(() => _error = 'Mock connect failed: $e');
     } finally {
       if (mounted) setState(() => _connecting = false);
     }
+    if (scanForAnother && mounted) await _scan();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Column(
-        children: [
-          _scanHeader(),
-          if (_error != null)
-            Container(
-              width: double.infinity,
-              color: Esk8Theme.danger.withValues(alpha: 0.12),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  Icon(Icons.error_outline, color: Esk8Theme.danger, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _error!,
-                      style: TextStyle(color: Esk8Theme.danger, fontSize: 13),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _scanHeader(),
+            if (_error != null)
+              Container(
+                width: double.infinity,
+                color: Esk8Theme.danger.withValues(alpha: 0.12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.error_outline,
+                      color: Esk8Theme.danger,
+                      size: 18,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _error!,
+                        style: TextStyle(color: Esk8Theme.danger, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (_connecting)
+              LinearProgressIndicator(
+                color: Esk8Theme.accent,
+                backgroundColor: Esk8Theme.border,
+              ),
+            Expanded(
+              child: StreamBuilder<List<ScanResult>>(
+                stream: CompanionScanner.results(),
+                initialData: const [],
+                builder: (_, snap) {
+                  final results = snap.data ?? const [];
+                  return StreamBuilder<bool>(
+                    stream: CompanionScanner.isScanning,
+                    initialData: false,
+                    builder: (_, scanSnap) {
+                      final scanning = scanSnap.data ?? false;
+                      return results.isEmpty
+                          ? _emptyState(scanning)
+                          : _resultsList(results, scanning);
+                    },
+                  );
+                },
               ),
             ),
-          if (_connecting)
-            LinearProgressIndicator(
-              color: Esk8Theme.accent,
-              backgroundColor: Esk8Theme.border,
-            ),
-          Expanded(
-            child: StreamBuilder<List<ScanResult>>(
-              stream: CompanionScanner.results(),
-              initialData: const [],
-              builder: (_, snap) {
-                final results = snap.data ?? const [];
-                return StreamBuilder<bool>(
-                  stream: CompanionScanner.isScanning,
-                  initialData: false,
-                  builder: (_, scanSnap) {
-                    final scanning = scanSnap.data ?? false;
-                    return results.isEmpty
-                        ? _emptyState(scanning)
-                        : _resultsList(results, scanning);
-                  },
-                );
-              },
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -275,27 +336,55 @@ class _ScanPageState extends State<ScanPage> {
           ),
         ),
         IconButton(
-          icon: Icon(Icons.bug_report, color: Esk8Theme.accent),
-          tooltip: 'Mock Mode',
-          onPressed: _connecting ? null : _startMockMode,
+          icon: Icon(Icons.route_outlined, color: Esk8Theme.accent),
+          tooltip: 'Ride library',
+          onPressed: _openRideLibrary,
+        ),
+        PopupMenuButton<String>(
+          tooltip: 'More',
+          color: Esk8Theme.panel,
+          icon: Icon(Icons.more_vert, color: Esk8Theme.textPrimary),
+          onSelected: (value) {
+            if (value == 'demo' && !_connecting) _startMockMode();
+          },
+          itemBuilder: (_) => [
+            PopupMenuItem<String>(
+              value: 'demo',
+              enabled: !_connecting,
+              child: Row(
+                children: [
+                  Icon(Icons.science_outlined, color: Esk8Theme.accent),
+                  const SizedBox(width: 12),
+                  const Text('Demo mode'),
+                ],
+              ),
+            ),
+          ],
         ),
       ],
     ),
   );
 
-  /// Anchored empty state: board icon + copy + a prominent sharp SCAN button.
+  /// Neutral EVEE empty state. Vehicle-specific identity only appears after an
+  /// advertisement or connection actually supplies a vehicle type.
   Widget _emptyState(bool scanning) => Center(
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Brand front door — the app's first impression when nothing is
-          // paired yet. The wordmark is the hero; connection status sits under.
-          const EveeLockup(),
-          const SizedBox(height: 44),
+          Container(
+            width: 92,
+            height: 92,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              border: Border.all(color: Esk8Theme.border),
+            ),
+            child: Icon(Icons.electric_bolt, color: Esk8Theme.accent, size: 44),
+          ),
+          const SizedBox(height: 28),
           Text(
-            scanning ? 'SCANNING…' : 'NO DEVICE CONNECTED',
+            scanning ? 'LOOKING FOR EVEE VEHICLES' : 'NO VEHICLE CONNECTED',
             style: TextStyle(
               fontSize: 15,
               letterSpacing: 2.5,
@@ -306,21 +395,60 @@ class _ScanPageState extends State<ScanPage> {
           const SizedBox(height: 8),
           Text(
             scanning
-                ? 'Looking for nearby EVEE devices'
-                : 'Scan to pair your EVEE device over Bluetooth',
+                ? 'Keep your EVEE-powered vehicle awake and nearby'
+                : 'Connect for live telemetry, or open your saved library',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 13, color: Esk8Theme.dim),
           ),
           const SizedBox(height: 28),
           _scanButton(scanning),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _openPhoneRide,
+            icon: const Icon(Icons.gps_fixed, size: 18),
+            label: const Text(
+              'START PHONE RIDE',
+              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.4),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Esk8Theme.accent,
+              side: BorderSide(color: Esk8Theme.accent),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 15),
+            ),
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: _openRideLibrary,
+            icon: const Icon(Icons.route_outlined, size: 18),
+            label: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                _tripCount == null ||
+                        _trailCount == null ||
+                        _waypointCount == null
+                    ? 'LIBRARY'
+                    : 'LIBRARY · $_tripCount RIDES · $_trailCount TRAILS · '
+                          '$_waypointCount POIS',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.4,
+                ),
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Esk8Theme.textPrimary,
+              side: BorderSide(color: Esk8Theme.border),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 15),
+            ),
+          ),
         ],
       ),
     ),
   );
 
-  /// Sharp accent-bordered SCAN button — mirrors the device's boxed labels.
+  /// Sharp filled primary action for discovering EVEE-powered vehicles.
   Widget _scanButton(bool scanning) => Material(
-    color: Esk8Theme.panel,
+    color: scanning ? Esk8Theme.panel : Esk8Theme.accent,
     child: InkWell(
       onTap: (scanning || _connecting) ? null : _scan,
       child: Container(
@@ -341,16 +469,16 @@ class _ScanPageState extends State<ScanPage> {
                 : Icon(
                     Icons.bluetooth_searching,
                     size: 18,
-                    color: Esk8Theme.accent,
+                    color: Colors.white,
                   ),
             const SizedBox(width: 10),
             Text(
-              scanning ? 'SCANNING' : 'SCAN',
+              scanning ? 'SCANNING' : 'SCAN FOR VEHICLE',
               style: TextStyle(
                 fontSize: 15,
                 letterSpacing: 3,
                 fontWeight: FontWeight.bold,
-                color: Esk8Theme.accent,
+                color: scanning ? Esk8Theme.accent : Colors.white,
               ),
             ),
           ],
@@ -415,11 +543,17 @@ class _ScanPageState extends State<ScanPage> {
                   decoration: BoxDecoration(
                     border: Border.all(color: Esk8Theme.accent),
                   ),
-                  child: Vehicle.iconWidget(
-                    vtype,
-                    color: Esk8Theme.accent,
-                    size: 24,
-                  ),
+                  child: hasMfg
+                      ? Vehicle.iconWidget(
+                          vtype,
+                          color: Esk8Theme.accent,
+                          size: 24,
+                        )
+                      : Icon(
+                          Icons.electric_bolt,
+                          color: Esk8Theme.accent,
+                          size: 24,
+                        ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -502,6 +636,8 @@ class _DashboardPageState extends State<DashboardPage>
   StreamSubscription<Telemetry>? _telSub;
   StreamSubscription<DeviceConnectionState>? _connSub;
   bool _reconnecting = false;
+  bool _leavingDashboard = false;
+  bool _disconnectIssued = false;
   BoardSettings? _boardSettings;
 
   // Start deep in a large virtual range so the deck wraps both ways (last page
@@ -541,6 +677,7 @@ class _DashboardPageState extends State<DashboardPage>
     _connSub = widget.dev.connectionState.listen((s) {
       if (s == DeviceConnectionState.disconnected &&
           mounted &&
+          !_leavingDashboard &&
           !_reconnecting) {
         _handleReconnect();
       }
@@ -557,6 +694,7 @@ class _DashboardPageState extends State<DashboardPage>
     }
     _autoTimer = Timer.periodic(const Duration(seconds: 1), (_) => _autoTick());
     _fetchSettings();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _applySystemUiMode());
   }
 
   void _setContentPageOpen(bool open) {
@@ -565,6 +703,7 @@ class _DashboardPageState extends State<DashboardPage>
       _contentPageOpen = open;
       if (open) _showControls = false;
     });
+    _applySystemUiMode();
   }
 
   /// Pop the floating window when a recording trip is backgrounded; dismiss it
@@ -596,8 +735,8 @@ class _DashboardPageState extends State<DashboardPage>
   void _pushOverlay() {
     final rec = TripRecorder.instance;
     final mph = _boardSettings?.mph ?? true;
-    final spd = mph ? rec.gpsSpeedKmh / 1.60934 : rec.gpsSpeedKmh;
-    final trip = mph ? rec.gpsDistanceM / 1609.34 : rec.gpsDistanceM / 1000.0;
+    final spd = mph ? rec.effectiveSpeedKmh / 1.60934 : rec.effectiveSpeedKmh;
+    final trip = mph ? rec.effectiveTripKm / 1.60934 : rec.effectiveTripKm;
     final pos = rec.currentPosition;
     FlutterOverlayWindow.shareData(
       jsonEncode({
@@ -605,6 +744,7 @@ class _DashboardPageState extends State<DashboardPage>
         'unit': mph ? 'MPH' : 'KM/H',
         'trip': trip.toStringAsFixed(2),
         'tu': mph ? 'mi' : 'km',
+        'src': rec.distanceSource,
         'time': _fmtElapsed(rec.elapsed),
         'paused': rec.isPaused,
         // Map fields — guarded; rider may have no fix yet.
@@ -637,11 +777,11 @@ class _DashboardPageState extends State<DashboardPage>
       if (!rec.isRecording) {
         // Only auto-start after a real stop since the last trip — so a manual
         // Stop sticks (and the always-moving mock never auto-restarts).
-        if (_seenStopped && t.speed > 5) {
+        if (_seenStopped && t.live && t.speed > 5) {
           _seenStopped = false;
           rec.start(widget.dev, isMph: _boardSettings?.mph ?? true);
         }
-      } else if (!rec.isPaused) {
+      } else if (rec.recordingUsesBoard && !rec.isPaused) {
         if (t.speed < 1) {
           _stoppedSince ??= DateTime.now();
           if (DateTime.now().difference(_stoppedSince!).inMinutes >= 3) {
@@ -656,7 +796,7 @@ class _DashboardPageState extends State<DashboardPage>
 
     final alert = AppPrefs.speedAlert;
     if (alert > 0) {
-      final over = t.speed >= alert;
+      final over = t.live && t.speed >= alert;
       if (over && !_wasOverSpeed) HapticFeedback.heavyImpact();
       _wasOverSpeed = over;
     }
@@ -666,6 +806,7 @@ class _DashboardPageState extends State<DashboardPage>
     try {
       final s = await widget.dev.readSettings();
       if (mounted && s != null) {
+        AppPrefs.preferredMph = s.mph;
         if (AppPrefs.themeSyncWithBoard) {
           AppPrefs.phoneTheme = s.theme;
           Esk8Theme.applyTheme(s.theme);
@@ -684,6 +825,7 @@ class _DashboardPageState extends State<DashboardPage>
       _latestT = t;
       final frameMph = t.mph;
       if (frameMph != null && _boardSettings?.mph != frameMph) {
+        AppPrefs.preferredMph = frameMph;
         final current = _boardSettings;
         if (current != null && mounted) {
           setState(() => _boardSettings = current.copyWith(mph: frameMph));
@@ -701,9 +843,13 @@ class _DashboardPageState extends State<DashboardPage>
   Future<void> _handleReconnect() async {
     if (_reconnecting || !mounted) return;
     setState(() => _reconnecting = true);
-    for (int attempt = 1; attempt <= 6 && mounted; attempt++) {
+    for (
+      int attempt = 1;
+      attempt <= 6 && mounted && !_leavingDashboard;
+      attempt++
+    ) {
       await Future.delayed(Duration(seconds: (attempt * 2).clamp(2, 8)));
-      if (!mounted) return;
+      if (!mounted || _leavingDashboard) return;
       try {
         await widget.dev.connect();
         _subscribeTelemetry();
@@ -715,21 +861,61 @@ class _DashboardPageState extends State<DashboardPage>
       }
     }
     if (mounted) {
-      setState(() => _reconnecting = false);
-      Navigator.of(context).pop(); // gave up — back to scan
+      setState(() {
+        _reconnecting = false;
+        _leavingDashboard = true;
+      });
+      Navigator.of(context).pop(true); // gave up — scan for another vehicle
     }
+  }
+
+  Future<void> _disconnectAndScan() async {
+    if (_leavingDashboard) return;
+    final recorder = TripRecorder.instance;
+    final finishBoardRide = recorder.recordingUsesBoard;
+    final ok = await confirmAction(
+      context,
+      title: 'Switch vehicles?',
+      message: finishBoardRide
+          ? 'EVEE will finish and save the active vehicle-backed ride, '
+                'disconnect from ${widget.dev.name}, and return to scanning.'
+          : recorder.recordingUsesPhoneOnly
+          ? 'EVEE will disconnect from ${widget.dev.name} and return to '
+                'scanning. Your phone-GPS ride will keep recording.'
+          : 'EVEE will disconnect from ${widget.dev.name} and immediately '
+                'return to scanning for another vehicle.',
+      confirmLabel: finishBoardRide ? 'Finish & switch' : 'Disconnect',
+    );
+    if (!ok || !mounted) return;
+
+    if (finishBoardRide) await recorder.stop();
+    if (!mounted) return;
+    setState(() {
+      _leavingDashboard = true;
+      _reconnecting = false;
+    });
+    _disconnectIssued = true;
+    try {
+      await widget.dev.disconnect();
+    } catch (_) {
+      // Still leave the dashboard. The transport is also closed again from
+      // native teardown when the route is disposed.
+      _disconnectIssued = false;
+    }
+    if (mounted) Navigator.of(context).pop(true);
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    unawaited(SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge));
     if (_overlayShown) FlutterOverlayWindow.closeOverlay();
     _telSub?.cancel();
     _telCtrl.close();
     _connSub?.cancel();
     _autoTimer?.cancel();
     _pageCtrl.dispose();
-    widget.dev.disconnect();
+    if (!_disconnectIssued) unawaited(widget.dev.disconnect());
     super.dispose();
   }
 
@@ -782,20 +968,33 @@ class _DashboardPageState extends State<DashboardPage>
   // and only then does the pack view appear. Appended before SETTINGS so it
   // reads as a board page, not a config page. Boards without a BMS never see it.
   List<String> get _pageNames => [
-        'HUD',
-        'DASH',
-        'TRIP',
-        'GRAPHS',
-        'DIAG',
-        if (widget.dev.hasBms) 'BMS',
-        'SETTINGS',
-      ];
+    'HUD',
+    'DASH',
+    'TRIP',
+    'GRAPHS',
+    'DIAG',
+    if (widget.dev.hasBms) 'BMS',
+    'SETTINGS',
+  ];
 
   void _onPageChanged(int index) {
     // App pages independently of the device now — the device self-navigates with its
     // LEFT button. (PAGE_SET is still available as a command if we ever want an
     // explicit remote-control toggle; we just don't fire it on every swipe.)
     setState(() => _currentPage = index);
+    _applySystemUiMode();
+  }
+
+  bool get _rideImmersive =>
+      !_contentPageOpen && _pageName(_currentPage) == 'TRIP';
+
+  void _applySystemUiMode() {
+    if (!mounted) return;
+    unawaited(
+      SystemChrome.setEnabledSystemUIMode(
+        _rideImmersive ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,
+      ),
+    );
   }
 
   String _pageName(int i) {
@@ -816,6 +1015,11 @@ class _DashboardPageState extends State<DashboardPage>
   };
 
   static String _telemetryStateText(Telemetry t) {
+    if (!t.live && t.batteryLive) {
+      return t.batterySource == 'daly'
+          ? 'DRIVE OFF · BMS LIVE'
+          : 'DRIVE OFF · ${t.batterySourceLabel} BATTERY LIVE';
+    }
     if (!t.live && !t.vescConnected) return 'NO VESC DATA · demo off';
     if (!t.live) return 'NO LIVE TELEMETRY';
     if (!t.vescConnected) return 'VESC LINK LOST';
@@ -872,35 +1076,38 @@ class _DashboardPageState extends State<DashboardPage>
     );
   }
 
-  Future<void> _openSettingsEditor() async {
+  /// Pushes into the deck's nested navigator so the top/bottom panels stay put.
+  /// Every sub-page opened from the dashboard goes through here — pushing on
+  /// the root navigator instead would cover the whole app and read as a
+  /// different app.
+  Future<void> _openContentPage(Widget page) async {
     setState(() => _showControls = false);
     final nav = _contentNavKey.currentState;
     if (nav == null) return;
-    await nav.push(
-      MaterialPageRoute(
-        builder: (_) => SettingsPage(dev: widget.dev, telemetry: _latestT),
-      ),
-    );
+    await nav.push(MaterialPageRoute(builder: (_) => page));
+  }
+
+  Future<void> _openSettingsEditor() async {
+    await _openContentPage(SettingsPage(dev: widget.dev, telemetry: _latestT));
+    if (!mounted) return;
     await _fetchSettings();
   }
 
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: _leavingDashboard,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         final nav = _contentNavKey.currentState;
         if (nav != null && nav.canPop()) {
           nav.pop(); // back out of settings / history / playback first
         } else {
-          // At the dashboard root: hand back to the OS (background the app).
-          // NOT Navigator.of(context).maybePop() — this PopScope IS that
-          // navigator's current route with canPop:false, so maybePop re-invokes
-          // this same callback, recursing through maybePop/findAncestorStateOfType
-          // as an unbounded microtask chain that pins the UI thread at 100% and
-          // ANRs (reproduced: rapid back presses at the root).
-          SystemNavigator.pop();
+          // At the connected dashboard root, Back means leave this vehicle and
+          // return to EVEE discovery. Reuse the deliberate disconnect flow so
+          // an active ride is handled consistently and reconnect does not race
+          // the route transition.
+          unawaited(_disconnectAndScan());
         }
       },
       child: Scaffold(
@@ -913,8 +1120,8 @@ class _DashboardPageState extends State<DashboardPage>
             final du = _boardSettings?.mph == true ? 'mi' : 'km';
             final rider = (_boardSettings?.rider ?? '').trim().toUpperCase();
             return SafeArea(
-              top: false,
-              bottom: false,
+              top: !_rideImmersive,
+              bottom: !_rideImmersive,
               child: Column(
                 children: [
                   // TOP PANEL — rider (left) · time (right). The centre is left
@@ -934,6 +1141,22 @@ class _DashboardPageState extends State<DashboardPage>
                       ),
                       left: rider.isNotEmpty ? '·  $rider' : '',
                       right: _clock(),
+                      trailingWidget: IconButton(
+                        tooltip: 'Disconnect / switch vehicle',
+                        onPressed: _leavingDashboard
+                            ? null
+                            : _disconnectAndScan,
+                        icon: Icon(
+                          Icons.bluetooth_disabled,
+                          color: Esk8Theme.accent,
+                          size: 19,
+                        ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints.tightFor(
+                          width: 30,
+                          height: 30,
+                        ),
+                      ),
                     ),
                   ),
 
@@ -968,7 +1191,10 @@ class _DashboardPageState extends State<DashboardPage>
                         ],
                       ),
                     ),
-                  if (!_reconnecting && t != null && t.rangeWarning != 0)
+                  if (!_reconnecting &&
+                      t != null &&
+                      t.live &&
+                      t.rangeWarning != 0)
                     Container(
                       width: double.infinity,
                       color: _rangeWarningColor(
@@ -989,13 +1215,17 @@ class _DashboardPageState extends State<DashboardPage>
                   if (!_reconnecting && t != null && !t.live)
                     Container(
                       width: double.infinity,
-                      color: Esk8Theme.orange.withValues(alpha: 0.18),
+                      color:
+                          (t.batteryLive ? Esk8Theme.yellow : Esk8Theme.orange)
+                              .withValues(alpha: 0.18),
                       padding: const EdgeInsets.symmetric(vertical: 5),
                       child: Text(
                         _telemetryStateText(t),
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          color: Esk8Theme.orange,
+                          color: t.batteryLive
+                              ? Esk8Theme.yellow
+                              : Esk8Theme.orange,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 0.7,
@@ -1124,13 +1354,19 @@ class _DashboardPageState extends State<DashboardPage>
                                           behavior: HitTestBehavior.translucent,
                                           onHorizontalDragEnd: (d) {
                                             final v = d.primaryVelocity ?? 0;
-                                            const dur = Duration(milliseconds: 280);
+                                            const dur = Duration(
+                                              milliseconds: 280,
+                                            );
                                             if (v < -120) {
                                               _pageCtrl.nextPage(
-                                                  duration: dur, curve: Curves.easeOut);
+                                                duration: dur,
+                                                curve: Curves.easeOut,
+                                              );
                                             } else if (v > 120) {
                                               _pageCtrl.previousPage(
-                                                  duration: dur, curve: Curves.easeOut);
+                                                duration: dur,
+                                                curve: Curves.easeOut,
+                                              );
                                             }
                                           },
                                           child: Center(
@@ -1242,8 +1478,10 @@ class _DashboardPageState extends State<DashboardPage>
                                             // A board with a screen but no buttons (0.91" OLED
                                             // builds) can't change its own face — these are its
                                             // only navigation. Button boards self-navigate.
-                                            if (_boardSettings?.hasButtons == false &&
-                                                _boardSettings?.display != 'none') ...[
+                                            if (_boardSettings?.hasButtons ==
+                                                    false &&
+                                                _boardSettings?.display !=
+                                                    'none') ...[
                                               Row(
                                                 children: [
                                                   Expanded(
@@ -1277,6 +1515,12 @@ class _DashboardPageState extends State<DashboardPage>
                                               _openSettingsEditor,
                                             ),
                                             const SizedBox(height: 10),
+                                            _controlAction(
+                                              Icons.swap_horiz,
+                                              'DISCONNECT / SWITCH VEHICLE',
+                                              _disconnectAndScan,
+                                            ),
+                                            const SizedBox(height: 10),
                                             Row(
                                               children: [
                                                 Expanded(
@@ -1295,16 +1539,11 @@ class _DashboardPageState extends State<DashboardPage>
                                                   child: _controlAction(
                                                     Icons.wifi,
                                                     'EXPORT / OTA',
-                                                    () => Navigator.of(context)
-                                                        .push(
-                                                          MaterialPageRoute(
-                                                            builder: (_) =>
-                                                                WifiExportPage(
-                                                                  dev: widget
-                                                                      .dev,
-                                                                ),
-                                                          ),
-                                                        ),
+                                                    () => _openContentPage(
+                                                      WifiExportPage(
+                                                        dev: widget.dev,
+                                                      ),
+                                                    ),
                                                   ),
                                                 ),
                                               ],
@@ -1362,12 +1601,8 @@ class _DashboardPageState extends State<DashboardPage>
                                             _controlAction(
                                               Icons.terminal,
                                               'CONSOLE',
-                                              () => Navigator.of(context).push(
-                                                MaterialPageRoute(
-                                                  builder: (_) => ConsolePage(
-                                                    dev: widget.dev,
-                                                  ),
-                                                ),
+                                              () => _openContentPage(
+                                                ConsolePage(dev: widget.dev),
                                               ),
                                             ),
                                           ],

@@ -155,7 +155,7 @@ class BatteryMeter extends StatelessWidget {
               tween: Tween<double>(end: percent.clamp(0, 100).toDouble()),
               duration: const Duration(milliseconds: 700),
               curve: Curves.easeOut,
-              builder: (_, v, __) => CustomPaint(
+              builder: (_, v, _) => CustomPaint(
                 painter: _MeterPainter(v, cells, c),
                 size: Size.infinite,
               ),
@@ -178,7 +178,9 @@ class _MeterPainter extends CustomPainter {
     final w = size.width * (percent / 100.0).clamp(0.0, 1.0);
     if (w > 0) {
       canvas.drawRect(
-          Rect.fromLTWH(0, 0, w, size.height), Paint()..color = fill);
+        Rect.fromLTWH(0, 0, w, size.height),
+        Paint()..color = fill,
+      );
     }
     // page-bg ticks cut the fill into `cells` slices — the pack, minus the bulk
     final tick = Paint()
@@ -444,6 +446,47 @@ class SubPageHeader extends StatelessWidget {
   }
 }
 
+/// Standard shell for every pushed sub-page (settings, library, playback,
+/// trail detail, console, export). One place decides the background, the
+/// header, and the system-inset behaviour so a page looks the same whether it
+/// was pushed into the dashboard deck or onto the root navigator from the scan
+/// screen.
+///
+/// The [SafeArea] is what makes both hosts work. Inside the deck the shell has
+/// already consumed the insets (and removed the cutout padding), so it costs
+/// nothing; as a root route it keeps the header clear of the status bar /
+/// camera cutout and the content clear of the gesture bar.
+class SubPageScaffold extends StatelessWidget {
+  final String title;
+  final List<Widget> actions;
+
+  /// Laid out in a [Column] directly beneath the header. Give the element that
+  /// should absorb the leftover height an [Expanded].
+  final List<Widget> children;
+
+  const SubPageScaffold({
+    super.key,
+    required this.title,
+    required this.children,
+    this.actions = const [],
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Esk8Theme.scaffold,
+      body: SafeArea(
+        child: Column(
+          children: [
+            SubPageHeader(title: title, actions: actions),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /// Top status strip — app wordmark · rider/connection · clock. Mirrors the
 /// board's header row.
 class TopStatusBar extends StatelessWidget {
@@ -451,7 +494,9 @@ class TopStatusBar extends StatelessWidget {
   final String center;
   final String right;
   final IconData? leadingIcon;
-  final Widget? leadingWidget; // takes precedence over leadingIcon (for vectors)
+  final Widget?
+  leadingWidget; // takes precedence over leadingIcon (for vectors)
+  final Widget? trailingWidget;
   const TopStatusBar({
     super.key,
     this.left = 'EVEE',
@@ -459,6 +504,7 @@ class TopStatusBar extends StatelessWidget {
     this.right = '',
     this.leadingIcon,
     this.leadingWidget,
+    this.trailingWidget,
   });
 
   @override
@@ -486,6 +532,10 @@ class TopStatusBar extends StatelessWidget {
           child: Center(child: Text(center, style: s)),
         ),
         Text(right, style: s),
+        if (trailingWidget != null) ...[
+          const SizedBox(width: 8),
+          trailingWidget!,
+        ],
       ],
     );
   }
@@ -713,8 +763,14 @@ class Vehicle {
   static const int custom = 5, euc = 6, onewheel = 7;
 
   static const _labels = [
-    'Skateboard', 'E-Bike', 'Scooter', 'Moped', 'Car',
-    'Custom', 'EUC', 'Onewheel',
+    'Skateboard',
+    'E-Bike',
+    'Scooter',
+    'Moped',
+    'Car',
+    'Custom',
+    'EUC',
+    'Onewheel',
   ];
 
   /// Picker display order — common PEVs first, custom last (enum values stay
@@ -723,35 +779,64 @@ class Vehicle {
 
   /// Icon choices offered for a Custom vehicle; `vicon` indexes this list.
   static const List<IconData> customIcons = [
-    Icons.bolt, Icons.two_wheeler, Icons.pedal_bike, Icons.directions_bike,
-    Icons.sports_motorsports, Icons.electric_rickshaw, Icons.surfing,
-    Icons.downhill_skiing, Icons.rocket_launch, Icons.agriculture,
-    Icons.directions_boat, Icons.airport_shuttle,
+    Icons.bolt,
+    Icons.two_wheeler,
+    Icons.pedal_bike,
+    Icons.directions_bike,
+    Icons.sports_motorsports,
+    Icons.electric_rickshaw,
+    Icons.surfing,
+    Icons.downhill_skiing,
+    Icons.rocket_launch,
+    Icons.agriculture,
+    Icons.directions_boat,
+    Icons.airport_shuttle,
   ];
 
   /// IconData fallback for places that can only take a glyph (e.g. a status
   /// bar). EUC/onewheel fall back to the nearest Material glyph here.
   static IconData icon(int type) {
     switch (type) {
-      case 0: return Icons.skateboarding;
-      case 1: return Icons.electric_bike;
-      case 2: return Icons.electric_scooter;
-      case 3: return Icons.electric_moped;
-      case 4: return Icons.electric_car;
-      case euc: return Icons.trip_origin;   // single wheel
-      case onewheel: return Icons.surfing;  // board
-      default: return Icons.bolt;
+      case 0:
+        return Icons.skateboarding;
+      case 1:
+        return Icons.electric_bike;
+      case 2:
+        return Icons.electric_scooter;
+      case 3:
+        return Icons.electric_moped;
+      case 4:
+        return Icons.electric_car;
+      case euc:
+        return Icons.trip_origin; // single wheel
+      case onewheel:
+        return Icons.surfing; // board
+      default:
+        return Icons.bolt;
     }
   }
 
   /// Full-fidelity icon widget: real vectors for EUC/onewheel, the chosen
   /// glyph for a custom vehicle, Material icons otherwise.
-  static Widget iconWidget(int type, {double size = 24, Color? color, int customIcon = 0}) {
+  static Widget iconWidget(
+    int type, {
+    double size = 24,
+    Color? color,
+    int customIcon = 0,
+  }) {
     switch (type) {
       case euc:
-        return _VehicleVector(size: size, color: color, make: (c) => _EucPainter(c));
+        return _VehicleVector(
+          size: size,
+          color: color,
+          make: (c) => _EucPainter(c),
+        );
       case onewheel:
-        return _VehicleVector(size: size, color: color, make: (c) => _OnewheelPainter(c));
+        return _VehicleVector(
+          size: size,
+          color: color,
+          make: (c) => _OnewheelPainter(c),
+        );
       case custom:
         final i = customIcon.clamp(0, customIcons.length - 1);
         return Icon(customIcons[i], size: size, color: color);
@@ -762,7 +847,9 @@ class Vehicle {
 
   /// Label for a type; a custom vehicle uses the rider's [customLabel] if set.
   static String label(int type, [String customLabel = '']) {
-    if (type == custom && customLabel.trim().isNotEmpty) return customLabel.trim();
+    if (type == custom && customLabel.trim().isNotEmpty) {
+      return customLabel.trim();
+    }
     return (type >= 0 && type < _labels.length) ? _labels[type] : 'Custom';
   }
 
@@ -775,7 +862,11 @@ class _VehicleVector extends StatelessWidget {
   final double size;
   final Color? color;
   final CustomPainter Function(Color) make;
-  const _VehicleVector({required this.size, required this.color, required this.make});
+  const _VehicleVector({
+    required this.size,
+    required this.color,
+    required this.make,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -803,15 +894,25 @@ class _EucPainter extends CustomPainter {
     final cx = s.width * 0.5;
     final wheelR = s.width * 0.30;
     final wheelCy = s.height * 0.62;
-    canvas.drawCircle(Offset(cx, wheelCy), wheelR, p);          // wheel
-    canvas.drawLine(Offset(cx, wheelCy - wheelR),
-        Offset(cx, s.height * 0.14), p);                        // body/pad stem
+    canvas.drawCircle(Offset(cx, wheelCy), wheelR, p); // wheel
+    canvas.drawLine(
+      Offset(cx, wheelCy - wheelR),
+      Offset(cx, s.height * 0.14),
+      p,
+    ); // body/pad stem
     final pedalY = wheelCy + wheelR * 0.15;
-    canvas.drawLine(Offset(cx - wheelR - s.width * 0.12, pedalY),
-        Offset(cx - wheelR + s.width * 0.02, pedalY), p);        // left pedal
-    canvas.drawLine(Offset(cx + wheelR - s.width * 0.02, pedalY),
-        Offset(cx + wheelR + s.width * 0.12, pedalY), p);        // right pedal
+    canvas.drawLine(
+      Offset(cx - wheelR - s.width * 0.12, pedalY),
+      Offset(cx - wheelR + s.width * 0.02, pedalY),
+      p,
+    ); // left pedal
+    canvas.drawLine(
+      Offset(cx + wheelR - s.width * 0.02, pedalY),
+      Offset(cx + wheelR + s.width * 0.12, pedalY),
+      p,
+    ); // right pedal
   }
+
   @override
   bool shouldRepaint(covariant _EucPainter old) => old.color != color;
 }
@@ -830,14 +931,26 @@ class _OnewheelPainter extends CustomPainter {
       ..strokeJoin = StrokeJoin.round;
     // board — a rounded capsule across the upper-middle
     final board = RRect.fromRectAndRadius(
-      Rect.fromLTWH(s.width * 0.12, s.height * 0.34, s.width * 0.76, s.height * 0.16),
+      Rect.fromLTWH(
+        s.width * 0.12,
+        s.height * 0.34,
+        s.width * 0.76,
+        s.height * 0.16,
+      ),
       Radius.circular(s.height * 0.08),
     );
     canvas.drawRRect(board, p);
     // one centre wheel below the board
-    final fill = Paint()..color = color..style = PaintingStyle.fill;
-    canvas.drawCircle(Offset(s.width * 0.5, s.height * 0.62), s.width * 0.15, fill);
+    final fill = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(
+      Offset(s.width * 0.5, s.height * 0.62),
+      s.width * 0.15,
+      fill,
+    );
   }
+
   @override
   bool shouldRepaint(covariant _OnewheelPainter old) => old.color != color;
 }

@@ -27,7 +27,14 @@ class HudView extends StatelessWidget {
     final speedUnit = isMph ? 'MPH' : 'KM/H';
     final distUnit = isMph ? 'MI' : 'KM';
     final cells = settings?.batterySeries ?? 12;
-    final hottestTemp = [t.motorTempC, t.escTempC, t.batteryTempC].reduce((a, b) => a > b ? a : b);
+    final validTemps = <int>[
+      if (t.live && t.motorTempC != 0) t.motorTempC,
+      if (t.live && t.escTempC != 0) t.escTempC,
+      if (t.batteryLive && t.batteryTempC != 0) t.batteryTempC,
+    ];
+    final hottestTemp = validTemps.isEmpty
+        ? null
+        : validTemps.reduce((a, b) => a > b ? a : b);
 
     // Display values are whole numbers (precision lives in the logs); dropping
     // the decimals frees width so the cell numbers can be big and glanceable.
@@ -41,7 +48,11 @@ class HudView extends StatelessWidget {
           // (spacers) so it reads as a composed layout, not a number adrift in a
           // void. The lower cluster anchors to the bottom.
           const Spacer(flex: 2),
-          SpeedHero(value: '${t.speed.toInt()}', unit: speedUnit, maxSize: 212),
+          SpeedHero(
+            value: t.live ? '${t.speed.toInt()}' : '--',
+            unit: speedUnit,
+            maxSize: 212,
+          ),
           const Spacer(flex: 2),
           Divider(height: 1, thickness: 1, color: Esk8Theme.border),
           const SizedBox(height: 10),
@@ -50,34 +61,93 @@ class HudView extends StatelessWidget {
           Row(
             children: [
               Icon(
-                t.remoteConnected ? Icons.sports_esports : Icons.sports_esports_outlined,
+                t.live && t.remoteConnected
+                    ? Icons.sports_esports
+                    : Icons.sports_esports_outlined,
                 size: 20,
-                color: t.remoteConnected ? Esk8Theme.green : Esk8Theme.dim,
+                color: t.live && t.remoteConnected
+                    ? Esk8Theme.green
+                    : Esk8Theme.dim,
               ),
               const SizedBox(width: 8),
               Text('THROTTLE', style: Esk8Theme.labelStyle),
               const SizedBox(width: 12),
-              Expanded(child: ThrottleBar(throttle: t.remoteConnected ? t.throttle : 0, height: 14)),
+              Expanded(
+                child: ThrottleBar(
+                  throttle: t.live && t.remoteConnected ? t.throttle : 0,
+                  height: 14,
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 14),
-          BatteryMeter(percent: t.battery, cells: cells),
+          if (t.batteryLive)
+            BatteryMeter(percent: t.battery, cells: cells)
+          else
+            const _UnavailableBattery(),
           const SizedBox(height: 14),
           StatRow([
-            StatTile(label: 'Watts', value: '${t.watts}', unit: 'W', valueSize: cellSize, padding: cellPad, valueColor: Esk8Theme.wattsColor(t.watts)),
+            StatTile(
+              label: 'Watts',
+              value: t.live ? '${t.watts}' : '--',
+              unit: 'W',
+              valueSize: cellSize,
+              padding: cellPad,
+              valueColor: t.live
+                  ? Esk8Theme.wattsColor(t.watts)
+                  : Esk8Theme.dim,
+            ),
             // White, not green — green is reserved for genuine "good" signals
             // (battery zone, cool temps), so it stays meaningful rather than decor.
-            StatTile(label: 'Volts', value: t.volts.toStringAsFixed(1), unit: 'V', valueSize: cellSize, padding: cellPad, valueColor: Esk8Theme.textPrimary),
+            StatTile(
+              label: 'Volts',
+              value: t.batteryLive ? t.volts.toStringAsFixed(1) : '--',
+              unit: 'V',
+              valueSize: cellSize,
+              padding: cellPad,
+              valueColor: t.batteryLive ? Esk8Theme.textPrimary : Esk8Theme.dim,
+            ),
           ]),
           const SizedBox(height: 8),
           StatRow([
-            StatTile(label: 'Range', value: t.range.toStringAsFixed(1), unit: distUnit, valueSize: cellSize, padding: cellPad),
+            StatTile(
+              label: 'Range',
+              value: t.batteryLive ? t.range.toStringAsFixed(1) : '--',
+              unit: distUnit,
+              valueSize: cellSize,
+              padding: cellPad,
+              valueColor: t.batteryLive ? null : Esk8Theme.dim,
+            ),
             // Hottest of the three sensors — motor/battery often have no thermistor
             // (read 0), so showing motor alone misleads; surface the real worst temp.
-            StatTile(label: 'Temp', value: '$hottestTemp', unit: '°C', valueSize: cellSize, padding: cellPad, valueColor: _tempColor(hottestTemp)),
+            StatTile(
+              label: 'Temp',
+              value: hottestTemp?.toString() ?? '--',
+              unit: '°C',
+              valueSize: cellSize,
+              padding: cellPad,
+              valueColor: hottestTemp == null
+                  ? Esk8Theme.dim
+                  : _tempColor(hottestTemp),
+            ),
           ]),
         ],
       ),
     );
   }
+}
+
+class _UnavailableBattery extends StatelessWidget {
+  const _UnavailableBattery();
+
+  @override
+  Widget build(BuildContext context) => Container(
+    height: 50,
+    alignment: Alignment.center,
+    decoration: BoxDecoration(border: Border.all(color: Esk8Theme.border)),
+    child: Text(
+      '--  BATTERY DATA',
+      style: Esk8Theme.number(24, color: Esk8Theme.dim),
+    ),
+  );
 }

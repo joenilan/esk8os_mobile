@@ -14,10 +14,10 @@ class BoltEMark extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => SizedBox(
-        width: size,
-        height: size,
-        child: CustomPaint(painter: _BoltEPainter(color ?? Esk8Theme.accent)),
-      );
+    width: size,
+    height: size,
+    child: CustomPaint(painter: _BoltEPainter(color ?? Esk8Theme.accent)),
+  );
 }
 
 class _BoltEPainter extends CustomPainter {
@@ -32,7 +32,11 @@ class _BoltEPainter extends CustomPainter {
     final k = size.height * (1 - 2 * pad) / 64.0;
     final lean = Matrix4.identity()
       ..setEntry(0, 3, 9.0) // translate x +9 (recentre the shear)
-      ..setEntry(0, 1, -math.tan(9 * math.pi / 180)); // skewX(-9°): forward rake
+      ..setEntry(
+        0,
+        1,
+        -math.tan(9 * math.pi / 180),
+      ); // skewX(-9°): forward rake
 
     canvas.save();
     canvas.translate(size.width / 2, size.height / 2);
@@ -44,9 +48,12 @@ class _BoltEPainter extends CustomPainter {
       ..color = color
       ..isAntiAlias = true;
     void bar(double x, double y, double w, double h) => canvas.drawRRect(
-        RRect.fromRectAndRadius(
-            Rect.fromLTWH(x, y, w, h), const Radius.circular(2)),
-        p);
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(x, y, w, h),
+        const Radius.circular(2),
+      ),
+      p,
+    );
     bar(40, 28, 14, 64); // spine
     bar(40, 28, 39, 14); // top arm
     bar(40, 78, 39, 14); // bottom arm
@@ -75,26 +82,30 @@ class EveeWordmark extends StatelessWidget {
   final double markSize;
   final double fontSize;
   final Color? textColor;
-  const EveeWordmark(
-      {super.key, this.markSize = 18, this.fontSize = 22, this.textColor});
+  const EveeWordmark({
+    super.key,
+    this.markSize = 18,
+    this.fontSize = 22,
+    this.textColor,
+  });
 
   @override
   Widget build(BuildContext context) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          BoltEMark(size: markSize, color: Esk8Theme.accent),
-          SizedBox(width: markSize * 0.4),
-          Text(
-            'EVEE',
-            style: GoogleFonts.bebasNeue(
-              fontSize: fontSize,
-              height: 1.0,
-              letterSpacing: 2.5,
-              color: textColor ?? Esk8Theme.textPrimary,
-            ),
-          ),
-        ],
-      );
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      BoltEMark(size: markSize, color: Esk8Theme.accent),
+      SizedBox(width: markSize * 0.4),
+      Text(
+        'EVEE',
+        style: GoogleFonts.bebasNeue(
+          fontSize: fontSize,
+          height: 1.0,
+          letterSpacing: 2.5,
+          color: textColor ?? Esk8Theme.textPrimary,
+        ),
+      ),
+    ],
+  );
 }
 
 /// The edition wordmark for a firmware vehicle type. The edition is a claim
@@ -121,21 +132,21 @@ class EveeLockup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          EveeWordmark(markSize: 44 * scale, fontSize: 56 * scale),
-          if (edition != null && edition!.isNotEmpty) ...[
-            SizedBox(height: 10 * scale),
-            Text(
-              'POWERED BY ${edition!}',
-              style: TextStyle(
-                color: Esk8Theme.dim,
-                fontSize: 11 * scale,
-                letterSpacing: 4 * scale,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ],
-      );
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      EveeWordmark(markSize: 44 * scale, fontSize: 56 * scale),
+      if (edition != null && edition!.isNotEmpty) ...[
+        SizedBox(height: 10 * scale),
+        Text(
+          'POWERED BY ${edition!}',
+          style: TextStyle(
+            color: Esk8Theme.dim,
+            fontSize: 11 * scale,
+            letterSpacing: 4 * scale,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ],
+    ],
+  );
 }

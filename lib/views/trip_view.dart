@@ -11,21 +11,24 @@ import '../ble/esk8os_ble.dart';
 import '../pages/trip_history_page.dart';
 import '../services/app_prefs.dart';
 import '../services/trip_recorder.dart';
+import '../widgets/confirm_dialog.dart';
 import '../widgets/esk8_theme.dart';
 
 /// Live ride map + trip controls. Recording itself lives in [TripRecorder]
 /// (app-level singleton) so it survives page swipes / screen-off / backgrounding;
 /// this view just observes the recorder and drives start/stop.
 class TripView extends StatefulWidget {
-  final Esk8Device dev;
+  final Esk8Device? dev;
   final Telemetry? telemetry;
   final BoardSettings? settings;
+  final bool? isMphOverride;
 
   const TripView({
     super.key,
-    required this.dev,
+    this.dev,
     required this.telemetry,
     required this.settings,
+    this.isMphOverride,
   });
 
   @override
@@ -34,12 +37,26 @@ class TripView extends StatefulWidget {
 
 class _TripViewState extends State<TripView>
     with TickerProviderStateMixin, AutomaticKeepAliveClientMixin {
+  static const Telemetry _phoneOnlyTelemetry = Telemetry(
+    live: false,
+    vescConnected: false,
+    batteryLive: false,
+    batterySource: 'none',
+    speed: 0,
+    battery: 0,
+    volts: 0,
+    watts: 0,
+    motorTempC: 0,
+    escTempC: 0,
+    range: 0,
+    maxSpeed: 0,
+    wattHours: 0,
+  );
+
   final MapController _mapController = MapController();
   final TripRecorder _rec = TripRecorder.instance;
 
   bool _locationReady = false;
-  bool _statsExpanded = false; // collapsed = speed only; tap to show all stats
-  bool _gpsCompare = false;
   bool _followMode = true;
   double _currentZoom = 16.0;
   // Persisted across page swipes / restarts (see AppPrefs).
@@ -247,7 +264,17 @@ class _TripViewState extends State<TripView>
   }
 
   Future<void> _toggleTracking() async {
+    if (_rec.isBusy) return;
     if (_rec.isRecording) {
+      final stop = await confirmAction(
+        context,
+        title: 'Finish this ride?',
+        message:
+            'EVEE will save the final route and stats, then stop GPS recording. '
+            'Use Pause if you plan to continue this ride.',
+        confirmLabel: 'Finish ride',
+      );
+      if (!stop) return;
       await _rec.stop();
     } else {
       final ok = await _rec.start(
@@ -256,8 +283,11 @@ class _TripViewState extends State<TripView>
       );
       if (!ok && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Location permission/service required to record'),
+          SnackBar(
+            content: Text(
+              _rec.lastError ??
+                  'Location permission/service required to record',
+            ),
           ),
         );
         return;
@@ -278,80 +308,85 @@ class _TripViewState extends State<TripView>
     return '${s}s';
   }
 
-  Widget _miniStat(String label, String value, {String? compare}) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      FittedBox(
-        fit: BoxFit.scaleDown,
-        alignment: Alignment.centerLeft,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.baseline,
-          textBaseline: TextBaseline.alphabetic,
-          children: [
-            Text(value, style: Esk8Theme.number(17, color: _ctlFg)),
-            if (compare != null) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Text(
-                  '|',
-                  style: TextStyle(color: _ctlDim, fontSize: 12),
-                ),
-              ),
-              Text(
-                compare,
-                style: Esk8Theme.number(17, color: Esk8Theme.accent),
-              ),
-            ],
-          ],
-        ),
+  Future<void> _showRideDetails({
+    required bool hasBoard,
+    required Telemetry telemetry,
+    required bool isMph,
+    required LatLng? position,
+    required String gpsStatus,
+    required String speedSource,
+    required double boardTripDisplay,
+    required Duration boardMovingTime,
+    required double boardMaxSpeedDisplay,
+    required double boardAvgDisplay,
+    required double boardMovingAvgDisplay,
+    required double gpsSpeedDisplay,
+    required double gpsTripDisplay,
+    required double gpsMaxSpeedDisplay,
+    required double gpsAvgDisplay,
+    required double gpsMovingAvgDisplay,
+    required Duration phoneElapsed,
+    required double climbDisplay,
+    required String climbUnit,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _RideDetailsSheet(
+        hasBoard: hasBoard,
+        telemetry: telemetry,
+        isMph: isMph,
+        position: position,
+        gpsStatus: gpsStatus,
+        speedSource: speedSource,
+        storageError: _rec.storageError,
+        boardTripDisplay: boardTripDisplay,
+        boardMovingTime: boardMovingTime,
+        boardMaxSpeedDisplay: boardMaxSpeedDisplay,
+        boardAvgDisplay: boardAvgDisplay,
+        boardMovingAvgDisplay: boardMovingAvgDisplay,
+        gpsSpeedDisplay: gpsSpeedDisplay,
+        gpsTripDisplay: gpsTripDisplay,
+        gpsMaxSpeedDisplay: gpsMaxSpeedDisplay,
+        gpsAvgDisplay: gpsAvgDisplay,
+        gpsMovingAvgDisplay: gpsMovingAvgDisplay,
+        phoneElapsed: phoneElapsed,
+        climbDisplay: climbDisplay,
+        climbUnit: climbUnit,
+        onHistory: () {
+          Navigator.pop(sheetContext);
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => TripHistoryPage(isMph: isMph)),
+          );
+        },
       ),
-      Text(
-        label,
-        style: TextStyle(
-          fontSize: 8,
-          color: _ctlDim,
-          letterSpacing: 0.5,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    ],
-  );
-
-  Widget _miniRow(
-    String l1,
-    String v1,
-    String l2,
-    String v2, {
-    String? c1,
-    String? c2,
-  }) => Row(
-    children: [
-      Expanded(child: _miniStat(l1, v1, compare: c1)),
-      Expanded(child: _miniStat(l2, v2, compare: c2)),
-    ],
-  );
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    final telemetry = widget.telemetry;
+    final isTracking = _rec.isRecording;
+    // A recording's source is fixed at Start. Connecting a vehicle midway
+    // through a phone ride must not silently relabel that ride as board-backed.
+    final hasBoard = isTracking ? _rec.recordingUsesBoard : widget.dev != null;
+    final telemetry = hasBoard
+        ? (_rec.latestTelemetry ?? widget.telemetry ?? _phoneOnlyTelemetry)
+        : _phoneOnlyTelemetry;
     final settings = widget.settings;
-
-    if (telemetry == null) {
-      return const Center(
-        child: Text(
-          'Waiting for telemetry…',
-          style: TextStyle(color: Colors.white),
-        ),
-      );
-    }
-
-    final isMph = settings?.mph == true;
+    final isMph =
+        settings?.mph ??
+        (hasBoard ? telemetry.mph : null) ??
+        widget.isMphOverride ??
+        AppPrefs.preferredMph;
     final unitStr = isMph ? 'MI' : 'KM';
     final speedUnitStr = isMph ? 'MPH' : 'KM/H';
 
-    final isTracking = _rec.isRecording;
+    final recordingState = _rec.state;
+    final recorderBusy = _rec.isBusy;
+    final gpsDegraded = isTracking && !_rec.gpsHealthy;
     final route = _rec.route;
     final pos = _rec.currentPosition ?? _initialCenter;
     // Draw the traveled line ENDING at the smoothed marker (not the raw latest
@@ -364,10 +399,9 @@ class _TripViewState extends State<TripView>
         ? [...route.sublist(0, route.length - 1), smoothNow]
         : route;
 
-    // ── TRIP DISTANCE + TIME come from the BOARD (canonical, matches the board
-    // screen): wheel distance and moving-time, independent of the phone. GPS still
-    // drives MAX/AVG/MOVE/CLIMB/route below. telemetry.trip is already in the
-    // board's display unit; tmov is moving seconds.
+    // Preserve the raw board and GPS values as separate evidence. The glance
+    // card uses the recorder's monotonic fusion so a live-but-stuck/reset board
+    // trip counter cannot freeze or erase the phone trip.
     final boardTripDisplay = telemetry.trip;
     final boardMovingTime = Duration(seconds: telemetry.tripMovingSeconds);
     // ── TRIP STATS (GPS-measured, per recording) — all 0 until you start ──
@@ -381,16 +415,31 @@ class _TripViewState extends State<TripView>
     final gpsSpeedDisplay = isMph
         ? (_rec.gpsSpeedKmh / 1.60934)
         : _rec.gpsSpeedKmh;
+    final effectiveTripDisplay = isTracking
+        ? (isMph ? _rec.effectiveTripKm / 1.60934 : _rec.effectiveTripKm)
+        : (hasBoard ? boardTripDisplay : gpsTripDistDisplay);
+    final effectiveTripSource = isTracking
+        ? _rec.distanceSource
+        : (hasBoard ? 'BOARD' : 'GPS');
+    final effectiveMovingTime = isTracking
+        ? _rec.effectiveMovingTime
+        : (hasBoard ? boardMovingTime : _rec.elapsed);
     // Big speed number: the trusted source. While recording, the recorder
     // picks board-when-live / GPS-when-not; when idle, the live board feed.
-    final bool boardLive = _rec.isRecording
-        ? _rec.boardLive
-        : (telemetry.live && telemetry.vescConnected);
+    final bool boardLive = _rec.isRecording ? _rec.boardLive : telemetry.live;
+    final bool gpsLive = _rec.isRecording && _rec.gpsLive;
     final double effSpeedKmh = _rec.isRecording
         ? _rec.effectiveSpeedKmh
-        : ((telemetry.mph ?? true) ? telemetry.speed * 1.60934 : telemetry.speed);
+        : ((telemetry.mph ?? true)
+              ? telemetry.speed * 1.60934
+              : telemetry.speed);
     final double bigSpeedDisplay = isMph ? effSpeedKmh / 1.60934 : effSpeedKmh;
-    final String speedSource = boardLive ? 'BOARD' : 'GPS';
+    final bool speedAvailable = boardLive || gpsLive;
+    final String speedSource = boardLive
+        ? 'BOARD'
+        : gpsLive
+        ? 'GPS'
+        : '--';
     final elapsed = _rec.elapsed;
     // Averages need a few seconds of elapsed time to be meaningful — dividing a
     // little distance by a ~1 s window otherwise spikes to absurd values in the
@@ -414,6 +463,31 @@ class _TripViewState extends State<TripView>
         : 0.0;
     final climbDisplay = isMph ? _rec.elevGainM * 3.28084 : _rec.elevGainM;
     final climbUnit = isMph ? 'FT' : 'M';
+    final gpsStatus = isTracking
+        ? _rec.gpsQualityLabel
+        : _locationReady
+        ? 'GPS READY'
+        : 'ACQUIRING GPS…';
+    final recordingLabel = !_rec.storageHealthy
+        ? 'STORAGE WARNING'
+        : switch (recordingState) {
+            TripRecordingState.starting => 'PREPARING RIDE',
+            TripRecordingState.recording => 'RECORDING',
+            TripRecordingState.paused => 'RIDE PAUSED',
+            TripRecordingState.stopping => 'SAVING RIDE',
+            TripRecordingState.error => 'RECORDER NEEDS ATTENTION',
+            TripRecordingState.idle => 'READY TO RIDE',
+          };
+    final recordingColor = !_rec.storageHealthy
+        ? Esk8Theme.danger
+        : switch (recordingState) {
+            TripRecordingState.recording => Esk8Theme.accent,
+            TripRecordingState.paused => Esk8Theme.yellow,
+            TripRecordingState.starting ||
+            TripRecordingState.stopping => Esk8Theme.orange,
+            TripRecordingState.error => Esk8Theme.danger,
+            TripRecordingState.idle => _ctlDim,
+          };
 
     return Stack(
       children: [
@@ -545,327 +619,54 @@ class _TripViewState extends State<TripView>
             ),
           ),
 
-        // Top-left: GPS status + history
+        // One glanceable ride surface: source/state, speed, canonical board
+        // distance/time, and battery. Tap for diagnostics and GPS comparison.
         Positioned(
-          top: 48,
+          top: 44,
           left: 16,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: _ctlBg,
-                  border: Border.all(color: _ctlBorder),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.gps_fixed,
-                      size: 14,
-                      color: (_locationReady || isTracking)
-                          ? Esk8Theme.accent
-                          : _ctlDim,
-                    ),
-                    const SizedBox(width: 6),
-                    Text(
-                      (_locationReady || isTracking)
-                          ? 'GPS LOCKED'
-                          : 'ACQUIRING GPS…',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1,
-                        color: (_locationReady || isTracking)
-                            ? _ctlFg
-                            : _ctlDim,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (pos != null) ...[
-                const SizedBox(height: 4),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _ctlBg,
-                    border: Border.all(color: _ctlBorder),
-                  ),
-                  child: Text(
-                    '${pos.latitude.toStringAsFixed(5)}, ${pos.longitude.toStringAsFixed(5)}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: _ctlDim,
-                      fontFamily: 'monospace',
-                    ),
-                  ),
-                ),
-              ],
-              const SizedBox(height: 8),
-              GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => TripHistoryPage(isMph: isMph),
-                    ),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _ctlBg,
-                    border: Border.all(color: _ctlBorder),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.history, size: 14, color: _ctlFg),
-                      const SizedBox(width: 6),
-                      Text(
-                        'HISTORY',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                          color: _ctlFg,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              GestureDetector(
-                onTap: () => setState(() {
-                  _gpsCompare = !_gpsCompare;
-                  if (_gpsCompare) _statsExpanded = true;
-                }),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 6,
-                  ),
-                  decoration: BoxDecoration(
-                    color: _ctlBg,
-                    border: Border.all(
-                      color: _gpsCompare ? Esk8Theme.accent : _ctlBorder,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.compare_arrows, size: 14, color: _ctlFg),
-                      const SizedBox(width: 6),
-                      Text(
-                        _gpsCompare ? 'GPS ON' : 'COMPARE',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1,
-                          color: _ctlFg,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Top-right: ONE compact card. Collapsed = just speed (map stays the
-        // star); tap it to expand the full trip-stats grid.
-        Positioned(
-          top: 48,
-          right: 12,
-          child: GestureDetector(
-            onTap: () => setState(() => _statsExpanded = !_statsExpanded),
-            child: Container(
-              width: _statsExpanded
-                  ? (_gpsCompare ? 190 : 156)
-                  : (_gpsCompare ? 126 : 96),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
-                color: _ctlBg,
-                border: Border.all(color: _ctlBorder),
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.baseline,
-                    textBaseline: TextBaseline.alphabetic,
-                    children: [
-                      Flexible(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.baseline,
-                            textBaseline: TextBaseline.alphabetic,
-                            children: [
-                              Text(
-                                '${bigSpeedDisplay.toInt()}',
-                                style: Esk8Theme.number(38, color: _ctlFg),
-                              ),
-                              if (_gpsCompare) ...[
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 6,
-                                  ),
-                                  child: Text(
-                                    '|',
-                                    style: TextStyle(
-                                      color: _ctlDim,
-                                      fontSize: 20,
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  '${gpsSpeedDisplay.toInt()}',
-                                  style: Esk8Theme.number(
-                                    38,
-                                    color: Esk8Theme.accent,
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 3),
-                      Text(
-                        speedUnitStr,
-                        style: Esk8Theme.labelStyle.copyWith(color: _ctlDim),
-                      ),
-                      // Fallback signal: only shown when GPS is driving the
-                      // number (board not feeding), so the rider knows the
-                      // source is the phone, not the wheel.
-                      if (!boardLive) ...[
-                        const SizedBox(width: 6),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            border: Border.all(color: _ctlDim, width: 1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            speedSource,
-                            style: TextStyle(
-                              color: _ctlDim,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  Icon(
-                    _statsExpanded ? Icons.expand_less : Icons.expand_more,
-                    size: 16,
-                    color: _ctlDim,
-                  ),
-                  if (_statsExpanded) ...[
-                    Divider(color: _ctlBorder, height: 6),
-                    const SizedBox(height: 6),
-                    _miniRow(
-                      'SPD $speedUnitStr',
-                      telemetry.speed.toStringAsFixed(1),
-                      'TRIP $unitStr',
-                      boardTripDisplay.toStringAsFixed(2),
-                      c1: _gpsCompare
-                          ? gpsSpeedDisplay.toStringAsFixed(1)
-                          : null,
-                      c2: _gpsCompare
-                          ? gpsTripDistDisplay.toStringAsFixed(2)
-                          : null,
-                    ),
-                    const SizedBox(height: 8),
-                    _miniRow(
-                      'TIME',
-                      _formatDuration(boardMovingTime),
-                      'MAX',
-                      boardMaxSpeedDisplay.toStringAsFixed(1),
-                      c1: _gpsCompare ? _formatDuration(elapsed) : null,
-                      c2: _gpsCompare
-                          ? gpsMaxSpeedDisplay.toStringAsFixed(1)
-                          : null,
-                    ),
-                    const SizedBox(height: 8),
-                    _miniRow(
-                      'AVG',
-                      boardAvgDisplay.toStringAsFixed(1),
-                      'MOVE',
-                      boardMovingAvgDisplay.toStringAsFixed(1),
-                      c1: _gpsCompare ? gpsAvgDisplay.toStringAsFixed(1) : null,
-                      c2: _gpsCompare
-                          ? gpsMovingAvgDisplay.toStringAsFixed(1)
-                          : null,
-                    ),
-                    const SizedBox(height: 8),
-                    _miniRow(
-                      'CLIMB $climbUnit',
-                      climbDisplay.toStringAsFixed(0),
-                      'EFF wh/${isMph ? 'mi' : 'km'}',
-                      telemetry.efficiency.toStringAsFixed(1),
-                    ),
-                    const SizedBox(height: 8),
-                    _miniRow(
-                      'ODO $unitStr',
-                      telemetry.odometer.toStringAsFixed(1),
-                      'RANGE $unitStr',
-                      telemetry.range.toStringAsFixed(1),
-                    ),
-                  ],
-                ],
-              ),
+          right: 16,
+          child: _RideGlanceCard(
+            background: _ctlBg,
+            border: _ctlBorder,
+            foreground: _ctlFg,
+            dim: _ctlDim,
+            stateLabel: recordingLabel,
+            stateColor: recordingColor,
+            gpsLabel: gpsStatus,
+            gpsDegraded: gpsDegraded,
+            speed: speedAvailable ? bigSpeedDisplay.toInt().toString() : '--',
+            speedUnit: speedUnitStr,
+            speedSource: speedSource,
+            trip: effectiveTripDisplay.toStringAsFixed(2),
+            tripUnit: unitStr,
+            tripLabel: '$effectiveTripSource TRIP',
+            movingTime: _formatDuration(effectiveMovingTime),
+            timeLabel: effectiveTripSource == 'BOARD' ? 'MOVING' : 'GPS MOVING',
+            battery: telemetry.batteryLive ? '${telemetry.battery}%' : '--',
+            batterySource: hasBoard ? telemetry.batterySourceLabel : 'NO BOARD',
+            onTap: () => _showRideDetails(
+              hasBoard: hasBoard,
+              telemetry: telemetry,
+              isMph: isMph,
+              position: pos,
+              gpsStatus: gpsStatus,
+              speedSource: speedSource,
+              boardTripDisplay: boardTripDisplay,
+              boardMovingTime: boardMovingTime,
+              boardMaxSpeedDisplay: boardMaxSpeedDisplay,
+              boardAvgDisplay: boardAvgDisplay,
+              boardMovingAvgDisplay: boardMovingAvgDisplay,
+              gpsSpeedDisplay: gpsSpeedDisplay,
+              gpsTripDisplay: gpsTripDistDisplay,
+              gpsMaxSpeedDisplay: gpsMaxSpeedDisplay,
+              gpsAvgDisplay: gpsAvgDisplay,
+              gpsMovingAvgDisplay: gpsMovingAvgDisplay,
+              phoneElapsed: elapsed,
+              climbDisplay: climbDisplay,
+              climbUnit: climbUnit,
             ),
           ),
         ),
-
-        // Recording banner (top center)
-        if (isTracking)
-          Positioned(
-            top: 48,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(color: Esk8Theme.accent),
-                child: const Text(
-                  '● RECORDING',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ),
-            ),
-          ),
 
         // Map controls (bottom left)
         Positioned(
@@ -904,7 +705,7 @@ class _TripViewState extends State<TripView>
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (isTracking) ...[
+              if (isTracking && !recorderBusy) ...[
                 Material(
                   color: _ctlBg,
                   child: InkWell(
@@ -927,9 +728,13 @@ class _TripViewState extends State<TripView>
               ],
               // Sharp filled primary CTA — board look, no rounded FAB.
               Material(
-                color: isTracking ? const Color(0xFFEF4444) : Esk8Theme.accent,
+                color: recorderBusy
+                    ? Esk8Theme.dim
+                    : isTracking
+                    ? const Color(0xFFEF4444)
+                    : Esk8Theme.accent,
                 child: InkWell(
-                  onTap: _toggleTracking,
+                  onTap: recorderBusy ? null : _toggleTracking,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 22,
@@ -939,14 +744,22 @@ class _TripViewState extends State<TripView>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          isTracking ? Icons.stop : Icons.play_arrow,
+                          recorderBusy
+                              ? Icons.hourglass_top
+                              : isTracking
+                              ? Icons.stop
+                              : Icons.play_arrow,
                           color: Colors.white,
                           size: 22,
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          isTracking
-                              ? (_rec.isPaused ? 'PAUSED' : 'STOP')
+                          recordingState == TripRecordingState.starting
+                              ? 'STARTING…'
+                              : recordingState == TripRecordingState.stopping
+                              ? 'SAVING…'
+                              : isTracking
+                              ? 'FINISH RIDE'
                               : 'START TRIP',
                           style: const TextStyle(
                             color: Colors.white,
@@ -974,6 +787,672 @@ class _TripViewState extends State<TripView>
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper Widgets
 // ─────────────────────────────────────────────────────────────────────────────
+
+class _RideGlanceCard extends StatelessWidget {
+  final Color background;
+  final Color border;
+  final Color foreground;
+  final Color dim;
+  final String stateLabel;
+  final Color stateColor;
+  final String gpsLabel;
+  final bool gpsDegraded;
+  final String speed;
+  final String speedUnit;
+  final String speedSource;
+  final String trip;
+  final String tripUnit;
+  final String tripLabel;
+  final String movingTime;
+  final String timeLabel;
+  final String battery;
+  final String batterySource;
+  final VoidCallback onTap;
+
+  const _RideGlanceCard({
+    required this.background,
+    required this.border,
+    required this.foreground,
+    required this.dim,
+    required this.stateLabel,
+    required this.stateColor,
+    required this.gpsLabel,
+    required this.gpsDegraded,
+    required this.speed,
+    required this.speedUnit,
+    required this.speedSource,
+    required this.trip,
+    required this.tripUnit,
+    required this.tripLabel,
+    required this.movingTime,
+    required this.timeLabel,
+    required this.battery,
+    required this.batterySource,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) => Material(
+    color: background,
+    child: InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 10, 10, 12),
+        decoration: BoxDecoration(
+          border: Border(left: BorderSide(color: stateColor, width: 4)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 7,
+                  height: 7,
+                  decoration: BoxDecoration(
+                    color: stateColor,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 7),
+                Flexible(
+                  child: Text(
+                    stateLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: stateColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Icon(
+                  gpsDegraded ? Icons.gps_off : Icons.gps_fixed,
+                  size: 13,
+                  color: gpsDegraded ? Esk8Theme.orange : dim,
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    gpsLabel,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: gpsDegraded ? Esk8Theme.orange : dim,
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+                const Spacer(),
+                Icon(Icons.battery_5_bar, size: 15, color: foreground),
+                const SizedBox(width: 4),
+                Text(
+                  battery,
+                  style: TextStyle(
+                    color: foreground,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  batterySource,
+                  style: TextStyle(
+                    color: dim,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(Icons.expand_more, size: 16, color: dim),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Divider(color: border, height: 1),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.bottomLeft,
+                          child: Text(
+                            speed,
+                            style: Esk8Theme.number(46, color: foreground),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 5),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              speedUnit,
+                              style: TextStyle(
+                                color: dim,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                            Text(
+                              speedSource,
+                              style: TextStyle(
+                                color: speedSource == 'GPS'
+                                    ? Esk8Theme.orange
+                                    : dim,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(width: 1, height: 40, color: border),
+                Expanded(
+                  flex: 4,
+                  child: _GlanceMetric(
+                    value: trip,
+                    unit: tripUnit,
+                    label: tripLabel,
+                    foreground: foreground,
+                    dim: dim,
+                  ),
+                ),
+                Container(width: 1, height: 40, color: border),
+                Expanded(
+                  flex: 4,
+                  child: _GlanceMetric(
+                    value: movingTime,
+                    label: timeLabel,
+                    foreground: foreground,
+                    dim: dim,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
+class _GlanceMetric extends StatelessWidget {
+  final String value;
+  final String? unit;
+  final String label;
+  final Color foreground;
+  final Color dim;
+
+  const _GlanceMetric({
+    required this.value,
+    this.unit,
+    required this.label,
+    required this.foreground,
+    required this.dim,
+  });
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: 10),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(value, style: Esk8Theme.number(20, color: foreground)),
+              if (unit != null) ...[
+                const SizedBox(width: 3),
+                Text(
+                  unit!,
+                  style: TextStyle(
+                    color: dim,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          label,
+          style: TextStyle(
+            color: dim,
+            fontSize: 8,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.8,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _RideDetailsSheet extends StatelessWidget {
+  final bool hasBoard;
+  final Telemetry telemetry;
+  final bool isMph;
+  final LatLng? position;
+  final String gpsStatus;
+  final String speedSource;
+  final String? storageError;
+  final double boardTripDisplay;
+  final Duration boardMovingTime;
+  final double boardMaxSpeedDisplay;
+  final double boardAvgDisplay;
+  final double boardMovingAvgDisplay;
+  final double gpsSpeedDisplay;
+  final double gpsTripDisplay;
+  final double gpsMaxSpeedDisplay;
+  final double gpsAvgDisplay;
+  final double gpsMovingAvgDisplay;
+  final Duration phoneElapsed;
+  final double climbDisplay;
+  final String climbUnit;
+  final VoidCallback onHistory;
+
+  const _RideDetailsSheet({
+    required this.hasBoard,
+    required this.telemetry,
+    required this.isMph,
+    required this.position,
+    required this.gpsStatus,
+    required this.speedSource,
+    required this.storageError,
+    required this.boardTripDisplay,
+    required this.boardMovingTime,
+    required this.boardMaxSpeedDisplay,
+    required this.boardAvgDisplay,
+    required this.boardMovingAvgDisplay,
+    required this.gpsSpeedDisplay,
+    required this.gpsTripDisplay,
+    required this.gpsMaxSpeedDisplay,
+    required this.gpsAvgDisplay,
+    required this.gpsMovingAvgDisplay,
+    required this.phoneElapsed,
+    required this.climbDisplay,
+    required this.climbUnit,
+    required this.onHistory,
+  });
+
+  static String _duration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60);
+    final s = d.inSeconds.remainder(60);
+    if (h > 0) return '${h}h ${m}m';
+    if (m > 0) return '${m}m ${s}s';
+    return '${s}s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final unit = isMph ? 'MI' : 'KM';
+    final speedUnit = isMph ? 'MPH' : 'KM/H';
+    return SafeArea(
+      top: false,
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.sizeOf(context).height * 0.86,
+        ),
+        decoration: BoxDecoration(
+          color: Esk8Theme.panel,
+          border: Border(top: BorderSide(color: Esk8Theme.border)),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(
+                child: Container(width: 42, height: 4, color: Esk8Theme.border),
+              ),
+              const SizedBox(height: 18),
+              Row(
+                children: [
+                  Icon(Icons.route, color: Esk8Theme.accent),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'RIDE DETAILS',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.4,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.close, color: Esk8Theme.dim),
+                  ),
+                ],
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _EvidenceChip(
+                    icon: Icons.speed,
+                    label: 'SPEED · $speedSource',
+                  ),
+                  _EvidenceChip(icon: Icons.gps_fixed, label: gpsStatus),
+                  if (hasBoard)
+                    _EvidenceChip(
+                      icon: Icons.battery_5_bar,
+                      label:
+                          'BATTERY · ${telemetry.batterySourceLabel}${telemetry.batteryLive ? ' ${telemetry.battery}%' : ''}',
+                    )
+                  else
+                    const _EvidenceChip(
+                      icon: Icons.phone_android,
+                      label: 'PHONE-ONLY RIDE',
+                    ),
+                ],
+              ),
+              if (storageError != null) ...[
+                const SizedBox(height: 12),
+                _WarningPanel(
+                  title: 'TRIP STORAGE WARNING',
+                  message: storageError!,
+                ),
+              ],
+              if (hasBoard) ...[
+                const SizedBox(height: 20),
+                const _DetailsHeader('BOARD · ODOMETRY EVIDENCE'),
+                const SizedBox(height: 10),
+                _DetailsGrid(
+                  children: [
+                    _DetailsMetric(
+                      label: 'TRIP',
+                      value: boardTripDisplay.toStringAsFixed(2),
+                      unit: unit,
+                    ),
+                    _DetailsMetric(
+                      label: 'MOVING TIME',
+                      value: _duration(boardMovingTime),
+                    ),
+                    _DetailsMetric(
+                      label: 'MAX',
+                      value: boardMaxSpeedDisplay.toStringAsFixed(1),
+                      unit: speedUnit,
+                    ),
+                    _DetailsMetric(
+                      label: 'AVG / ELAPSED',
+                      value: boardAvgDisplay.toStringAsFixed(1),
+                      unit: speedUnit,
+                    ),
+                    _DetailsMetric(
+                      label: 'AVG / MOVING',
+                      value: boardMovingAvgDisplay.toStringAsFixed(1),
+                      unit: speedUnit,
+                    ),
+                    _DetailsMetric(
+                      label: 'EFFICIENCY',
+                      value: telemetry.efficiency.toStringAsFixed(1),
+                      unit: 'WH/${isMph ? 'MI' : 'KM'}',
+                    ),
+                    _DetailsMetric(
+                      label: 'RANGE',
+                      value: telemetry.batteryLive
+                          ? telemetry.range.toStringAsFixed(1)
+                          : '--',
+                      unit: unit,
+                    ),
+                    _DetailsMetric(
+                      label: 'ODOMETER',
+                      value: telemetry.odometer.toStringAsFixed(1),
+                      unit: unit,
+                    ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 22),
+              _DetailsHeader(
+                hasBoard
+                    ? 'PHONE GPS · ROUTE EVIDENCE'
+                    : 'PHONE GPS · PRIMARY RIDE SOURCE',
+              ),
+              const SizedBox(height: 10),
+              _DetailsGrid(
+                children: [
+                  _DetailsMetric(
+                    label: 'SPEED',
+                    value: gpsSpeedDisplay.toStringAsFixed(1),
+                    unit: speedUnit,
+                  ),
+                  _DetailsMetric(
+                    label: 'DISTANCE',
+                    value: gpsTripDisplay.toStringAsFixed(2),
+                    unit: unit,
+                  ),
+                  _DetailsMetric(
+                    label: 'ELAPSED',
+                    value: _duration(phoneElapsed),
+                  ),
+                  _DetailsMetric(
+                    label: 'MAX',
+                    value: gpsMaxSpeedDisplay.toStringAsFixed(1),
+                    unit: speedUnit,
+                  ),
+                  _DetailsMetric(
+                    label: 'AVG / ELAPSED',
+                    value: gpsAvgDisplay.toStringAsFixed(1),
+                    unit: speedUnit,
+                  ),
+                  _DetailsMetric(
+                    label: 'AVG / MOVING',
+                    value: gpsMovingAvgDisplay.toStringAsFixed(1),
+                    unit: speedUnit,
+                  ),
+                  _DetailsMetric(
+                    label: 'CLIMB',
+                    value: climbDisplay.toStringAsFixed(0),
+                    unit: climbUnit,
+                  ),
+                ],
+              ),
+              if (position != null) ...[
+                const SizedBox(height: 18),
+                Text(
+                  '${position!.latitude.toStringAsFixed(5)}, '
+                  '${position!.longitude.toStringAsFixed(5)}',
+                  style: TextStyle(
+                    color: Esk8Theme.dim,
+                    fontFamily: 'monospace',
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+              OutlinedButton.icon(
+                onPressed: onHistory,
+                icon: const Icon(Icons.history),
+                label: const Text('OPEN LIBRARY'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailsGrid extends StatelessWidget {
+  final List<Widget> children;
+
+  const _DetailsGrid({required this.children});
+
+  @override
+  Widget build(BuildContext context) => GridView.count(
+    crossAxisCount: 2,
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    childAspectRatio: 2.25,
+    mainAxisSpacing: 8,
+    crossAxisSpacing: 8,
+    children: children,
+  );
+}
+
+class _DetailsMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final String? unit;
+
+  const _DetailsMetric({required this.label, required this.value, this.unit});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+    decoration: BoxDecoration(
+      color: Esk8Theme.scaffold,
+      border: Border.all(color: Esk8Theme.border),
+    ),
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
+            children: [
+              Text(value, style: Esk8Theme.number(20)),
+              if (unit != null) ...[
+                const SizedBox(width: 5),
+                Text(
+                  unit!,
+                  style: TextStyle(
+                    color: Esk8Theme.dim,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        const SizedBox(height: 3),
+        Text(label, style: Esk8Theme.labelStyle),
+      ],
+    ),
+  );
+}
+
+class _DetailsHeader extends StatelessWidget {
+  final String text;
+
+  const _DetailsHeader(this.text);
+
+  @override
+  Widget build(BuildContext context) => Text(
+    text,
+    style: TextStyle(
+      color: Esk8Theme.dim,
+      fontSize: 10,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 1.2,
+    ),
+  );
+}
+
+class _EvidenceChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+
+  const _EvidenceChip({required this.icon, required this.label});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+    decoration: BoxDecoration(
+      color: Esk8Theme.scaffold,
+      border: Border.all(color: Esk8Theme.border),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, color: Esk8Theme.accent, size: 14),
+        const SizedBox(width: 6),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 9,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.6,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+class _WarningPanel extends StatelessWidget {
+  final String title;
+  final String message;
+
+  const _WarningPanel({required this.title, required this.message});
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Esk8Theme.danger.withValues(alpha: 0.12),
+      border: Border.all(color: Esk8Theme.danger),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: TextStyle(
+            color: Esk8Theme.danger,
+            fontWeight: FontWeight.w800,
+            fontSize: 10,
+            letterSpacing: 1,
+          ),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          message,
+          style: const TextStyle(color: Colors.white, fontSize: 12),
+        ),
+      ],
+    ),
+  );
+}
 
 class _MapButton extends StatelessWidget {
   final IconData icon;

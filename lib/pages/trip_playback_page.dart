@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:intl/intl.dart';
+import '../ble/esk8os_ble.dart';
 import '../database/trip_database.dart';
 import '../services/app_prefs.dart';
 import '../services/trip_share.dart';
@@ -53,6 +54,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     ),
   );
   List<Map<String, dynamic>> _telemetry = [];
+  bool _hasBmsData = false;
   List<LatLng> _route = [];
   // Keyframes = (pointIndex, position) only where the position actually CHANGED.
   // The GPS updates ~every 5s but we log 1 Hz, so ~80% of points are duplicates;
@@ -78,6 +80,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   // matches what you ride with; the toggle here flips that same pref.
   bool _mapLight = AppPrefs.mapLight;
   bool _follow = false; // recenter the camera on the marker as it moves
+  bool get _phoneGps => widget.tripData['source'] == 'phone-gps';
 
   int get _idx =>
       _pos.round().clamp(0, _telemetry.isEmpty ? 0 : _telemetry.length - 1);
@@ -109,6 +112,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     if (mounted) {
       setState(() {
         _telemetry = data;
+        _hasBmsData = data.any((row) => _bmsFromRow(row) != null);
         _route = data
             .map((t) => LatLng(t['lat'] as double, t['lng'] as double))
             .toList();
@@ -327,8 +331,14 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
           'Speed',
           spdUnit,
           Esk8Theme.accent,
-          (r) => (r['boardSpeed'] as num).toDouble(),
-          compareValueOf: _gpsCompare
+          (r) {
+            if (_phoneGps) {
+              final gps = (r['gpsSpeed'] as num).toDouble();
+              return isMph ? gps / 1.60934 : gps;
+            }
+            return (r['boardSpeed'] as num).toDouble();
+          },
+          compareValueOf: !_phoneGps && _gpsCompare
               ? (r) {
                   final gps = (r['gpsSpeed'] as num).toDouble();
                   return isMph ? gps / 1.60934 : gps;
@@ -343,24 +353,63 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
               ((r['altitude'] as num?)?.toDouble() ?? 0) *
               (isMph ? 3.28084 : 1),
         ),
-        _metricChart(
-          'Power',
-          'W',
-          const Color(0xFF66BB6A),
-          (r) => (r['watts'] as num).toDouble(),
-        ),
-        _metricChart(
-          'Voltage',
-          'V',
-          Esk8Theme.yellow,
-          (r) => (r['voltage'] as num).toDouble(),
-        ),
-        _metricChart(
-          'Battery',
-          '%',
-          const Color(0xFFEF5350),
-          (r) => (r['battery'] as num).toDouble(),
-        ),
+        if (!_phoneGps) ...[
+          _metricChart(
+            'Power',
+            'W',
+            const Color(0xFF66BB6A),
+            (r) => (r['watts'] as num).toDouble(),
+          ),
+          _metricChart(
+            'Voltage',
+            'V',
+            Esk8Theme.yellow,
+            (r) => (r['voltage'] as num).toDouble(),
+          ),
+          _metricChart(
+            'Battery',
+            '%',
+            const Color(0xFFEF5350),
+            (r) => (r['battery'] as num).toDouble(),
+          ),
+        ],
+        if (_hasBmsData) ...[
+          _metricChart('BMS pack voltage', 'V', Esk8Theme.yellow, (r) {
+            final b = _bmsFromRow(r);
+            return b != null && b.packFresh ? b.packVolts : null;
+          }),
+          _metricChart(
+            'BMS cell voltage',
+            'V',
+            Esk8Theme.orange,
+            (r) {
+              final b = _bmsFromRow(r);
+              return b != null && b.minMaxVoltageFresh && b.minMv > 0
+                  ? b.minMv / 1000.0
+                  : null;
+            },
+            compareValueOf: (r) {
+              final b = _bmsFromRow(r);
+              return b != null && b.minMaxVoltageFresh && b.maxMv > 0
+                  ? b.maxMv / 1000.0
+                  : null;
+            },
+          ),
+          _metricChart('BMS cell spread', 'mV', Esk8Theme.danger, (r) {
+            final b = _bmsFromRow(r);
+            return b != null && b.minMaxVoltageFresh
+                ? b.deltaMv.toDouble()
+                : null;
+          }),
+          _metricChart('BMS high temperature', '°C', const Color(0xFFFF8A65), (
+            r,
+          ) {
+            final b = _bmsFromRow(r);
+            return b != null && b.temperaturesFresh
+                ? b.tempMax.toDouble()
+                : null;
+          }),
+        ],
       ],
     );
   }
@@ -369,23 +418,30 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     String label,
     String unit,
     Color color,
-    double Function(Map<String, dynamic>) valueOf, {
-    double Function(Map<String, dynamic>)? compareValueOf,
+    double? Function(Map<String, dynamic>) valueOf, {
+    double? Function(Map<String, dynamic>)? compareValueOf,
   }) {
     final vals = [for (final r in _telemetry) valueOf(r)];
     final compareVals = compareValueOf == null
         ? null
         : [for (final r in _telemetry) compareValueOf(r)];
     final spots = [
-      for (var i = 0; i < vals.length; i++) FlSpot(i.toDouble(), vals[i]),
+      for (var i = 0; i < vals.length; i++)
+        vals[i] == null ? FlSpot.nullSpot : FlSpot(i.toDouble(), vals[i]!),
     ];
     final compareSpots = compareVals == null
         ? null
         : [
             for (var i = 0; i < compareVals.length; i++)
-              FlSpot(i.toDouble(), compareVals[i]),
+              compareVals[i] == null
+                  ? FlSpot.nullSpot
+                  : FlSpot(i.toDouble(), compareVals[i]!),
           ];
-    final allVals = compareVals == null ? vals : [...vals, ...compareVals];
+    final allVals = <double>[
+      ...vals.whereType<double>(),
+      ...?compareVals?.whereType<double>(),
+    ];
+    if (allVals.isEmpty) return const SizedBox.shrink();
     double minY = allVals.reduce(min), maxY = allVals.reduce(max);
     if (maxY - minY < 1) maxY = minY + 1;
     final pad = (maxY - minY) * 0.1;
@@ -413,7 +469,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
                   textBaseline: TextBaseline.alphabetic,
                   children: [
                     Text(
-                      cur.toStringAsFixed(1),
+                      cur?.toStringAsFixed(1) ?? '—',
                       style: Esk8Theme.number(20, color: color),
                     ),
                     if (compareCur != null) ...[
@@ -481,6 +537,10 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     );
   }
 
+  BmsData? _bmsFromRow(Map<String, dynamic> row) {
+    return BmsData.tryFromStorageJson(row['bmsJson']);
+  }
+
   /// The base tile layer — matches the live map's light/dark preference. Dark
   /// tiles get the same brightness bump used on the trip view.
   Widget _tileLayer() {
@@ -509,37 +569,31 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(
-        backgroundColor: Esk8Theme.scaffold,
-        body: Column(
-          children: [
-            const SubPageHeader(title: 'Trip Playback'),
-            Expanded(
-              child: Center(
-                child: CircularProgressIndicator(color: Esk8Theme.accent),
-              ),
+      return SubPageScaffold(
+        title: _phoneGps ? 'Phone GPS Ride' : 'Trip Playback',
+        children: [
+          Expanded(
+            child: Center(
+              child: CircularProgressIndicator(color: Esk8Theme.accent),
             ),
-          ],
-        ),
+          ),
+        ],
       );
     }
 
     if (_telemetry.isEmpty) {
-      return Scaffold(
-        backgroundColor: Esk8Theme.scaffold,
-        body: Column(
-          children: [
-            const SubPageHeader(title: 'Trip Playback'),
-            Expanded(
-              child: Center(
-                child: Text(
-                  'No telemetry data for this trip.',
-                  style: TextStyle(color: Esk8Theme.dim),
-                ),
+      return SubPageScaffold(
+        title: _phoneGps ? 'Phone GPS Ride' : 'Trip Playback',
+        children: [
+          Expanded(
+            child: Center(
+              child: Text(
+                'No telemetry data for this trip.',
+                style: TextStyle(color: Esk8Theme.dim),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       );
     }
 
@@ -562,248 +616,288 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     final gpsAvg = elapsedHours > 0 ? gpsDistance / elapsedHours : 0.0;
     final boardAvg = elapsedHours > 0 ? boardDistance / elapsedHours : 0.0;
     final accent = Esk8Theme.accent;
-    return Scaffold(
-      backgroundColor: Esk8Theme.scaffold,
-      body: Column(
-        children: [
-          SubPageHeader(
-            title: 'Trip Playback',
-            actions: [
-              IconButton(
-                icon: Icon(Icons.compare_arrows, color: accent),
-                tooltip: _gpsCompare ? 'Hide GPS compare' : 'GPS compare',
-                onPressed: () => setState(() => _gpsCompare = !_gpsCompare),
-              ),
-              if (!_showGraphs) ...[
-                IconButton(
-                  icon: Icon(
-                    _mapLight ? Icons.light_mode : Icons.dark_mode,
-                    color: accent,
-                  ),
-                  tooltip: _mapLight ? 'Light map' : 'Dark map',
-                  onPressed: () => setState(() {
-                    _mapLight = !_mapLight;
-                    AppPrefs.mapLight = _mapLight; // share with the live map
-                  }),
-                ),
-                IconButton(
-                  icon: Icon(
-                    _follow ? Icons.my_location : Icons.location_searching,
-                    color: accent,
-                  ),
-                  tooltip: _follow ? 'Following marker' : 'Free look',
-                  onPressed: () => setState(() {
-                    _follow = !_follow;
-                    if (_follow) _recenterIfFollow();
-                  }),
-                ),
-              ],
-              IconButton(
-                icon: Icon(
-                  _showGraphs ? Icons.map : Icons.show_chart,
-                  color: accent,
-                ),
-                tooltip: _showGraphs ? 'Map' : 'Graphs',
-                onPressed: () => setState(() => _showGraphs = !_showGraphs),
-              ),
-              IconButton(
-                icon: Icon(Icons.ios_share, color: accent),
-                tooltip: 'Share trip card',
-                onPressed: () => TripShare.shareSummary(
-                  context,
-                  widget.tripData,
-                  widget.isMph,
-                ),
-              ),
-            ],
+    return SubPageScaffold(
+      title: _phoneGps ? 'Phone GPS Ride' : 'Trip Playback',
+      actions: [
+        if (!_phoneGps)
+          IconButton(
+            icon: Icon(Icons.compare_arrows, color: accent),
+            tooltip: _gpsCompare ? 'Hide GPS compare' : 'GPS compare',
+            onPressed: () => setState(() => _gpsCompare = !_gpsCompare),
           ),
-          Expanded(
-            child: Stack(
-              children: [
-                if (_showGraphs)
-                  _buildGraphs()
-                else
-                  FlutterMap(
-                    mapController: _mapController,
-                    options: MapOptions(
-                      initialCenter: _route.isNotEmpty
-                          ? _route.first
-                          : const LatLng(0, 0),
-                      initialZoom: 16,
-                      onMapReady: () => _mapReady = true,
-                      onPositionChanged: (camera, hasGesture) {
-                        if (hasGesture && _follow) {
-                          setState(
-                            () => _follow = false,
-                          ); // a manual pan drops follow
-                        }
-                      },
-                    ),
-                    children: [
-                      _tileLayer(),
-                      ?_routeLayer, // cached static full route (skipped while still loading)
-                      // The trail + marker animate on the controller WITHOUT rebuilding the
-                      // map (tiles/route stay put), so the marker glides at vsync. No page
-                      // setState happens during playback.
-                      AnimatedBuilder(
-                        animation: _playCtrl,
-                        builder: (_, _) => _buildTrailLayer(),
-                      ),
-                      AnimatedBuilder(
-                        animation: _playCtrl,
-                        builder: (_, _) => MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: _markerPos(),
-                              width: 20,
-                              height: 20,
-                              child: _markerDot,
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Tile-license requirement: OSM data + CARTO basemap.
-                      SimpleAttributionWidget(
-                        source: Text(
-                          '© OpenStreetMap contributors · © CARTO',
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: _mapLight ? Colors.black54 : Colors.white54,
-                          ),
-                        ),
-                        backgroundColor: _mapLight
-                            ? const Color(0xAAFFFFFF)
-                            : const Color(0xAA1E1E1E),
-                      ),
-                    ],
+        if (!_showGraphs) ...[
+          IconButton(
+            icon: Icon(
+              _mapLight ? Icons.light_mode : Icons.dark_mode,
+              color: accent,
+            ),
+            tooltip: _mapLight ? 'Light map' : 'Dark map',
+            onPressed: () => setState(() {
+              _mapLight = !_mapLight;
+              AppPrefs.mapLight = _mapLight; // share with the live map
+            }),
+          ),
+          IconButton(
+            icon: Icon(
+              _follow ? Icons.my_location : Icons.location_searching,
+              color: accent,
+            ),
+            tooltip: _follow ? 'Following marker' : 'Free look',
+            onPressed: () => setState(() {
+              _follow = !_follow;
+              if (_follow) _recenterIfFollow();
+            }),
+          ),
+        ],
+        IconButton(
+          icon: Icon(_showGraphs ? Icons.map : Icons.show_chart, color: accent),
+          tooltip: _showGraphs ? 'Map' : 'Graphs',
+          onPressed: () => setState(() => _showGraphs = !_showGraphs),
+        ),
+        IconButton(
+          icon: Icon(Icons.ios_share, color: accent),
+          tooltip: 'Share trip card',
+          onPressed: () =>
+              TripShare.shareSummary(context, widget.tripData, widget.isMph),
+        ),
+      ],
+      children: [
+        Expanded(
+          child: Stack(
+            children: [
+              if (_showGraphs)
+                _buildGraphs()
+              else
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: _route.isNotEmpty
+                        ? _route.first
+                        : const LatLng(0, 0),
+                    initialZoom: 16,
+                    onMapReady: () => _mapReady = true,
+                    onPositionChanged: (camera, hasGesture) {
+                      if (hasGesture && _follow) {
+                        setState(
+                          () => _follow = false,
+                        ); // a manual pan drops follow
+                      }
+                    },
                   ),
-
-                // Playback controls (Bottom)
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
-                    decoration: const BoxDecoration(
-                      color: Color(0xDD1E1E1E),
-                      border: Border(top: BorderSide(color: Color(0xFF333333))),
-                    ),
-                    // Stats + slider update on the controller (no page rebuild), so they
-                    // track playback in sync with the gliding marker.
-                    child: AnimatedBuilder(
+                  children: [
+                    _tileLayer(),
+                    ?_routeLayer, // cached static full route (skipped while still loading)
+                    // The trail + marker animate on the controller WITHOUT rebuilding the
+                    // map (tiles/route stay put), so the marker glides at vsync. No page
+                    // setState happens during playback.
+                    AnimatedBuilder(
                       animation: _playCtrl,
-                      builder: (context, _) {
-                        final data = _telemetry[_idx];
-                        final ts = DateTime.fromMillisecondsSinceEpoch(
-                          data['timestamp'] as int,
-                        );
-                        final gps = widget.isMph
-                            ? (data['gpsSpeed'] as double) / 1.60934
-                            : data['gpsSpeed'] as double;
-                        final board = data['boardSpeed'] as double;
-                        return Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                _compareStat(
-                                  'Speed $speedUnitStr',
-                                  _fmt(board),
-                                  gps: _gpsCompare ? _fmt(gps) : null,
-                                ),
-                                _compareStat(
-                                  'Trip $distUnitStr',
-                                  _fmt(boardDistance, digits: 2),
-                                  gps: _gpsCompare
-                                      ? _fmt(gpsDistance, digits: 2)
-                                      : null,
-                                ),
-                                _compareStat(
-                                  'Max $speedUnitStr',
-                                  _fmt(boardMax),
-                                  gps: _gpsCompare ? _fmt(gpsMax) : null,
-                                ),
-                                _compareStat(
-                                  'Avg $speedUnitStr',
-                                  _fmt(boardAvg),
-                                  gps: _gpsCompare ? _fmt(gpsAvg) : null,
-                                ),
-                              ],
-                            ),
+                      builder: (_, _) => _buildTrailLayer(),
+                    ),
+                    AnimatedBuilder(
+                      animation: _playCtrl,
+                      builder: (_, _) => MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: _markerPos(),
+                            width: 20,
+                            height: 20,
+                            child: _markerDot,
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Tile-license requirement: OSM data + CARTO basemap.
+                    SimpleAttributionWidget(
+                      source: Text(
+                        '© OpenStreetMap contributors · © CARTO',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: _mapLight ? Colors.black54 : Colors.white54,
+                        ),
+                      ),
+                      backgroundColor: _mapLight
+                          ? const Color(0xAAFFFFFF)
+                          : const Color(0xAA1E1E1E),
+                    ),
+                  ],
+                ),
+
+              // Playback controls (Bottom)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+                  decoration: const BoxDecoration(
+                    color: Color(0xDD1E1E1E),
+                    border: Border(top: BorderSide(color: Color(0xFF333333))),
+                  ),
+                  // Stats + slider update on the controller (no page rebuild), so they
+                  // track playback in sync with the gliding marker.
+                  child: AnimatedBuilder(
+                    animation: _playCtrl,
+                    builder: (context, _) {
+                      final data = _telemetry[_idx];
+                      final ts = DateTime.fromMillisecondsSinceEpoch(
+                        data['timestamp'] as int,
+                      );
+                      final gps = widget.isMph
+                          ? (data['gpsSpeed'] as double) / 1.60934
+                          : data['gpsSpeed'] as double;
+                      final board = data['boardSpeed'] as double;
+                      final primarySpeed = _phoneGps ? gps : board;
+                      final primaryDistance = _phoneGps
+                          ? gpsDistance
+                          : boardDistance;
+                      final primaryMax = _phoneGps ? gpsMax : boardMax;
+                      final primaryAvg = _phoneGps ? gpsAvg : boardAvg;
+                      final bms = _bmsFromRow(data);
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              _compareStat(
+                                'Speed $speedUnitStr',
+                                _fmt(primarySpeed),
+                                gps: !_phoneGps && _gpsCompare
+                                    ? _fmt(gps)
+                                    : null,
+                              ),
+                              _compareStat(
+                                'Trip $distUnitStr',
+                                _fmt(primaryDistance, digits: 2),
+                                gps: !_phoneGps && _gpsCompare
+                                    ? _fmt(gpsDistance, digits: 2)
+                                    : null,
+                              ),
+                              _compareStat(
+                                'Max $speedUnitStr',
+                                _fmt(primaryMax),
+                                gps: !_phoneGps && _gpsCompare
+                                    ? _fmt(gpsMax)
+                                    : null,
+                              ),
+                              _compareStat(
+                                'Avg $speedUnitStr',
+                                _fmt(primaryAvg),
+                                gps: !_phoneGps && _gpsCompare
+                                    ? _fmt(gpsAvg)
+                                    : null,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: [
+                              _compareStat(
+                                'Time',
+                                DateFormat('h:mm:ss a').format(ts),
+                              ),
+                              _compareStat(
+                                'Source',
+                                _phoneGps ? 'PHONE GPS' : 'BOARD + GPS',
+                              ),
+                              if (!_phoneGps)
+                                _compareStat('Battery', '${data['battery']}%'),
+                              _compareStat(
+                                'Duration',
+                                _formatDuration(elapsed),
+                              ),
+                            ],
+                          ),
+                          if (_hasBmsData) ...[
                             const SizedBox(height: 8),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                               children: [
                                 _compareStat(
-                                  'Time',
-                                  DateFormat('h:mm:ss a').format(ts),
+                                  'BMS',
+                                  bms == null
+                                      ? '—'
+                                      : bms.packFresh
+                                      ? '${bms.soc}%'
+                                      : bms.link
+                                      ? 'STALE'
+                                      : 'LINK DOWN',
                                 ),
-                                _compareStat('Battery', '${data['battery']}%'),
                                 _compareStat(
-                                  'Duration',
-                                  _formatDuration(elapsed),
+                                  'Cell Δ',
+                                  bms != null && bms.minMaxVoltageFresh
+                                      ? '${bms.deltaMv} mV'
+                                      : '—',
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            Row(
-                              children: [
-                                IconButton(
-                                  icon: Icon(
-                                    _isPlaying ? Icons.pause : Icons.play_arrow,
-                                    color: accent,
-                                    size: 32,
-                                  ),
-                                  onPressed: _togglePlayback,
+                                _compareStat(
+                                  'Low cell',
+                                  bms != null &&
+                                          bms.minMaxVoltageFresh &&
+                                          bms.minMv > 0
+                                      ? '${bms.minCell}: ${(bms.minMv / 1000).toStringAsFixed(3)} V'
+                                      : '—',
                                 ),
-                                Expanded(
-                                  child: SliderTheme(
-                                    data: SliderThemeData(
-                                      activeTrackColor: accent,
-                                      inactiveTrackColor: const Color(
-                                        0xFF333333,
-                                      ),
-                                      thumbColor: Colors.white,
-                                      overlayColor: accent.withValues(
-                                        alpha: 0.2,
-                                      ),
-                                    ),
-                                    child: Slider(
-                                      value: _pos.clamp(
-                                        0,
-                                        (_telemetry.length - 1).toDouble(),
-                                      ),
-                                      min: 0,
-                                      max: (_telemetry.length - 1).toDouble(),
-                                      onChanged: (val) {
-                                        _playCtrl.stop();
-                                        _playCtrl.value = (val / _maxPos).clamp(
-                                          0.0,
-                                          1.0,
-                                        );
-                                        if (_isPlaying) {
-                                          setState(() => _isPlaying = false);
-                                        }
-                                        _recenterIfFollow();
-                                      },
-                                    ),
-                                  ),
+                                _compareStat(
+                                  'BMS state',
+                                  bms?.alarmLabel ?? '—',
                                 ),
                               ],
                             ),
                           ],
-                        );
-                      },
-                    ),
+                          const SizedBox(height: 16),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: Icon(
+                                  _isPlaying ? Icons.pause : Icons.play_arrow,
+                                  color: accent,
+                                  size: 32,
+                                ),
+                                onPressed: _togglePlayback,
+                              ),
+                              Expanded(
+                                child: SliderTheme(
+                                  data: SliderThemeData(
+                                    activeTrackColor: accent,
+                                    inactiveTrackColor: const Color(0xFF333333),
+                                    thumbColor: Colors.white,
+                                    overlayColor: accent.withValues(alpha: 0.2),
+                                  ),
+                                  child: Slider(
+                                    value: _pos.clamp(
+                                      0,
+                                      (_telemetry.length - 1).toDouble(),
+                                    ),
+                                    min: 0,
+                                    max: (_telemetry.length - 1).toDouble(),
+                                    onChanged: (val) {
+                                      _playCtrl.stop();
+                                      _playCtrl.value = (val / _maxPos).clamp(
+                                        0.0,
+                                        1.0,
+                                      );
+                                      if (_isPlaying) {
+                                        setState(() => _isPlaying = false);
+                                      }
+                                      _recenterIfFollow();
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      );
+                    },
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

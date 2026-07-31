@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../ble/esk8os_ble.dart';
+import '../widgets/esk8_widgets.dart';
 import '../wifi/wifi_service.dart';
 
 /// Wireless serial console (fw 0.10.3+). Its own entry point, separate from
@@ -54,7 +55,9 @@ class _ConsolePageState extends State<ConsolePage> {
           _pass = s.wifiPass;
         });
       }
-    } catch (_) {/* keep defaults */}
+    } catch (_) {
+      /* keep defaults */
+    }
   }
 
   @override
@@ -98,7 +101,9 @@ class _ConsolePageState extends State<ConsolePage> {
           setState(() => _phase = 2);
           return;
         }
-      } catch (_) {/* keep polling */}
+      } catch (_) {
+        /* keep polling */
+      }
       if (_elapsed >= 33000 && mounted) {
         t.cancel();
         setState(() => _timedOut = true); // show "approve on board / continue"
@@ -109,7 +114,9 @@ class _ConsolePageState extends State<ConsolePage> {
   Future<void> _turnOff() async {
     try {
       await widget.dev.sendCommand(Esk8Commands.wifiExportStop);
-    } catch (_) {/* best effort */}
+    } catch (_) {
+      /* best effort */
+    }
     if (mounted) Navigator.of(context).pop();
   }
 
@@ -145,9 +152,9 @@ class _ConsolePageState extends State<ConsolePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Wireless Console')),
-      body: _phase == 2 ? _buildLive() : _buildEnable(),
+    return SubPageScaffold(
+      title: 'Wireless Console',
+      children: [Expanded(child: _phase == 2 ? _buildLive() : _buildEnable())],
     );
   }
 

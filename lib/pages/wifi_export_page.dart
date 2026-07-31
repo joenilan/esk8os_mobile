@@ -6,6 +6,7 @@ import 'package:file_selector/file_selector.dart';
 import '../ble/esk8os_ble.dart';
 import '../wifi/wifi_service.dart';
 import '../widgets/esk8_theme.dart';
+import '../widgets/esk8_widgets.dart';
 
 Color get _accent => Esk8Theme.accent; // follows the board's selected theme
 
@@ -44,7 +45,9 @@ class _WifiExportPageState extends State<WifiExportPage> {
           _pass = s.wifiPass;
         });
       }
-    } catch (_) {/* keep legacy defaults */}
+    } catch (_) {
+      /* keep legacy defaults */
+    }
   }
 
   @override
@@ -148,9 +151,9 @@ class _WifiExportPageState extends State<WifiExportPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('WiFi Export & OTA')),
-      body: _buildBody(),
+    return SubPageScaffold(
+      title: 'WiFi Export & OTA',
+      children: [Expanded(child: _buildBody())],
     );
   }
 

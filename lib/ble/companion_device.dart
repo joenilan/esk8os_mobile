@@ -60,17 +60,21 @@ class CompanionDevice implements Esk8Device {
   CompanionDevice(this.device);
 
   @override
-  String get name =>
-      device.platformName.isNotEmpty ? device.platformName : device.remoteId.str;
+  String get name => device.platformName.isNotEmpty
+      ? device.platformName
+      : device.remoteId.str;
 
   @override
   Stream<DeviceConnectionState> get connectionState =>
-      device.connectionState.map((s) => s == BluetoothConnectionState.connected
-          ? DeviceConnectionState.connected
-          : DeviceConnectionState.disconnected);
+      device.connectionState.map(
+        (s) => s == BluetoothConnectionState.connected
+            ? DeviceConnectionState.connected
+            : DeviceConnectionState.disconnected,
+      );
 
   @override
-  bool get isReady => _telemetry != null && _settings != null && _command != null;
+  bool get isReady =>
+      _telemetry != null && _settings != null && _command != null;
 
   /// Connect, raise the MTU so JSON notifies aren't truncated, discover services,
   /// and bind the three companion characteristics.
@@ -90,7 +94,9 @@ class CompanionDevice implements Esk8Device {
     // Best-effort large MTU (spec §7). Some stacks negotiate automatically.
     try {
       await device.requestMtu(512);
-    } catch (_) {/* non-fatal */}
+    } catch (_) {
+      /* non-fatal */
+    }
 
     final services = await device.discoverServices();
     final svc = services.firstWhere(
@@ -159,7 +165,9 @@ class CompanionDevice implements Esk8Device {
     try {
       final obj = jsonDecode(utf8.decode(bytes));
       if (obj is Map<String, dynamic>) return obj;
-    } catch (_) {/* partial/garbled notify — skip */}
+    } catch (_) {
+      /* partial/garbled notify — skip */
+    }
     return null;
   }
 
@@ -171,7 +179,9 @@ class CompanionDevice implements Esk8Device {
     try {
       final obj = jsonDecode(utf8.decode(bytes));
       if (obj is Map<String, dynamic>) return BoardSettings.fromJson(obj);
-    } catch (_) {/* ignore */}
+    } catch (_) {
+      /* ignore */
+    }
     return null;
   }
 
@@ -186,7 +196,9 @@ class CompanionDevice implements Esk8Device {
       if (bytes.isEmpty) return null;
       final obj = jsonDecode(utf8.decode(bytes));
       if (obj is Map<String, dynamic>) return BaseConfig.fromJson(obj);
-    } catch (_) {/* old firmware / bad read */}
+    } catch (_) {
+      /* old firmware / bad read */
+    }
     return null;
   }
 

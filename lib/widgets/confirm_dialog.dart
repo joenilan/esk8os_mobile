@@ -22,9 +22,13 @@ Future<bool> confirmAction(
         side: BorderSide(color: Esk8Theme.border),
         borderRadius: BorderRadius.zero, // the board never rounds
       ),
-      title: Text(title,
-          style: TextStyle(
-              color: Esk8Theme.textPrimary, fontWeight: FontWeight.bold)),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: Esk8Theme.textPrimary,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
       content: Text(message, style: TextStyle(color: Esk8Theme.label)),
       actions: [
         TextButton(
@@ -33,10 +37,13 @@ Future<bool> confirmAction(
         ),
         TextButton(
           onPressed: () => Navigator.of(ctx).pop(true),
-          child: Text(confirmLabel,
-              style: TextStyle(
-                  color: destructive ? Esk8Theme.danger : Esk8Theme.accent,
-                  fontWeight: FontWeight.bold)),
+          child: Text(
+            confirmLabel,
+            style: TextStyle(
+              color: destructive ? Esk8Theme.danger : Esk8Theme.accent,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ),
       ],
     ),

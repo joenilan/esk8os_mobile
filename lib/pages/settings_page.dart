@@ -40,7 +40,8 @@ class SettingsPage extends StatefulWidget {
 
 class _SettingsPageState extends State<SettingsPage> {
   BoardSettings? _settings;
-  BaseConfig? _base; // VESC base config + provenance (fw 0.10.1+; null = older fw)
+  BaseConfig?
+  _base; // VESC base config + provenance (fw 0.10.1+; null = older fw)
   _RangeCalibration? _lastTripCalibration;
   _RangeCalibration? _learnedCalibration;
   bool _loading = true;
@@ -162,12 +163,16 @@ class _SettingsPageState extends State<SettingsPage> {
       await widget.dev.writeSettings(partial);
       // Re-read to confirm the device accepted the value.
       final s = await widget.dev.readSettings();
+      final base = await widget.dev.readBaseConfig();
       if (s != null && mounted) {
         if (AppPrefs.themeSyncWithBoard) {
           AppPrefs.phoneTheme = s.theme;
           Esk8Theme.applyTheme(s.theme);
         }
-        setState(() => _settings = s);
+        setState(() {
+          _settings = s;
+          _base = base;
+        });
       }
       _toast('$label updated');
     } catch (e) {
@@ -234,6 +239,42 @@ class _SettingsPageState extends State<SettingsPage> {
     try {
       await widget.dev.sendCommand(command);
       _toast('$label sent');
+    } catch (e) {
+      _toast('Failed: $e');
+    } finally {
+      if (mounted) setState(() => _writing = false);
+    }
+  }
+
+  Future<void> _useVesc(String overrideKey, String label) async {
+    if (_writing) return;
+    setState(() => _writing = true);
+    try {
+      await widget.dev.sendCommand(Esk8Commands.unset(overrideKey));
+      // Command writes are fire-and-forget. Give the board UI loop time to
+      // remove the NVS key, then refresh both the effective value and source.
+      await Future.delayed(const Duration(milliseconds: 250));
+      final s = await widget.dev.readSettings();
+      final base = await widget.dev.readBaseConfig();
+      if (s == null) throw StateError('Device did not return settings');
+      final sourceKey = switch (overrideKey) {
+        'packAh' => 'ah',
+        'homeCell' => 'home',
+        'stopCell' => 'stop',
+        'wheelmm' => 'wheel',
+        _ => overrideKey,
+      };
+      if (base?.src[sourceKey] == 'r') {
+        throw StateError(
+          'Board firmware did not clear the override; update the board firmware',
+        );
+      }
+      if (!mounted) return;
+      setState(() {
+        _settings = s;
+        _base = base;
+      });
+      _toast('$label now follows VESC');
     } catch (e) {
       _toast('Failed: $e');
     } finally {
@@ -396,22 +437,6 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  /// One-tile summary of the ESC-read base config + where each effective
-  /// value currently comes from (r = your override, v = VESC, d = default).
-  String _baseSummary(BaseConfig b) {
-    String tag(String k) => switch (b.src[k]) {
-      'r' => 'override',
-      'v' => 'VESC',
-      _ => 'default',
-    };
-    return '${b.cells}S ${b.packAh.toStringAsFixed(1)}Ah · '
-        'cut ${b.cutStartV.toStringAsFixed(1)}→${b.cutEndV.toStringAsFixed(1)}V · '
-        '${b.poles} poles · gear ${b.gearRatio.toStringAsFixed(2)} · ${b.wheelMm}mm\n'
-        'sources — cells: ${tag('cells')} · pack: ${tag('ah')} · '
-        'home: ${tag('home')} · limp: ${tag('stop')} · '
-        'Wh/mi: ${tag('whmi')} · wheel: ${tag('wheel')}';
-  }
-
   String _boardCalSummary(BoardSettings s) {
     final whmi = s.calWhPerMile > 0
         ? '${s.calWhPerMile.toStringAsFixed(1)} Wh/mi learned'
@@ -446,23 +471,16 @@ class _SettingsPageState extends State<SettingsPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Esk8Theme.scaffold,
-      body: Column(
-        children: [
-          SubPageHeader(
-            title: 'Settings',
-            actions: [
-              IconButton(
-                icon: Icon(Icons.refresh, color: Esk8Theme.accent),
-                onPressed: _loading ? null : _read,
-                tooltip: 'Re-read settings',
-              ),
-            ],
-          ),
-          Expanded(child: _buildBody()),
-        ],
-      ),
+    return SubPageScaffold(
+      title: 'Settings',
+      actions: [
+        IconButton(
+          icon: Icon(Icons.refresh, color: Esk8Theme.accent),
+          onPressed: _loading ? null : _read,
+          tooltip: 'Re-read settings',
+        ),
+      ],
+      children: [Expanded(child: _buildBody())],
     );
   }
 
@@ -493,6 +511,7 @@ class _SettingsPageState extends State<SettingsPage> {
     }
 
     final s = _settings!;
+    final base = _base;
     final rangeWhPerMile = _pendingWhPerMile ?? s.whPerMile;
     final rangeCalibration = _RangeCalibration.from(s, widget.telemetry);
     final lastTripCalibration = _lastTripCalibration;
@@ -561,8 +580,11 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                     child: Row(
                       children: [
-                        Vehicle.iconWidget(s.vehicleType,
-                            color: _accent, customIcon: s.vehicleCustomIcon),
+                        Vehicle.iconWidget(
+                          s.vehicleType,
+                          color: _accent,
+                          customIcon: s.vehicleCustomIcon,
+                        ),
                         const SizedBox(width: 16),
                         Expanded(
                           child: TextField(
@@ -861,57 +883,61 @@ class _SettingsPageState extends State<SettingsPage> {
 
             const SizedBox(height: 16),
 
-            // ── Battery Cells ──────────────────────────────────────────
-            _SectionHeader('BATTERY'),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.battery_full, color: _accent),
-                        const SizedBox(width: 16),
-                        Text(
-                          '${s.batterySeries}S',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
+            if (base?.valid != true) ...[
+              // Legacy firmware has no VESC provenance characteristic, so the
+              // board still needs a visible fallback cell-count control.
+              _SectionHeader('BATTERY'),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.battery_full, color: _accent),
+                          const SizedBox(width: 16),
+                          Text(
+                            '${s.batterySeries}S',
+                            style: const TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                        const Spacer(),
-                        Text(
-                          '${(s.batterySeries * 4.2).toStringAsFixed(1)}V max',
-                          style: TextStyle(
-                            color: Colors.grey[500],
-                            fontSize: 13,
+                          const Spacer(),
+                          Text(
+                            '${(s.batterySeries * 4.2).toStringAsFixed(1)}V max',
+                            style: TextStyle(
+                              color: Colors.grey[500],
+                              fontSize: 13,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    Slider(
-                      value: s.batterySeries.toDouble(),
-                      min: 6,
-                      max: 14,
-                      divisions: 8,
-                      label: '${s.batterySeries}S',
-                      activeColor: _accent,
-                      onChanged: (v) {}, // preview only; write on change end
-                      onChangeEnd: (v) => _writeCells(v.round()),
-                    ),
-                  ],
+                        ],
+                      ),
+                      Slider(
+                        value: s.batterySeries.toDouble(),
+                        min: 6,
+                        max: 14,
+                        divisions: 8,
+                        label: '${s.batterySeries}S',
+                        activeColor: _accent,
+                        onChanged: (v) {},
+                        onChangeEnd: (v) => _writeCells(v.round()),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
+            ],
 
             // ── Battery / Range tuning ─────────────────────────────────
-            _SectionHeader('BATTERY / RANGE'),
+            _SectionHeader(
+              base?.valid == true ? 'VESC / POWERTRAIN' : 'BATTERY / RANGE',
+            ),
             Card(
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -920,50 +946,120 @@ class _SettingsPageState extends State<SettingsPage> {
                 ),
                 child: Column(
                   children: [
-                    _SliderRow(
-                      icon: Icons.battery_charging_full,
-                      label: 'Pack capacity',
-                      value: s.packAh.clamp(4.0, 40.0),
-                      min: 4,
-                      max: 40,
-                      divisions: 72,
-                      display: '${s.packAh.toStringAsFixed(1)} Ah',
-                      onEnd: (v) => _writePackAh(v),
-                    ),
-                    _SliderRow(
-                      icon: Icons.home,
-                      label: 'Ride-home voltage',
-                      value: s.homeCellV.clamp(s.stopCellV, 4.2),
-                      min: s.stopCellV,
-                      max: 4.2,
-                      divisions: ((4.2 - s.stopCellV) / 0.05).round(),
-                      display: s.homeEffCellV > s.homeCellV + 0.005
-                          ? '${s.homeCellV.toStringAsFixed(2)} → ~${(s.homeEffCellV * s.batterySeries).toStringAsFixed(1)}V loaded'
-                          : '${s.homeCellV.toStringAsFixed(2)} V/cell  ${(s.homeCellV * s.batterySeries).toStringAsFixed(1)} V pack',
-                      onEnd: (v) => _write(
-                        BoardSettings.writeJson(
-                          homeCellV: double.parse(v.toStringAsFixed(2)),
-                        ),
-                        'Ride-home voltage',
+                    if (base?.valid == true) ...[
+                      _AuthorityField(
+                        icon: Icons.battery_full,
+                        label: 'Battery cells',
+                        value: '${s.batterySeries}S',
+                        source: BaseConfig.sourceLabel(base!.src['cells']),
+                        vescValue: '${base.cells}S',
+                        onUseVesc: base.src['cells'] == 'r'
+                            ? () => _useVesc('cells', 'Battery cells')
+                            : null,
                       ),
-                    ),
-                    _SliderRow(
-                      icon: Icons.power_settings_new,
-                      label: 'Limp floor voltage',
-                      value: s.stopCellV.clamp(3.0, 3.6),
-                      min: 3.0,
-                      max: 3.6,
-                      divisions: 12,
-                      display: s.stopEffCellV > s.stopCellV + 0.005
-                          ? '${s.stopCellV.toStringAsFixed(2)} → stops ~${(s.stopEffCellV * s.batterySeries).toStringAsFixed(1)}V loaded'
-                          : '${s.stopCellV.toStringAsFixed(2)} V/cell  ${(s.stopCellV * s.batterySeries).toStringAsFixed(1)} V pack',
-                      onEnd: (v) => _write(
-                        BoardSettings.writeJson(
-                          stopCellV: double.parse(v.toStringAsFixed(2)),
-                        ),
-                        'Limp floor',
+                      _AuthorityField(
+                        icon: Icons.battery_charging_full,
+                        label: 'Pack capacity',
+                        value: '${s.packAh.toStringAsFixed(1)} Ah',
+                        source: BaseConfig.sourceLabel(base.src['ah']),
+                        vescValue: '${base.packAh.toStringAsFixed(1)} Ah',
+                        onUseVesc: base.src['ah'] == 'r'
+                            ? () => _useVesc('packAh', 'Pack capacity')
+                            : null,
                       ),
-                    ),
+                      _AuthorityField(
+                        icon: Icons.home,
+                        label: 'Ride-home floor',
+                        value: '${s.homeCellV.toStringAsFixed(2)} V/cell',
+                        source: BaseConfig.sourceLabel(base.src['home']),
+                        vescValue: base.cells > 0
+                            ? '${(base.cutStartV / base.cells).toStringAsFixed(2)} V/cell'
+                            : null,
+                        onUseVesc: base.src['home'] == 'r'
+                            ? () => _useVesc('homeCell', 'Ride-home floor')
+                            : null,
+                      ),
+                      _AuthorityField(
+                        icon: Icons.power_settings_new,
+                        label: 'Limp floor',
+                        value: '${s.stopCellV.toStringAsFixed(2)} V/cell',
+                        source: BaseConfig.sourceLabel(base.src['stop']),
+                        vescValue: base.cells > 0
+                            ? '${(base.cutEndV / base.cells).toStringAsFixed(2)} V/cell'
+                            : null,
+                        onUseVesc: base.src['stop'] == 'r'
+                            ? () => _useVesc('stopCell', 'Limp floor')
+                            : null,
+                      ),
+                      const Divider(height: 1),
+                      _AuthorityField(
+                        icon: Icons.settings,
+                        label: 'Motor poles',
+                        value: '${base.poles}',
+                        source: 'FROM VESC',
+                      ),
+                      _AuthorityField(
+                        icon: Icons.sync,
+                        label: 'Motor : wheel ratio',
+                        value: base.gearRatio.toStringAsFixed(2),
+                        source: 'FROM VESC',
+                      ),
+                      _AuthorityField(
+                        icon: Icons.electric_bolt,
+                        label: 'Current limits',
+                        value:
+                            '${base.motorAmpMax.toStringAsFixed(0)} A motor · '
+                            '${base.battAmpMax.toStringAsFixed(0)} A battery · '
+                            '${base.battAmpRegen.toStringAsFixed(0)} A regen',
+                        source: 'FROM VESC',
+                      ),
+                      const Divider(height: 1),
+                    ] else ...[
+                      _SliderRow(
+                        icon: Icons.battery_charging_full,
+                        label: 'Pack capacity',
+                        value: s.packAh.clamp(4.0, 40.0),
+                        min: 4,
+                        max: 40,
+                        divisions: 72,
+                        display: '${s.packAh.toStringAsFixed(1)} Ah',
+                        onEnd: (v) => _writePackAh(v),
+                      ),
+                      _SliderRow(
+                        icon: Icons.home,
+                        label: 'Ride-home voltage',
+                        value: s.homeCellV.clamp(s.stopCellV, 4.2),
+                        min: s.stopCellV,
+                        max: 4.2,
+                        divisions: ((4.2 - s.stopCellV) / 0.05).round(),
+                        display: s.homeEffCellV > s.homeCellV + 0.005
+                            ? '${s.homeCellV.toStringAsFixed(2)} → ~${(s.homeEffCellV * s.batterySeries).toStringAsFixed(1)}V loaded'
+                            : '${s.homeCellV.toStringAsFixed(2)} V/cell  ${(s.homeCellV * s.batterySeries).toStringAsFixed(1)} V pack',
+                        onEnd: (v) => _write(
+                          BoardSettings.writeJson(
+                            homeCellV: double.parse(v.toStringAsFixed(2)),
+                          ),
+                          'Ride-home voltage',
+                        ),
+                      ),
+                      _SliderRow(
+                        icon: Icons.power_settings_new,
+                        label: 'Limp floor voltage',
+                        value: s.stopCellV.clamp(3.0, 3.6),
+                        min: 3.0,
+                        max: 3.6,
+                        divisions: 12,
+                        display: s.stopEffCellV > s.stopCellV + 0.005
+                            ? '${s.stopCellV.toStringAsFixed(2)} → stops ~${(s.stopEffCellV * s.batterySeries).toStringAsFixed(1)}V loaded'
+                            : '${s.stopCellV.toStringAsFixed(2)} V/cell  ${(s.stopCellV * s.batterySeries).toStringAsFixed(1)} V pack',
+                        onEnd: (v) => _write(
+                          BoardSettings.writeJson(
+                            stopCellV: double.parse(v.toStringAsFixed(2)),
+                          ),
+                          'Limp floor',
+                        ),
+                      ),
+                    ],
                     // On a self-learning board (fw 0.9.5+) the device owns the
                     // range model — it learns Wh/mi, pack resistance and real
                     // deliverable energy while riding, and IGNORES any whmi the
@@ -993,19 +1089,6 @@ class _SettingsPageState extends State<SettingsPage> {
                           ),
                           child: const Text('Reset'),
                         ),
-                      ),
-                    // Three-tier config surface (fw 0.10.1+): the ESC's own
-                    // mcconf is the base truth under these sliders; anything
-                    // you set here becomes an explicit override on top of it.
-                    if (_base?.valid == true)
-                      ListTile(
-                        contentPadding: EdgeInsets.zero,
-                        leading: Icon(Icons.verified_outlined, color: _accent),
-                        title: const Text(
-                          'VESC base config',
-                          style: TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                        subtitle: Text(_baseSummary(_base!)),
                       ),
                     if (!s.hasBoardCal) ...[
                       _RangeModelControl(
@@ -1358,49 +1441,52 @@ class _SettingsPageState extends State<SettingsPage> {
 
             const SizedBox(height: 16),
 
-            // ── Wheel Profile ──────────────────────────────────────────
-            _SectionHeader('WHEEL PROFILE'),
+            // ── Wheel calibration / legacy profile ────────────────────
+            _SectionHeader(
+              base?.valid == true ? 'WHEEL CALIBRATION' : 'WHEEL PROFILE',
+            ),
             Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    SegmentedButton<int>(
-                      segments: const [
-                        ButtonSegment(value: 0, label: Text('Profile 0')),
-                        ButtonSegment(value: 1, label: Text('Profile 1')),
-                      ],
-                      selected: {s.profile},
-                      onSelectionChanged: (sel) => _write(
-                        BoardSettings.writeJson(profile: sel.first),
-                        'Profile',
+                    if (base?.valid != true) ...[
+                      SegmentedButton<int>(
+                        segments: const [
+                          ButtonSegment(value: 0, label: Text('Profile 0')),
+                          ButtonSegment(value: 1, label: Text('Profile 1')),
+                        ],
+                        selected: {s.profile},
+                        onSelectionChanged: (sel) => _write(
+                          BoardSettings.writeJson(profile: sel.first),
+                          'Profile',
+                        ),
+                        style: ButtonStyle(
+                          foregroundColor: WidgetStateProperty.resolveWith((
+                            states,
+                          ) {
+                            if (states.contains(WidgetState.selected)) {
+                              return Colors.white;
+                            }
+                            return Colors.grey[400];
+                          }),
+                          backgroundColor: WidgetStateProperty.resolveWith((
+                            states,
+                          ) {
+                            if (states.contains(WidgetState.selected)) {
+                              return _accent.withValues(alpha: 0.25);
+                            }
+                            return null;
+                          }),
+                        ),
                       ),
-                      style: ButtonStyle(
-                        foregroundColor: WidgetStateProperty.resolveWith((
-                          states,
-                        ) {
-                          if (states.contains(WidgetState.selected)) {
-                            return Colors.white;
-                          }
-                          return Colors.grey[400];
-                        }),
-                        backgroundColor: WidgetStateProperty.resolveWith((
-                          states,
-                        ) {
-                          if (states.contains(WidgetState.selected)) {
-                            return _accent.withValues(alpha: 0.25);
-                          }
-                          return null;
-                        }),
+                      const SizedBox(height: 16),
+                      _ReadOnlyField(
+                        icon: Icons.settings,
+                        label: 'Motor poles',
+                        value: '${s.poles}',
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    // Read-only derived fields
-                    _ReadOnlyField(
-                      icon: Icons.settings,
-                      label: 'Motor Poles',
-                      value: '${s.poles}',
-                    ),
+                    ],
                     // Wheel diameter — rider-tunable like an e-bike computer.
                     // Overrides the preset so a worn/soft pneumatic reads true;
                     // this value drives ALL speed and distance math.
@@ -1480,14 +1566,19 @@ class _SettingsPageState extends State<SettingsPage> {
                               ],
                             ),
                             Padding(
-                              padding: const EdgeInsets.only(left: 4, bottom: 4),
+                              padding: const EdgeInsets.only(
+                                left: 4,
+                                bottom: 4,
+                              ),
                               child: Row(
                                 children: [
                                   Expanded(
                                     child: Text(
                                       s.wheelOverrideMm > 0
                                           ? 'Calibrated. Roll 5 loaded revs, ÷5 ÷π for the exact size.'
-                                          : 'Using the preset. Tune if speed/distance reads high or low.',
+                                          : base?.valid == true
+                                          ? 'Using ${base!.wheelMm} mm from VESC. Tune only if measured speed/distance is off.'
+                                          : 'Using the fallback profile. Tune if speed/distance reads high or low.',
                                       style: TextStyle(
                                         color: Colors.grey[500],
                                         fontSize: 12,
@@ -1506,11 +1597,12 @@ class _SettingsPageState extends State<SettingsPage> {
                         );
                       },
                     ),
-                    _ReadOnlyField(
-                      icon: Icons.sync,
-                      label: 'Gear Ratio',
-                      value: s.gear.toStringAsFixed(2),
-                    ),
+                    if (base?.valid != true)
+                      _ReadOnlyField(
+                        icon: Icons.sync,
+                        label: 'Motor : wheel ratio',
+                        value: s.gear.toStringAsFixed(2),
+                      ),
                   ],
                 ),
               ),
@@ -2051,6 +2143,62 @@ class _ReadOnlyField extends StatelessWidget {
       ],
     ),
   );
+}
+
+class _AuthorityField extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  final String source;
+  final String? vescValue;
+  final VoidCallback? onUseVesc;
+
+  const _AuthorityField({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.source,
+    this.vescValue,
+    this.onUseVesc,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final overridden = onUseVesc != null;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(icon, color: _accent),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Flexible(
+            flex: 2,
+            child: Text(
+              value,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.end,
+              style: Esk8Theme.number(17, color: _accent),
+            ),
+          ),
+        ],
+      ),
+      subtitle: Text(
+        overridden && vescValue != null
+            ? '$source · VESC has $vescValue'
+            : source,
+      ),
+      trailing: overridden
+          ? TextButton(onPressed: onUseVesc, child: const Text('Use VESC'))
+          : null,
+    );
+  }
 }
 
 class _SegmentedStringRow extends StatelessWidget {

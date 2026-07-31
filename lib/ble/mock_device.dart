@@ -47,6 +47,7 @@ class MockDevice implements Esk8Device {
   final int _startMs = DateTime.now().millisecondsSinceEpoch;
   int _samples = 0;
   double _speedSum = 0.0;
+  final Set<String> _mockOverrides = {};
 
   BoardSettings _settings = const BoardSettings(
     hardware: 'tdisplay-s3',
@@ -56,14 +57,14 @@ class MockDevice implements Esk8Device {
     mph: true,
     theme: 'CYBER',
     poles: 14,
-    wheelMm: 105,
+    wheelMm: 203,
     wheelOverrideMm: 0,
-    gear: 2.5,
-    batterySeries: 12,
+    gear: 4.5,
+    batterySeries: 10,
     profile: 0,
-    packAh: 16.5,
-    homeCellV: 3.40,
-    stopCellV: 3.30,
+    packAh: 32.0,
+    homeCellV: 3.20,
+    stopCellV: 3.00,
     whPerMile: 22.0,
     brightness: 100,
     statusRgb: true,
@@ -79,11 +80,11 @@ class MockDevice implements Esk8Device {
     // Mimic fw 0.9.5+ on-board adaptive calibration so the settings page's
     // "Device-learned calibration" tile shows in mock mode.
     hasBoardCal: true,
-    calPackROhm: 78,
+    calPackROhm: 45,
     calTypicalAmps: 16.4,
-    calWhPerMile: 23.8,
-    calPackWh: 452,
-    firmwareVersion: 'v0.9.5 mock',
+    calWhPerMile: 0,
+    calPackWh: 0,
+    firmwareVersion: 'v0.10.1 mock',
   );
 
   @override
@@ -126,7 +127,9 @@ class MockDevice implements Esk8Device {
       _telemetry.add(
         Telemetry(
           live: true,
-          vescConnected: true,
+          vescConnected: false,
+          batteryLive: true,
+          batterySource: 'demo',
           mph: _settings.mph,
           speed: _speed,
           battery: _battery,
@@ -171,8 +174,8 @@ class MockDevice implements Esk8Device {
     });
 
     // 1 Hz synthetic Daly pack — mirrors the firmware's simulateBms(): a 10S
-    // pack with one deliberately weak cell (#7, ~70 mV low) so the imbalance
-    // view (the reason to read a BMS) is exercisable with no hardware.
+    // pack with a normal ~10 mV spread plus the physically verified Level-1
+    // high-state warning, matching the installed 10S UART-K pack.
     _bmsTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       _bms.add(_mockBms());
     });
@@ -185,9 +188,7 @@ class MockDevice implements Esk8Device {
     final nominal = (3600 + (soc - 55) / 30.0 * 400).round();
     final cells = <int>[];
     for (var c = 0; c < 10; c++) {
-      var mv = nominal + ((c * 7) % 15) - 7;
-      if (c == 6) mv -= 70; // the weak cell (#7)
-      cells.add(mv);
+      cells.add(nominal + ((c * 7) % 11) - 5);
     }
     final minMv = cells.reduce(min);
     final maxMv = cells.reduce(max);
@@ -196,10 +197,13 @@ class MockDevice implements Esk8Device {
     final t1 = 28 + (3 * wave).round();
     return BmsData(
       link: true,
+      freshnessMask: BmsData.allFreshMask,
+      alarmLevel: 1,
+      rawFaultBytes: '11000000000000',
       packVolts: packV,
       current: -(10 + 8 * wave), // discharging
       soc: soc,
-      remainingAh: 10.0 * soc / 100.0,
+      remainingAh: 32.0 * soc / 100.0,
       cycles: 42,
       cellCount: 10,
       cellsMv: cells,
@@ -213,7 +217,7 @@ class MockDevice implements Esk8Device {
       tempMax: max(t0, t1),
       chargeMos: true,
       dischargeMos: true,
-      fault: false,
+      fault: true,
     );
   }
 
@@ -245,12 +249,12 @@ class MockDevice implements Esk8Device {
   Future<BaseConfig?> readBaseConfig() async {
     await Future.delayed(const Duration(milliseconds: 60));
     // Mirrors a real dual-FW6.5 capture so the tier UI is exercisable in mock.
-    return const BaseConfig(
+    return BaseConfig(
       valid: true,
       cells: 10,
-      packAh: 16.5,
-      cutStartV: 34.0,
-      cutEndV: 31.0,
+      packAh: 32.0,
+      cutStartV: 32.0,
+      cutEndV: 30.0,
       poles: 14,
       gearRatio: 4.5,
       wheelMm: 203,
@@ -258,12 +262,12 @@ class MockDevice implements Esk8Device {
       battAmpMax: 15,
       battAmpRegen: -5,
       src: {
-        'cells': 'r',
-        'ah': 'v',
-        'home': 'v',
-        'stop': 'r',
-        'whmi': 'r',
-        'wheel': 'v',
+        'cells': _mockOverrides.contains('cells') ? 'r' : 'v',
+        'ah': _mockOverrides.contains('packAh') ? 'r' : 'v',
+        'home': _mockOverrides.contains('homeCell') ? 'r' : 'v',
+        'stop': _mockOverrides.contains('stopCell') ? 'r' : 'v',
+        'whmi': _mockOverrides.contains('whmi') ? 'r' : 'd',
+        'wheel': _mockOverrides.contains('wheelmm') ? 'r' : 'v',
       },
     );
   }
@@ -271,6 +275,18 @@ class MockDevice implements Esk8Device {
   @override
   Future<void> writeSettings(Map<String, dynamic> partial) async {
     await Future.delayed(const Duration(milliseconds: 100));
+    if (partial.containsKey('bat_s')) _mockOverrides.add('cells');
+    if (partial.containsKey('packAh')) _mockOverrides.add('packAh');
+    if (partial.containsKey('homeCell')) _mockOverrides.add('homeCell');
+    if (partial.containsKey('stopCell')) _mockOverrides.add('stopCell');
+    if (partial.containsKey('whmi')) _mockOverrides.add('whmi');
+    if (partial.containsKey('wheelmm')) {
+      if ((partial['wheelmm'] as int) > 0) {
+        _mockOverrides.add('wheelmm');
+      } else {
+        _mockOverrides.remove('wheelmm');
+      }
+    }
     _settings = BoardSettings(
       hardware: _settings.hardware,
       display: _settings.display,
@@ -388,5 +404,19 @@ class MockDevice implements Esk8Device {
   @override
   Future<void> sendCommand(String command) async {
     await Future.delayed(const Duration(milliseconds: 100));
+    if (!command.startsWith('UNSET:')) return;
+    final key = command.substring(6);
+    final fallback = switch (key) {
+      'cells' => <String, dynamic>{'bat_s': 10},
+      'packAh' => <String, dynamic>{'packAh': 32.0},
+      'homeCell' => <String, dynamic>{'homeCell': 3.20},
+      'stopCell' => <String, dynamic>{'stopCell': 3.00},
+      'whmi' => <String, dynamic>{'whmi': 20.0},
+      'wheelmm' => <String, dynamic>{'wheelmm': 0},
+      _ => const <String, dynamic>{},
+    };
+    if (fallback.isEmpty) return;
+    await writeSettings(fallback);
+    _mockOverrides.remove(key);
   }
 }

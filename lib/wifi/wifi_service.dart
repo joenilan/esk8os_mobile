@@ -49,9 +49,7 @@ class WifiService {
   /// endpoint) and return its plain-text output. Same console as USB serial.
   static Future<String> runCommand(String line) async {
     final uri = Uri.parse('$baseUrl/cmd').replace(queryParameters: {'c': line});
-    final response = await http
-        .get(uri)
-        .timeout(const Duration(seconds: 8));
+    final response = await http.get(uri).timeout(const Duration(seconds: 8));
     if (response.statusCode == 200) return response.body;
     throw Exception('console returned ${response.statusCode}');
   }

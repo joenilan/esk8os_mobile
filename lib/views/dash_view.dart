@@ -65,7 +65,7 @@ class DashView extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             SpeedHero(
-              value: '${t.speed.toInt()}',
+              value: t.live ? '${t.speed.toInt()}' : '--',
               unit: speedUnit,
               maxSize: 92,
             ),
@@ -73,19 +73,23 @@ class DashView extends StatelessWidget {
             StatRow([
               StatTile(
                 label: 'Volts',
-                value: t.volts.toStringAsFixed(1),
+                value: t.batteryLive ? t.volts.toStringAsFixed(1) : '--',
                 unit: 'V',
                 valueSize: 40,
                 // White, matching the HUD — green stays reserved for the safety
                 // zones on this page (current/temp/range), where it means "safe".
-                valueColor: Esk8Theme.textPrimary,
+                valueColor: t.batteryLive
+                    ? Esk8Theme.textPrimary
+                    : Esk8Theme.dim,
               ),
               StatTile(
                 label: 'Watts',
-                value: '${t.watts}',
+                value: t.live ? '${t.watts}' : '--',
                 unit: 'W',
                 valueSize: 40,
-                valueColor: Esk8Theme.wattsColor(t.watts),
+                valueColor: t.live
+                    ? Esk8Theme.wattsColor(t.watts)
+                    : Esk8Theme.dim,
               ),
             ]),
           ],
@@ -97,26 +101,27 @@ class DashView extends StatelessWidget {
           rows: [
             FieldRow(
               label: 'Motor 1',
-              value: t.masterMotorAmps.toStringAsFixed(1),
+              value: t.live ? t.masterMotorAmps.toStringAsFixed(1) : '--',
               unit: 'A',
-              valueColor: _amp(t.masterMotorAmps),
+              valueColor: t.live ? _amp(t.masterMotorAmps) : Esk8Theme.dim,
             ),
             FieldRow(
               label: 'Motor 2',
-              value: t.slaveMotorAmps.toStringAsFixed(1),
+              value: t.live ? t.slaveMotorAmps.toStringAsFixed(1) : '--',
               unit: 'A',
-              valueColor: _amp(t.slaveMotorAmps),
+              valueColor: t.live ? _amp(t.slaveMotorAmps) : Esk8Theme.dim,
             ),
             FieldRow(
               label: 'Battery',
-              value: t.batteryAmps.toStringAsFixed(1),
+              value: t.live ? t.batteryAmps.toStringAsFixed(1) : '--',
               unit: 'A',
+              valueColor: t.live ? null : Esk8Theme.dim,
             ),
             FieldRow(
               label: 'Duty',
-              value: '${t.duty}',
+              value: t.live ? '${t.duty}' : '--',
               unit: '%',
-              valueColor: Esk8Theme.dutyColor(t.duty),
+              valueColor: t.live ? Esk8Theme.dutyColor(t.duty) : Esk8Theme.dim,
             ),
           ],
         ),
@@ -125,21 +130,29 @@ class DashView extends StatelessWidget {
           rows: [
             FieldRow(
               label: 'Motor',
-              value: '${t.motorTempC}',
+              value: t.live && t.motorTempC != 0 ? '${t.motorTempC}' : '--',
               unit: '°C',
-              valueColor: _temp(t.motorTempC),
+              valueColor: t.live && t.motorTempC != 0
+                  ? _temp(t.motorTempC)
+                  : Esk8Theme.dim,
             ),
             FieldRow(
               label: 'ESC',
-              value: '${t.escTempC}',
+              value: t.live && t.escTempC != 0 ? '${t.escTempC}' : '--',
               unit: '°C',
-              valueColor: _temp(t.escTempC),
+              valueColor: t.live && t.escTempC != 0
+                  ? _temp(t.escTempC)
+                  : Esk8Theme.dim,
             ),
             FieldRow(
               label: 'Battery',
-              value: '${t.batteryTempC}',
+              value: t.batteryLive && t.batteryTempC != 0
+                  ? '${t.batteryTempC}'
+                  : '--',
               unit: '°C',
-              valueColor: _temp(t.batteryTempC),
+              valueColor: t.batteryLive && t.batteryTempC != 0
+                  ? _temp(t.batteryTempC)
+                  : Esk8Theme.dim,
             ),
           ],
         ),
@@ -148,27 +161,35 @@ class DashView extends StatelessWidget {
           rows: [
             FieldRow(
               label: 'Home remaining',
-              value: t.range.toStringAsFixed(1),
+              value: t.batteryLive ? t.range.toStringAsFixed(1) : '--',
               unit: distUnit,
-              valueColor: t.range <= 2 ? Esk8Theme.danger : Esk8Theme.green,
+              valueColor: !t.batteryLive
+                  ? Esk8Theme.dim
+                  : t.range <= 2
+                  ? Esk8Theme.danger
+                  : Esk8Theme.green,
             ),
             FieldRow(
               label: 'Limp remaining',
-              value: t.limpRange.toStringAsFixed(1),
+              value: t.batteryLive ? t.limpRange.toStringAsFixed(1) : '--',
               unit: distUnit,
-              valueColor: t.limpRange <= 2
+              valueColor: !t.batteryLive
+                  ? Esk8Theme.dim
+                  : t.limpRange <= 2
                   ? Esk8Theme.danger
                   : Esk8Theme.yellow,
             ),
             FieldRow(
               label: 'Home full',
-              value: t.estRange.toStringAsFixed(1),
+              value: t.batteryLive ? t.estRange.toStringAsFixed(1) : '--',
               unit: distUnit,
+              valueColor: t.batteryLive ? null : Esk8Theme.dim,
             ),
             FieldRow(
               label: 'Limp full',
-              value: t.limpEstRange.toStringAsFixed(1),
+              value: t.batteryLive ? t.limpEstRange.toStringAsFixed(1) : '--',
               unit: distUnit,
+              valueColor: t.batteryLive ? null : Esk8Theme.dim,
             ),
           ],
         ),
@@ -177,34 +198,45 @@ class DashView extends StatelessWidget {
           rows: [
             FieldRow(
               label: 'Warning',
-              value: _warningLabel(t.rangeWarning),
-              valueColor: _warningColor(t.rangeWarning),
+              value: t.live ? _warningLabel(t.rangeWarning) : '--',
+              valueColor: t.live
+                  ? _warningColor(t.rangeWarning)
+                  : Esk8Theme.dim,
               valueSize: 24,
             ),
             FieldRow(
               label: 'Loaded cell',
-              value: t.cellVolts > 0
+              value: !t.batteryLive
+                  ? '--'
+                  : t.cellVolts > 0
                   ? t.cellVolts.toStringAsFixed(2)
                   : (t.volts / (settings?.batterySeries ?? 10)).toStringAsFixed(
                       2,
                     ),
               unit: 'V',
-              valueColor: settings != null && t.cellVolts <= settings!.homeCellV
+              valueColor: !t.batteryLive
+                  ? Esk8Theme.dim
+                  : settings != null && t.cellVolts <= settings!.homeCellV
                   ? Esk8Theme.orange
                   : Esk8Theme.textPrimary,
             ),
             FieldRow(
               label: 'Lowest loaded',
-              value: t.minLoadedVolts > 0
+              value: !t.live
+                  ? '--'
+                  : t.minLoadedVolts > 0
                   ? t.minLoadedVolts.toStringAsFixed(1)
                   : t.minVolts.toStringAsFixed(1),
               unit: 'V',
+              valueColor: t.live ? null : Esk8Theme.dim,
             ),
             FieldRow(
               label: 'Max battery',
-              value: t.maxBatteryAmps.toStringAsFixed(1),
+              value: t.live ? t.maxBatteryAmps.toStringAsFixed(1) : '--',
               unit: 'A',
-              valueColor: _amp(t.maxBatteryAmps, limit: 36),
+              valueColor: t.live
+                  ? _amp(t.maxBatteryAmps, limit: 36)
+                  : Esk8Theme.dim,
             ),
             FieldRow(
               label: 'Below home',

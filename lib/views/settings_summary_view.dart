@@ -96,10 +96,11 @@ class SettingsSummaryView extends StatelessWidget {
             // board actually uses for range.
             FieldRow(
               label: 'Wh/mi',
-              value: (s.hasBoardCal && s.calWhPerMile > 0
-                      ? s.calWhPerMile
-                      : s.whPerMile)
-                  .toStringAsFixed(1),
+              value:
+                  (s.hasBoardCal && s.calWhPerMile > 0
+                          ? s.calWhPerMile
+                          : s.whPerMile)
+                      .toStringAsFixed(1),
             ),
           ],
         ),

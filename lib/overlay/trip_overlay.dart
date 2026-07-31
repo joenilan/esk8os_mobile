@@ -100,8 +100,10 @@ class _TripOverlayState extends State<TripOverlay> {
             // No-fix hint while we wait for GPS.
             if (_pos == null)
               const Center(
-                child: Text('Waiting for GPS…',
-                    style: TextStyle(color: Colors.white70, fontSize: 12)),
+                child: Text(
+                  'Waiting for GPS…',
+                  style: TextStyle(color: Colors.white70, fontSize: 12),
+                ),
               ),
             Positioned(left: 0, right: 0, bottom: 0, child: _buildStatsStrip()),
             // Transparent tap-catcher on top: FlutterMap absorbs pointer events,
@@ -126,8 +128,9 @@ class _TripOverlayState extends State<TripOverlay> {
         initialCenter: _pos ?? _fallback,
         initialZoom: _zoom,
         // Gestures off so dragging the bubble moves the window, not the map.
-        interactionOptions:
-            const InteractionOptions(flags: InteractiveFlag.none),
+        interactionOptions: const InteractionOptions(
+          flags: InteractiveFlag.none,
+        ),
         onMapReady: () {
           _mapReady = true;
           _recenter();
@@ -164,8 +167,11 @@ class _TripOverlayState extends State<TripOverlay> {
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white, width: 2),
                     ),
-                    child: const Icon(Icons.navigation,
-                        color: Colors.white, size: 16),
+                    child: const Icon(
+                      Icons.navigation,
+                      color: Colors.white,
+                      size: 16,
+                    ),
                   ),
                 ),
               ),
@@ -187,34 +193,45 @@ class _TripOverlayState extends State<TripOverlay> {
       ),
       child: Row(
         children: [
-          Text(_spd,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 26,
-                  fontWeight: FontWeight.bold,
-                  height: 1)),
+          Text(
+            _spd,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 26,
+              fontWeight: FontWeight.bold,
+              height: 1,
+            ),
+          ),
           const SizedBox(width: 4),
           Padding(
             padding: const EdgeInsets.only(bottom: 3),
-            child: Text(_paused ? 'PAUSED' : _unit,
-                style: TextStyle(
-                    color: _paused ? const Color(0xFFFFCD00) : Colors.grey,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold)),
+            child: Text(
+              _paused ? 'PAUSED' : _unit,
+              style: TextStyle(
+                color: _paused ? const Color(0xFFFFCD00) : Colors.grey,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
           ),
           const Spacer(),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('$_trip $_tripUnit',
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                      height: 1.1)),
-              Text(_time,
-                  style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              Text(
+                '$_trip $_tripUnit',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  height: 1.1,
+                ),
+              ),
+              Text(
+                _time,
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
             ],
           ),
         ],

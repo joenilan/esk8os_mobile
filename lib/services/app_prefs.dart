@@ -5,9 +5,24 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// map style and heading-up mode). Call [init] once in main() before runApp.
 class AppPrefs {
   static late SharedPreferences _p;
+  static const _rideTrackingDefaultsVersionKey = 'rideTrackingDefaultsVersion';
+  static const _rideTrackingDefaultsVersion = 1;
 
   static Future<void> init() async {
     _p = await SharedPreferences.getInstance();
+    // Product migration: this is a ride tracker, so existing installs should
+    // receive the safer defaults once. The version marker means a rider can
+    // deliberately turn either option back off without the next launch
+    // silently re-enabling it.
+    if ((_p.getInt(_rideTrackingDefaultsVersionKey) ?? 0) <
+        _rideTrackingDefaultsVersion) {
+      await _p.setBool('autoTrip', true);
+      await _p.setBool('overlayEnabled', true);
+      await _p.setInt(
+        _rideTrackingDefaultsVersionKey,
+        _rideTrackingDefaultsVersion,
+      );
+    }
   }
 
   static bool get mapHeadingUp => _p.getBool('mapHeadingUp') ?? false;
@@ -18,8 +33,14 @@ class AppPrefs {
       true; // light basemap by default — feels more natural
   static set mapLight(bool v) => _p.setBool('mapLight', v);
 
+  /// Last display unit reported by a real board/settings frame. This is only a
+  /// phone-side presentation cache so disconnected ride history uses the
+  /// rider's familiar units; it never changes the board's unit setting.
+  static bool get preferredMph => _p.getBool('preferredMph') ?? true;
+  static set preferredMph(bool v) => _p.setBool('preferredMph', v);
+
   /// Auto start/stop a trip from movement.
-  static bool get autoTrip => _p.getBool('autoTrip') ?? false;
+  static bool get autoTrip => _p.getBool('autoTrip') ?? true;
   static set autoTrip(bool v) => _p.setBool('autoTrip', v);
 
   /// After a valid recorded trip, update the board Wh/mi model from recent trips.
@@ -31,7 +52,7 @@ class AppPrefs {
   static set speedAlert(double v) => _p.setDouble('speedAlert', v);
 
   /// Floating window over other apps when a recording trip is backgrounded.
-  static bool get overlayEnabled => _p.getBool('overlayEnabled') ?? false;
+  static bool get overlayEnabled => _p.getBool('overlayEnabled') ?? true;
   static set overlayEnabled(bool v) => _p.setBool('overlayEnabled', v);
 
   /// Phone app theme follows the ESP32 board theme by default.

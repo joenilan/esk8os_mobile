@@ -42,7 +42,7 @@ class GraphsView extends StatelessWidget {
             child: _MetricChart(
               label: 'Speed',
               unit: speedUnit,
-              values: [for (final t in samples) t.speed],
+              values: [for (final t in samples) t.live ? t.speed : null],
               color: Esk8Theme.accent,
             ),
           ),
@@ -51,7 +51,9 @@ class GraphsView extends StatelessWidget {
             child: _MetricChart(
               label: 'Power',
               unit: 'W',
-              values: [for (final t in samples) t.watts.toDouble()],
+              values: [
+                for (final t in samples) t.live ? t.watts.toDouble() : null,
+              ],
               color: const Color(0xFF4FC3F7),
             ),
           ),
@@ -60,7 +62,7 @@ class GraphsView extends StatelessWidget {
             child: _MetricChart(
               label: 'Voltage',
               unit: 'V',
-              values: [for (final t in samples) t.volts],
+              values: [for (final t in samples) t.batteryLive ? t.volts : null],
               color: Esk8Theme.yellow,
             ),
           ),
@@ -102,8 +104,7 @@ class _SessionPeaks extends StatelessWidget {
       child: Row(
         children: [
           for (var i = 0; i < cells.length; i++) ...[
-            if (i > 0)
-              Container(width: 1, height: 34, color: Esk8Theme.border),
+            if (i > 0) Container(width: 1, height: 34, color: Esk8Theme.border),
             Expanded(child: cells[i]),
           ],
         ],
@@ -152,7 +153,7 @@ class _SessionPeaks extends StatelessWidget {
 class _MetricChart extends StatelessWidget {
   final String label;
   final String unit;
-  final List<double> values;
+  final List<double?> values;
   final Color color;
 
   const _MetricChart({
@@ -165,10 +166,20 @@ class _MetricChart extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final spots = [
-      for (var i = 0; i < values.length; i++) FlSpot(i.toDouble(), values[i]),
+      for (var i = 0; i < values.length; i++)
+        values[i] == null ? FlSpot.nullSpot : FlSpot(i.toDouble(), values[i]!),
     ];
-    double minY = values.reduce((a, b) => a < b ? a : b);
-    double maxY = values.reduce((a, b) => a > b ? a : b);
+    final valid = values.whereType<double>().toList(growable: false);
+    if (valid.isEmpty) {
+      return Center(
+        child: Text(
+          '$label unavailable',
+          style: TextStyle(color: Esk8Theme.dim),
+        ),
+      );
+    }
+    double minY = valid.reduce((a, b) => a < b ? a : b);
+    double maxY = valid.reduce((a, b) => a > b ? a : b);
     if (maxY - minY < 1) maxY = minY + 1;
     final pad = (maxY - minY) * 0.15;
     minY -= pad;
@@ -187,7 +198,9 @@ class _MetricChart extends StatelessWidget {
                 fit: BoxFit.scaleDown,
                 alignment: Alignment.centerRight,
                 child: Text(
-                  '${current.toStringAsFixed(1)} $unit',
+                  current == null
+                      ? '-- $unit'
+                      : '${current.toStringAsFixed(1)} $unit',
                   style: Esk8Theme.number(22, color: color),
                 ),
               ),

@@ -10,6 +10,8 @@ void main() {
       final t = Telemetry.fromJson({
         'live': true,
         'vesc': true,
+        'blive': true,
+        'bsrc': 'fused',
         'spd': 24.5,
         'bat': 73,
         'v': 41.2,
@@ -55,6 +57,8 @@ void main() {
 
       expect(t.live, true);
       expect(t.vescConnected, true);
+      expect(t.batteryLive, true);
+      expect(t.batterySource, 'fused');
       expect(t.speed, 24.5);
       expect(t.battery, 73);
       expect(t.volts, 41.2);
@@ -105,6 +109,50 @@ void main() {
       final t = Telemetry.fromJson({'live': false, 'vesc': false});
       expect(t.live, false);
       expect(t.vescConnected, false);
+      expect(t.batteryLive, false);
+      expect(t.batterySource, 'none');
+    });
+
+    test('keeps Daly battery data live while the drivetrain is parked', () {
+      final t = Telemetry.fromJson({
+        'live': false,
+        'vesc': false,
+        'blive': true,
+        'bsrc': 'daly',
+        'bat': 100,
+        'v': 41.8,
+        'btemp': 21,
+        'rng': 21.4,
+        'cellv': 4.18,
+        'spd': 0,
+        'w': 0,
+      });
+
+      expect(t.live, false);
+      expect(t.batteryLive, true);
+      expect(t.batterySource, 'daly');
+      expect(t.batterySourceLabel, 'BMS');
+      expect(t.battery, 100);
+      expect(t.volts, 41.8);
+      expect(t.batteryTempC, 21);
+      expect(t.range, 21.4);
+      expect(t.cellVolts, 4.18);
+    });
+
+    test('legacy payload derives battery availability only from live', () {
+      final live = Telemetry.fromJson({'live': true});
+      expect(live.batteryLive, true);
+      expect(live.batterySource, 'vesc');
+
+      final parked = Telemetry.fromJson({'live': false});
+      expect(parked.batteryLive, false);
+      expect(parked.batterySource, 'none');
+    });
+
+    test('missing source does not invent Daly availability', () {
+      final t = Telemetry.fromJson({'live': false, 'blive': true});
+      expect(t.batteryLive, true);
+      expect(t.batterySource, 'none');
     });
 
     test('tmov defaults to 0 when absent (older firmware)', () {

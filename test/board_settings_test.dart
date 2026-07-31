@@ -4,6 +4,32 @@ import 'package:esk8os_mobile/ble/esk8os_ble.dart';
 /// Tests for the BLE settings contract (spec §4): parsing the board's config and
 /// building partial write maps for the writable fields.
 void main() {
+  group('BaseConfig', () {
+    test('parses VESC values and per-field provenance', () {
+      final base = BaseConfig.fromJson({
+        'valid': true,
+        'cells': 10,
+        'ah': 32.0,
+        'cutS': 32.0,
+        'cutE': 30.0,
+        'poles': 14,
+        'gear': 4.5,
+        'wheel': 203,
+        'src': {'cells': 'v', 'ah': 'r', 'wheel': 'v'},
+      });
+
+      expect(base.valid, isTrue);
+      expect(base.gearRatio, 4.5);
+      expect(base.src['cells'], 'v');
+      expect(base.src['ah'], 'r');
+      expect(BaseConfig.sourceLabel(base.src['ah']), 'YOUR OVERRIDE');
+    });
+
+    test('builds an explicit clear-override command', () {
+      expect(Esk8Commands.unset('packAh'), 'UNSET:packAh');
+    });
+  });
+
   group('BoardSettings.fromJson', () {
     test('parses a full settings payload', () {
       final s = BoardSettings.fromJson({
