@@ -2,16 +2,17 @@ import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:maplibre/maplibre.dart';
 
-/// MapLibre + OpenFreeMap vector prototype (roadmap step 5).
+/// MapLibre + OpenFreeMap vector map (roadmap step 5).
 ///
 /// Renders OpenFreeMap's free vector styles through MapLibre GL — no API key,
 /// no tile caps, real map styling instead of raster images — behind the same
-/// maps/ seam as the raster [EveeMap] basemap. Prototype scope, deliberately:
-///  * Android in-app surfaces only (playback first). The floating overlay runs
-///    in a separate engine where native map views don't exist; it stays raster.
-///  * Camera is fixed at construction; follow/scrub camera work lands after
-///    the stack proves itself on hardware.
-///  * The live ride map keeps the proven raster path until this is validated.
+/// maps/ seam as the raster [EveeMap] basemap.
+///
+/// Scope: Android in-app surfaces (playback first). The floating overlay runs
+/// in a separate engine where native map views don't exist; it stays raster.
+/// The caller owns the camera via [onMapController] and observes gestures via
+/// [onMapEvent]; route/trail/marker layers diff natively on rebuild, so a
+/// per-frame rebuild is cheap (same model as the raster path).
 ///
 /// Attribution: OpenFreeMap serves OpenStreetMap data and requires on-map
 /// attribution, same rule as the raster path.
@@ -22,30 +23,43 @@ class EveeVectorMap extends StatelessWidget {
     this.zoom = 16,
     this.dark = false,
     this.polylines = const [],
+    this.trail,
+    this.marker,
     this.polylineColor = const Color(0xFFB950D7),
+    this.onMapController,
+    this.onMapEvent,
   });
 
-  // OpenFreeMap hosted styles (verified live 2026-08-29): liberty, bright,
-  // positron and dark. No key, no registration.
+  // OpenFreeMap hosted styles (verified live 2026-08-29): liberty (colorful,
+  // like the OSM default), bright, positron (grayscale) and dark. No key,
+  // no registration. Liberty reads best in daylight; dark matches the theme.
   static const String _styleLight =
-      'https://tiles.openfreemap.org/styles/positron';
+      'https://tiles.openfreemap.org/styles/liberty';
   static const String _styleDark = 'https://tiles.openfreemap.org/styles/dark';
 
   static const String attributionText =
       '© OpenStreetMap contributors · © OpenFreeMap';
 
-  /// Route start (map opens here).
+  /// Camera position at construction (the caller drives it afterwards).
   final LatLng center;
   final double zoom;
   final bool dark;
 
-  /// Route segments in the app'sLatLng form; each becomes a vector LineString.
+  /// The full route, drawn dimmed under everything else.
   final List<List<LatLng>> polylines;
+
+  /// The traveled portion of the ride, drawn at full strength.
+  final List<LatLng>? trail;
+
+  /// The scrub/playback position dot.
+  final LatLng? marker;
   final Color polylineColor;
+  final void Function(MapController controller)? onMapController;
+  final void Function(MapEvent event)? onMapEvent;
 
   @override
   Widget build(BuildContext context) {
-    final lines = [
+    final routeLines = [
       for (final segment in polylines)
         if (segment.length >= 2)
           LineString(
@@ -64,13 +78,43 @@ class EveeVectorMap extends StatelessWidget {
               initCenter: Position(center.longitude, center.latitude),
             ),
             layers: [
-              if (lines.isNotEmpty)
+              if (routeLines.isNotEmpty)
                 PolylineLayer(
-                  polylines: lines,
-                  color: polylineColor.withValues(alpha: 0.75),
+                  polylines: routeLines,
+                  color: polylineColor.withValues(alpha: 0.5),
                   width: 4,
                 ),
+              if (trail != null && trail!.length >= 2)
+                PolylineLayer(
+                  polylines: [
+                    LineString(
+                      coordinates: [
+                        for (final p in trail!)
+                          Position(p.longitude, p.latitude),
+                      ],
+                    ),
+                  ],
+                  color: polylineColor,
+                  width: 4,
+                ),
+              if (marker != null)
+                CircleLayer(
+                  points: [
+                    Point(
+                      coordinates: Position(
+                        marker!.longitude,
+                        marker!.latitude,
+                      ),
+                    ),
+                  ],
+                  radius: 7,
+                  color: polylineColor,
+                  strokeWidth: 2,
+                  strokeColor: Colors.white,
+                ),
             ],
+            onMapCreated: (controller) => onMapController?.call(controller),
+            onEvent: onMapEvent,
           ),
         ),
         const Positioned(

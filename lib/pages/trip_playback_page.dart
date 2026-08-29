@@ -6,6 +6,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../maps/evee_map.dart';
 import '../maps/evee_vector_map.dart';
+import 'package:maplibre/maplibre.dart' as ml;
 import 'package:intl/intl.dart';
 import '../ble/esk8os_ble.dart';
 import '../database/trip_database.dart';
@@ -82,6 +83,12 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   // matches what you ride with; the toggle here flips that same pref.
   bool _mapLight = AppPrefs.mapLight;
   bool _vectorBasemap = AppPrefs.vectorBasemap;
+  // Vector prototype camera: controller arrives from the map, and follow
+  // re-centers are throttled by distance so 60 fps playback doesn't spam
+  // native camera moves. (ml.* = maplibre types; the file also uses
+  // flutter_map's MapController and geolocator's Position.)
+  ml.MapController? _vectorController;
+  LatLng? _vectorLastFollow;
   bool _follow = false; // recenter the camera on the marker as it moves
   bool get _phoneGps => widget.tripData['source'] == 'phone-gps';
 
@@ -665,17 +672,50 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
               if (_showGraphs)
                 _buildGraphs()
               else if (_vectorBasemap)
-                // Roadmap step-5 prototype: MapLibre + OpenFreeMap vector
-                // rendering of the same route. The scrub marker/trail stay on
-                // the raster map until the vector camera work is validated.
-                EveeVectorMap(
-                  center: _route.isNotEmpty
-                      ? _route.first
-                      : const LatLng(0, 0),
-                  zoom: 15,
-                  dark: !_mapLight,
-                  polylines: _route.length >= 2 ? [_route] : const [],
-                  polylineColor: Esk8Theme.accent,
+                // Roadmap step-5: MapLibre + OpenFreeMap vector playback. The
+                // trail + marker rebuild per animation frame and the layers
+                // diff natively; follow re-centers are distance-throttled.
+                AnimatedBuilder(
+                  animation: _playCtrl,
+                  builder: (_, _) {
+                    final marker = _markerPos();
+                    final controller = _vectorController;
+                    if (_follow && controller != null) {
+                      final last = _vectorLastFollow;
+                      if (last == null || _dist(last, marker) > 20) {
+                        _vectorLastFollow = marker;
+                        controller.moveCamera(
+                          center: ml.Position(
+                            marker.longitude,
+                            marker.latitude,
+                          ),
+                        );
+                      }
+                    }
+                    return EveeVectorMap(
+                      center: _route.isNotEmpty
+                          ? _route.first
+                          : const LatLng(0, 0),
+                      zoom: 15,
+                      dark: !_mapLight,
+                      polylines: _route.length >= 2 ? [_route] : const [],
+                      trail: _route.length >= 2
+                          ? _route.sublist(0, _idx + 1)
+                          : null,
+                      marker: marker,
+                      polylineColor: Esk8Theme.accent,
+                      onMapController: (controller) =>
+                          _vectorController = controller,
+                      onMapEvent: (event) {
+                        if (event is ml.MapEventStartMoveCamera &&
+                            event.reason == ml.CameraChangeReason.apiGesture &&
+                            _follow) {
+                          // A manual pan drops follow, same as the raster map.
+                          setState(() => _follow = false);
+                        }
+                      },
+                    );
+                  },
                 )
               else
                 FlutterMap(
