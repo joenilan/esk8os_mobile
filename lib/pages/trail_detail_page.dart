@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,7 @@ import '../maps/evee_vector_map.dart';
 import '../database/trip_database.dart';
 import '../models/trail.dart';
 import '../services/app_prefs.dart';
+import '../services/offline_maps.dart';
 import '../services/trail_export.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/esk8_theme.dart';
@@ -40,6 +42,9 @@ class _TrailDetailPageState extends State<TrailDetailPage> {
   // playback, with long-click POI creation and click-to-view via nearest-POI.
   bool _useVectorMap = AppPrefs.vectorBasemap;
   ml.MapController? _vectorController;
+  // Offline trail maps (roadmap step 5).
+  bool _offlineBusy = false;
+  bool _offlineSaved = false;
 
   @override
   void initState() {
@@ -64,13 +69,121 @@ class _TrailDetailPageState extends State<TrailDetailPage> {
     final waypoints = await TripDatabase.instance.getWaypointsForTrail(
       widget.trailId,
     );
+    final saved = points.isNotEmpty
+        ? await OfflineMaps.hasRegionFor(
+            LatLng(points.first.latitude, points.first.longitude),
+          )
+        : false;
     if (!mounted) return;
     setState(() {
       _trail = trail;
       _points = points;
       _waypoints = waypoints;
+      _offlineSaved = saved;
       _loading = false;
     });
+  }
+
+  /// Download this trail's surrounding area for offline use. The progress
+  /// dialog is informational — the MapLibre offline pipeline continues in the
+  /// background and the region persists even if the dialog is dismissed.
+  Future<void> _downloadOffline() async {
+    if (_points.isEmpty || _offlineBusy) return;
+    setState(() => _offlineBusy = true);
+    final progress = ValueNotifier<double?>(null);
+    unawaited(
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => ValueListenableBuilder<double?>(
+          valueListenable: progress,
+          builder: (_, value, _) => AlertDialog(
+            backgroundColor: Esk8Theme.panel,
+            title: Text(
+              'Saving offline map',
+              style: TextStyle(color: Esk8Theme.textPrimary, fontSize: 18),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LinearProgressIndicator(
+                  value: value,
+                  color: Esk8Theme.accent,
+                  backgroundColor: Esk8Theme.border,
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  value == null
+                      ? 'Preparing…'
+                      : '${(value * 100).toStringAsFixed(0)}%',
+                  style: TextStyle(color: Esk8Theme.dim, fontSize: 13),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Keep the app open. The area works with zero signal once saved.',
+                  style: TextStyle(color: Esk8Theme.dim, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    try {
+      await OfflineMaps.download(
+        bounds: OfflineMaps.boundsFor([
+          for (final p in _points) LatLng(p.latitude, p.longitude),
+        ]),
+        onProgress: (p, _) => progress.value = p,
+      );
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      setState(() => _offlineSaved = true);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Offline map saved')));
+    } catch (error) {
+      if (!mounted) return;
+      if (Navigator.of(context, rootNavigator: true).canPop()) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Offline download failed: $error')),
+      );
+    } finally {
+      progress.dispose();
+      if (mounted) setState(() => _offlineBusy = false);
+    }
+  }
+
+  /// The plugin has no per-region delete; this resets the whole offline
+  /// store, so it lives behind a confirm that says exactly that.
+  Future<void> _confirmDeleteOffline() async {
+    final ok = await confirmAction(
+      context,
+      title: 'Delete offline maps?',
+      message:
+          'This removes EVERY downloaded offline map area on this device, '
+          'not just this trail. Downloaded areas can be restored from the '
+          'trail pages afterwards.',
+      confirmLabel: 'Delete all',
+    );
+    if (!ok) return;
+    try {
+      await OfflineMaps.deleteAll();
+      if (mounted) {
+        setState(() => _offlineSaved = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Offline maps deleted')));
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Delete failed: $error')));
+      }
+    }
   }
 
   List<List<LatLng>> get _segments {
@@ -425,6 +538,19 @@ class _TrailDetailPageState extends State<TrailDetailPage> {
           icon: Icon(
             Icons.layers_outlined,
             color: _useVectorMap ? Esk8Theme.green : Esk8Theme.accent,
+          ),
+        ),
+        IconButton(
+          tooltip: _offlineSaved
+              ? 'Offline map saved — long-press to delete ALL offline maps'
+              : 'Save this area for offline use',
+          onPressed: (_points.isEmpty || _offlineBusy)
+              ? null
+              : _downloadOffline,
+          onLongPress: _offlineSaved ? _confirmDeleteOffline : null,
+          icon: Icon(
+            _offlineSaved ? Icons.offline_pin : Icons.download_for_offline,
+            color: _offlineSaved ? Esk8Theme.green : Esk8Theme.accent,
           ),
         ),
         IconButton(
