@@ -46,12 +46,14 @@ class EveeVectorMap extends StatelessWidget {
   final double zoom;
   final bool dark;
 
-  /// The full route, drawn dimmed under everything else.
+  /// The full route, split into segments (pauses/GPS outages break the
+  /// line), drawn dimmed under everything else.
   final List<List<LatLng>> polylines;
 
-  /// The traveled portion of the ride, drawn at full strength. Pass the same
-  /// instance when unchanged — the native layer diff skips identical sources.
-  final List<LatLng>? trailBase;
+  /// The traveled portion of the ride, per segment, drawn at full strength.
+  /// Pass the same instance when unchanged — the native layer diff skips
+  /// identical sources.
+  final List<List<LatLng>>? trailBase;
 
   /// The 2-point segment connecting the trail base to the interpolated scrub
   /// marker, so line and dot move as one entity. Rebuilt every frame.
@@ -90,15 +92,17 @@ class EveeVectorMap extends StatelessWidget {
                   color: polylineColor.withValues(alpha: 0.5),
                   width: 4,
                 ),
-              if (trailBase != null && trailBase!.length >= 2)
+              if (trailBase != null && trailBase!.any((seg) => seg.length >= 2))
                 PolylineLayer(
                   polylines: [
-                    LineString(
-                      coordinates: [
-                        for (final p in trailBase!)
-                          Position(p.longitude, p.latitude),
-                      ],
-                    ),
+                    for (final seg in trailBase!)
+                      if (seg.length >= 2)
+                        LineString(
+                          coordinates: [
+                            for (final p in seg)
+                              Position(p.longitude, p.latitude),
+                          ],
+                        ),
                   ],
                   color: polylineColor,
                   width: 4,

@@ -64,6 +64,13 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   /// Zero-phase smoothed copy of [_route] — the display geometry. Raw fixes
   /// stay in [_route] (and in the DB) as evidence.
   List<LatLng> _routeDisplay = [];
+
+  /// Per-segment (start, end) row ranges — the display line never connects
+  /// across one (pauses, kills, GPS outages).
+  List<(int, int)> _segmentRanges = const [(0, 0)];
+
+  /// Smoothed display geometry PER SEGMENT — the drawn line splits here.
+  List<List<LatLng>> _segmentsDisplay = const [];
   // Keyframes = (pointIndex, position) only where the position actually CHANGED.
   // The GPS updates ~every 5s but we log 1 Hz, so ~80% of points are duplicates;
   // the marker must glide between distinct fixes (spread over the duplicate span),
@@ -94,7 +101,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   // flutter_map's MapController and geolocator's Position.)
   ml.MapController? _vectorController;
   LatLng? _vectorLastFollow;
-  List<LatLng> _vectorTrailBase = const [];
+  List<List<LatLng>> _vectorTrailBase = const [];
   int _vectorTrailForIdx = -1;
   bool _follow = false; // recenter the camera on the marker as it moves
   bool get _phoneGps => widget.tripData['source'] == 'phone-gps';
@@ -131,6 +138,24 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
 
   double get _maxPos => (_telemetry.length - 1).clamp(1, 1 << 30).toDouble();
 
+  /// Contiguous (start, end) row-index ranges split on timestamp gaps > 5 s.
+  /// Union of the ranges is every row, in order.
+  static List<(int, int)> _splitSegments(List<Map<String, dynamic>> rows) {
+    if (rows.isEmpty) return const [];
+    final ranges = <(int, int)>[];
+    var start = 0;
+    for (var i = 1; i < rows.length; i++) {
+      final dt =
+          (rows[i]['timestamp'] as int) - (rows[i - 1]['timestamp'] as int);
+      if (dt > 5000) {
+        ranges.add((start, i - 1));
+        start = i;
+      }
+    }
+    ranges.add((start, rows.length - 1));
+    return ranges;
+  }
+
   Future<void> _loadTelemetry() async {
     final data = await TripDatabase.instance.getTripTelemetry(widget.tripId);
     if (mounted) {
@@ -140,10 +165,20 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
         _route = data
             .map((t) => LatLng(t['lat'] as double, t['lng'] as double))
             .toList();
+        // Segment breaks: a pause, a hard kill, or a GPS outage leaves a
+        // timestamp gap in the 1 Hz rows. The line must NOT connect across
+        // one (roadmap: playback drew straight lines across paused
+        // relocations). Threshold 5 s — normal 1 Hz rows never trip it.
+        _segmentRanges = _splitSegments(data);
         // Display geometry: zero-phase smoothed copy of the raw fixes (raw
-        // rows stay untouched in the DB). 1:1 index mapping keeps slicing
-        // and keyframes consistent with the recorded samples.
-        _routeDisplay = RidePathSmoother.displayTrack(_route);
+        // rows stay untouched in the DB), smoothed PER SEGMENT so a gap
+        // cannot bleed into the next segment's start. The flattened list is
+        // still 1:1 with the rows, keeping slicing and keyframes consistent.
+        _segmentsDisplay = [
+          for (final (s, e) in _segmentRanges)
+            RidePathSmoother.displayTrack(_route.sublist(s, e + 1)),
+        ];
+        _routeDisplay = [for (final seg in _segmentsDisplay) ...seg];
         _isLoading = false;
       });
       // ~80 ms per recorded point; scrubbable either way.
@@ -182,15 +217,19 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
         }
       }
       // Cache the static full-route line once (identical instance => Flutter skips
-      // rebuilding it each frame).
-      if (_routeDisplay.length >= 2) {
+      // rebuilding it each frame). One polyline PER SEGMENT — no connector
+      // across a pause/GPS-outage gap.
+      if (_segmentsDisplay.isNotEmpty &&
+          _segmentsDisplay.any((s) => s.length >= 2)) {
         _routeLayer = PolylineLayer(
           polylines: [
-            Polyline(
-              points: _routeDisplay,
-              strokeWidth: 4.0,
-              color: _routeColor.withValues(alpha: 0.5),
-            ),
+            for (final seg in _segmentsDisplay)
+              if (seg.length >= 2)
+                Polyline(
+                  points: seg,
+                  strokeWidth: 4.0,
+                  color: _routeColor.withValues(alpha: 0.5),
+                ),
           ],
         );
       }
@@ -258,18 +297,28 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
 
   /// Traveled-trail line — rebuilt only when the integer point index changes
   /// (not every frame), so it doesn't re-simplify the growing path 60x/sec.
-  /// The TIP is separate: a 2-point segment ending exactly at the interpolated
-  /// marker, rebuilt every frame — that's what glues line and dot together.
+  /// Segment-aware: completed segments draw fully, the segment containing the
+  /// scrub position draws partially, future segments not at all. The TIP is
+  /// separate: a 2-point segment ending exactly at the interpolated marker,
+  /// rebuilt every frame — that's what glues line and dot together.
   Widget _buildTrailLayer() {
     if (_trailBase == null || _trailForIdx != _trailEndIdx) {
       _trailForIdx = _trailEndIdx;
       _trailBase = PolylineLayer(
         polylines: [
-          Polyline(
-            points: _routeDisplay.sublist(0, _trailEndIdx + 1),
-            strokeWidth: 4.0,
-            color: _routeColor,
-          ),
+          for (final (s, e) in _segmentRanges)
+            if (_trailEndIdx >= e)
+              Polyline(
+                points: _routeDisplay.sublist(s, e + 1),
+                strokeWidth: 4.0,
+                color: _routeColor,
+              )
+            else if (_trailEndIdx >= s)
+              Polyline(
+                points: _routeDisplay.sublist(s, _trailEndIdx + 1),
+                strokeWidth: 4.0,
+                color: _routeColor,
+              ),
         ],
       );
     }
@@ -717,9 +766,15 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
                     // line and dot move as one entity.
                     if (_vectorTrailForIdx != endIdx) {
                       _vectorTrailForIdx = endIdx;
-                      _vectorTrailBase = List<LatLng>.from(
-                        _routeDisplay.sublist(0, endIdx + 1),
-                      );
+                      _vectorTrailBase = [
+                        for (final (s, e) in _segmentRanges)
+                          if (endIdx >= e)
+                            List<LatLng>.from(_routeDisplay.sublist(s, e + 1))
+                          else if (endIdx >= s)
+                            List<LatLng>.from(
+                              _routeDisplay.sublist(s, endIdx + 1),
+                            ),
+                      ];
                     }
                     final controller = _vectorController;
                     if (_follow && controller != null) {
@@ -740,9 +795,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
                           : const LatLng(0, 0),
                       zoom: 15,
                       dark: !_mapLight,
-                      polylines: _routeDisplay.length >= 2
-                          ? [_routeDisplay]
-                          : const [],
+                      polylines: _segmentsDisplay,
                       trailBase: _vectorTrailBase,
                       tipSegment: _routeDisplay.length >= 2
                           ? [_routeDisplay[endIdx], marker]

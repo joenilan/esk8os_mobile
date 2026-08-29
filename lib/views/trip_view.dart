@@ -5,7 +5,9 @@ import 'package:flutter/scheduler.dart'; // Ticker for smooth map rotation
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:maplibre/maplibre.dart' as ml;
 import '../maps/evee_map.dart';
+import '../maps/evee_vector_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../ble/esk8os_ble.dart';
@@ -60,6 +62,11 @@ class _TripViewState extends State<TripView>
 
   bool _locationReady = false;
   bool _followMode = true;
+  // Vector beta (roadmap step 5): when on, the map renders through
+  // MapLibre + OpenFreeMap and every camera move routes through the
+  // MapLibre controller instead of flutter_map's.
+  final bool _useVectorMap = AppPrefs.vectorBasemap;
+  ml.MapController? _vectorController;
   double _currentZoom = 16.0;
   // Persisted across page swipes / restarts (see AppPrefs).
   bool _headingUp = AppPrefs.mapHeadingUp;
@@ -108,13 +115,32 @@ class _TripViewState extends State<TripView>
     super.dispose();
   }
 
+  /// Move the ACTIVE map's camera (vector beta or raster). [bearing] is the
+  /// direction pointed up (heading-up mode); raster expresses it as a
+  /// negative rotation, MapLibre as its bearing.
+  void _cameraMove({LatLng? center, double? bearing}) {
+    if (_useVectorMap) {
+      final c = _vectorController;
+      if (c == null) return;
+      c.moveCamera(
+        center: center == null
+            ? null
+            : ml.Position(center.longitude, center.latitude),
+        bearing: bearing,
+      );
+      return;
+    }
+    if (center != null) _mapController.move(center, _currentZoom);
+    if (bearing != null) _mapController.rotate(-bearing);
+  }
+
   /// Each frame: ease the rendered map rotation toward the target heading so the
   /// map turns smoothly. Idles (no redraw) once it's essentially aligned.
   void _onRotTick(Duration _) {
     if (!_headingUp || !mounted) return;
     if (_angleDiff(_targetHeading, _displayHeading).abs() < 0.25) return;
     _displayHeading = _smoothAngle(_displayHeading, _targetHeading, 0.18);
-    _mapController.rotate(-_displayHeading);
+    _cameraMove(bearing: _displayHeading);
   }
 
   // Shortest signed difference a-b in [-180,180]; smooth a circular heading.
@@ -173,7 +199,7 @@ class _TripViewState extends State<TripView>
     final lng = _mStart.longitude + (_mEnd.longitude - _mStart.longitude) * t;
     final p = LatLng(lat, lng);
     _smoothPos.value = p; // rebuilds only the marker layer (no page setState)
-    if (_followMode) _mapController.move(p, _currentZoom);
+    if (_followMode) _cameraMove(center: p);
   }
 
   void _toggleHeadingUp() {
@@ -185,7 +211,7 @@ class _TripViewState extends State<TripView>
       _rotTicker?.stop();
       _displayHeading = 0;
       _targetHeading = 0;
-      _mapController.rotate(0); // back to north-up
+      _cameraMove(bearing: 0); // back to north-up
     }
   }
 
@@ -249,7 +275,7 @@ class _TripViewState extends State<TripView>
         // Only recenter if we didn't already open on the rider (cold start) or
         // we're actively following — avoids a visible "jump" on a fresh fix.
         if (!hadCenter || _followMode) {
-          _mapController.move(latLng, _currentZoom);
+          _cameraMove(center: latLng);
         }
       }
     } catch (_) {
@@ -260,7 +286,7 @@ class _TripViewState extends State<TripView>
   void _recenter() {
     final p = _smoothPos.value ?? _rec.currentPosition ?? _initialCenter;
     if (p != null) {
-      _mapController.move(p, _currentZoom);
+      _cameraMove(center: p);
       setState(() => _followMode = true);
     }
   }
@@ -295,7 +321,7 @@ class _TripViewState extends State<TripView>
         return;
       }
       if (_rec.currentPosition != null) {
-        _mapController.move(_rec.currentPosition!, _currentZoom);
+        _cameraMove(center: _rec.currentPosition!);
         setState(() => _followMode = true);
       }
     }
@@ -498,7 +524,29 @@ class _TripViewState extends State<TripView>
         // Map layer — build only once we have a fix (the last-known seed is
         // near-instant) so it opens ON the rider, not a default city that then
         // jumps when the live fix lands.
-        if (pos != null)
+        if (pos != null && _useVectorMap)
+          // Roadmap step-5 beta: MapLibre + OpenFreeMap vector live map.
+          // Follow/heading route through _cameraMove; a manual pan drops
+          // follow, and zoom changes stay synced for the zoom buttons.
+          EveeVectorMap(
+            center: pos,
+            zoom: _currentZoom,
+            dark: !_mapLight,
+            polylines: linePoints.length >= 2 ? [linePoints] : const [],
+            marker: _smoothPos.value ?? pos,
+            polylineColor: Esk8Theme.accent,
+            onMapController: (controller) => _vectorController = controller,
+            onMapEvent: (event) {
+              if (event is ml.MapEventMoveCamera) {
+                _currentZoom = event.camera.zoom;
+              } else if (event is ml.MapEventStartMoveCamera &&
+                  event.reason == ml.CameraChangeReason.apiGesture &&
+                  _followMode) {
+                setState(() => _followMode = false);
+              }
+            },
+          )
+        else if (pos != null)
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
