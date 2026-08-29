@@ -612,19 +612,8 @@ class _TripViewState extends State<TripView>
                   ],
                 ),
               ),
-              // Tile-license requirement: OSM data + CARTO basemap attribution.
-              SimpleAttributionWidget(
-                source: Text(
-                  '© OpenStreetMap contributors · © CARTO',
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: _mapLight ? Colors.black54 : Colors.white54,
-                  ),
-                ),
-                backgroundColor: _mapLight
-                    ? const Color(0xAAFFFFFF)
-                    : const Color(0xAA1E1E1E),
-              ),
+              // Attribution ships inside EveeMap.basemap — a second widget
+              // here would stack on top of it (seen garbled on device).
             ],
           )
         else

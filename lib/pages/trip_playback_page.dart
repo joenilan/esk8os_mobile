@@ -855,19 +855,8 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
                         ],
                       ),
                     ),
-                    // Tile-license requirement: OSM data + CARTO basemap.
-                    SimpleAttributionWidget(
-                      source: Text(
-                        '© OpenStreetMap contributors · © CARTO',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: _mapLight ? Colors.black54 : Colors.white54,
-                        ),
-                      ),
-                      backgroundColor: _mapLight
-                          ? const Color(0xAAFFFFFF)
-                          : const Color(0xAA1E1E1E),
-                    ),
+                    // Attribution ships inside EveeMap.basemap / the vector
+                    // map — a second widget here stacked on top of it.
                   ],
                 ),
 

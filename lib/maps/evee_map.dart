@@ -26,12 +26,18 @@ class EveeMap {
       'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/'
       'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
 
-  static const String _attribution =
+  static const String _attributionOsm =
+      '© OpenStreetMap contributors';
+  static const String _attributionEsri =
       '© OpenStreetMap contributors · Tiles © Esri';
 
   static const String userAgentPackageName = 'com.joenilan.esk8os_mobile';
 
   /// The basemap layer stack: tiles + attribution.
+  ///
+  /// Attribution is mode-aware (crediting the tiles actually shown) and
+  /// rendered with a plain widget — flutter_map's SimpleAttributionWidget
+  /// hardcodes a 'flutter_map | © ' prefix that garbled the line on device.
   static Widget basemap({required bool light}) {
     final TileLayer layer = TileLayer(
       urlTemplate: light ? _osmUrl : _esriDarkUrl,
@@ -41,15 +47,18 @@ class EveeMap {
     return Stack(
       children: [
         Positioned.fill(child: layer),
-        const Positioned(
+        Positioned(
           bottom: 0,
           right: 0,
-          child: SimpleAttributionWidget(
-            source: Text(
-              _attribution,
-              style: TextStyle(fontSize: 10, color: Colors.white),
+          child: ColoredBox(
+            color: Colors.black45,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              child: Text(
+                light ? _attributionOsm : _attributionEsri,
+                style: const TextStyle(fontSize: 10, color: Colors.white),
+              ),
             ),
-            backgroundColor: Colors.black45,
           ),
         ),
       ],
