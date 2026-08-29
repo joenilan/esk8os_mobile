@@ -121,6 +121,19 @@ class BmsData {
   /// `lfb` / `lfa`; most recent non-zero 0x98 frame this board boot and its age.
   final String? lastRawFaultBytes;
   final int? lastFaultAgeSec;
+
+  /// `oc` / `oca`; the pack's own read-only discharge-overcurrent settings as
+  /// `[warning_A, protection1_A, protection1_delay_ms, protection2_A,
+  /// protection2_delay_ms]` (CRC-validated Modbus reads of DALY 0x145..0x149)
+  /// plus the age of that read. Null means the read has not succeeded — never
+  /// invent defaults. Diagnostics only; the firmware exposes no BMS write path.
+  final double? ocWarnA;
+  final double? ocProtect1A;
+  final int? ocProtect1DelayMs;
+  final double? ocProtect2A;
+  final int? ocProtect2DelayMs;
+  final int? ocAgeSec;
+
   final double packVolts; // pv
   final double current; // cur: + charging, - discharging
   final int soc; // soc (%)
@@ -146,6 +159,12 @@ class BmsData {
     this.rawFaultBytes,
     this.lastRawFaultBytes,
     this.lastFaultAgeSec,
+    this.ocWarnA,
+    this.ocProtect1A,
+    this.ocProtect1DelayMs,
+    this.ocProtect2A,
+    this.ocProtect2DelayMs,
+    this.ocAgeSec,
     this.packVolts = 0,
     this.current = 0,
     this.soc = 0,
@@ -214,6 +233,9 @@ class BmsData {
 
   String? get lastFaultLabel => faultLabel(lastRawFaultBytes);
 
+  /// True once the board has published a verified discharge-O/C settings read.
+  bool get ocSettingsValid => ocWarnA != null;
+
   bool cellBalancing(int i) => balanceFresh && (balMask & (1 << i)) != 0;
   bool cellStale(int i) => !cellsFresh || (staleMask & (1 << i)) != 0;
 
@@ -257,6 +279,16 @@ class BmsData {
       if (rawFaultBytes != null) 'fb': rawFaultBytes,
       if (lastRawFaultBytes != null) 'lfb': lastRawFaultBytes,
       if (lastFaultAgeSec != null) 'lfa': lastFaultAgeSec,
+      if (ocSettingsValid) ...{
+        'oc': [
+          ocWarnA,
+          ocProtect1A,
+          ocProtect1DelayMs,
+          ocProtect2A,
+          ocProtect2DelayMs,
+        ],
+        if (ocAgeSec != null) 'oca': ocAgeSec,
+      },
     };
   }
 
@@ -272,38 +304,61 @@ class BmsData {
     }
   }
 
-  factory BmsData.fromJson(Map<String, dynamic> j) => BmsData(
-    link: j['link'] == true,
-    freshnessMask: j['fv'] is num ? (j['fv'] as num).toInt() : null,
-    alarmLevel: j['al'] is num ? (j['al'] as num).toInt() : null,
-    rawFaultBytes: j['fb'] is String ? j['fb'] as String : null,
-    lastRawFaultBytes: j['lfb'] is String ? j['lfb'] as String : null,
-    lastFaultAgeSec: j['lfa'] is num ? (j['lfa'] as num).toInt() : null,
-    packVolts: _d(j['pv']),
-    current: _d(j['cur']),
-    soc: _i(j['soc']),
-    remainingAh: _d(j['rah']),
-    cycles: _i(j['cyc']),
-    cellCount: _i(j['n']),
-    cellsMv: (j['cv'] is List)
-        ? (j['cv'] as List).map((e) => (e as num).toInt()).toList()
-        : const [],
-    balMask: _i(j['bal']),
-    staleMask: _i(j['st']),
-    minMv: _i(j['mn']),
-    minCell: _i(j['mnc']),
-    maxMv: _i(j['mx']),
-    maxCell: _i(j['mxc']),
-    deltaMv: _i(j['dv']),
-    temps: (j['t'] is List)
-        ? (j['t'] as List).map((e) => (e as num).toInt()).toList()
-        : const [],
-    tempMin: _i(j['tmn']),
-    tempMax: _i(j['tmx']),
-    chargeMos: j['cmos'] == true,
-    dischargeMos: j['dmos'] == true,
-    fault: j['flt'] == true,
-  );
+  factory BmsData.fromJson(Map<String, dynamic> j) {
+    // `oc` is [warnA, p1A, p1ms, p2A, p2ms]; all five entries must be numeric
+    // before any of it is trusted, so a malformed array degrades to "not
+    // provided" instead of half-validated settings.
+    double? ocWarn, ocP1a, ocP2a;
+    int? ocP1ms, ocP2ms;
+    if (j['oc'] is List) {
+      final raw = j['oc'] as List;
+      if (raw.length == 5 && raw.every((e) => e is num)) {
+        ocWarn = (raw[0] as num).toDouble();
+        ocP1a = (raw[1] as num).toDouble();
+        ocP1ms = (raw[2] as num).toInt();
+        ocP2a = (raw[3] as num).toDouble();
+        ocP2ms = (raw[4] as num).toInt();
+      }
+    }
+    return BmsData(
+      link: j['link'] == true,
+      freshnessMask: j['fv'] is num ? (j['fv'] as num).toInt() : null,
+      alarmLevel: j['al'] is num ? (j['al'] as num).toInt() : null,
+      rawFaultBytes: j['fb'] is String ? j['fb'] as String : null,
+      lastRawFaultBytes: j['lfb'] is String ? j['lfb'] as String : null,
+      lastFaultAgeSec: j['lfa'] is num ? (j['lfa'] as num).toInt() : null,
+      ocWarnA: ocWarn,
+      ocProtect1A: ocP1a,
+      ocProtect1DelayMs: ocP1ms,
+      ocProtect2A: ocP2a,
+      ocProtect2DelayMs: ocP2ms,
+      ocAgeSec: j['oca'] is num ? (j['oca'] as num).toInt() : null,
+      packVolts: _d(j['pv']),
+      current: _d(j['cur']),
+      soc: _i(j['soc']),
+      remainingAh: _d(j['rah']),
+      cycles: _i(j['cyc']),
+      cellCount: _i(j['n']),
+      cellsMv: (j['cv'] is List)
+          ? (j['cv'] as List).map((e) => (e as num).toInt()).toList()
+          : const [],
+      balMask: _i(j['bal']),
+      staleMask: _i(j['st']),
+      minMv: _i(j['mn']),
+      minCell: _i(j['mnc']),
+      maxMv: _i(j['mx']),
+      maxCell: _i(j['mxc']),
+      deltaMv: _i(j['dv']),
+      temps: (j['t'] is List)
+          ? (j['t'] as List).map((e) => (e as num).toInt()).toList()
+          : const [],
+      tempMin: _i(j['tmn']),
+      tempMax: _i(j['tmx']),
+      chargeMos: j['cmos'] == true,
+      dischargeMos: j['dmos'] == true,
+      fault: j['flt'] == true,
+    );
+  }
 }
 
 /// Command strings written to the command characteristic (spec §5).

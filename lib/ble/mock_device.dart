@@ -218,6 +218,12 @@ class MockDevice implements Esk8Device {
       chargeMos: true,
       dischargeMos: true,
       fault: true,
+      ocWarnA: 36.0,
+      ocProtect1A: 45.0,
+      ocProtect1DelayMs: 1000,
+      ocProtect2A: 60.0,
+      ocProtect2DelayMs: 500,
+      ocAgeSec: 8,
     );
   }
 

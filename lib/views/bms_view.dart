@@ -209,6 +209,36 @@ class _BmsViewState extends State<BmsView> {
                 valueColor: Esk8Theme.orange,
                 valueSize: 18,
               ),
+            // The pack's own discharge limits (read-only Modbus evidence).
+            // Context for any ride peak: P1 is the limit that opened the
+            // discharge MOS on the 2026-07-30 validation ride.
+            if (b.ocSettingsValid) ...[
+              FieldRow(
+                label: 'O/C warn limit',
+                value: b.ocWarnA!.toStringAsFixed(1),
+                unit: 'A',
+                trailing: b.ocAgeSec == null ? null : '${b.ocAgeSec}s AGO',
+                trailingColor: Esk8Theme.dim,
+                valueSize: 20,
+              ),
+              FieldRow(
+                label: 'O/C protect 1',
+                value: b.ocProtect1A!.toStringAsFixed(1),
+                unit: 'A',
+                trailing: '${b.ocProtect1DelayMs} ms',
+                valueColor: Esk8Theme.orange,
+                trailingColor: Esk8Theme.dim,
+                valueSize: 20,
+              ),
+              FieldRow(
+                label: 'O/C protect 2',
+                value: b.ocProtect2A!.toStringAsFixed(1),
+                unit: 'A',
+                trailing: '${b.ocProtect2DelayMs} ms',
+                trailingColor: Esk8Theme.dim,
+                valueSize: 20,
+              ),
+            ],
           ],
         ),
       ],

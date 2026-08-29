@@ -11,6 +11,12 @@ void main() {
         rawFaultBytes: '11000000000000',
         lastRawFaultBytes: '00000800000000',
         lastFaultAgeSec: 42,
+        ocWarnA: 36.0,
+        ocProtect1A: 45.0,
+        ocProtect1DelayMs: 1000,
+        ocProtect2A: 60.0,
+        ocProtect2DelayMs: 500,
+        ocAgeSec: 8,
         packVolts: 39.62,
         current: -12.4,
         soc: 78,
@@ -45,6 +51,13 @@ void main() {
       expect(restored.lastRawFaultBytes, '00000800000000');
       expect(restored.lastFaultAgeSec, 42);
       expect(restored.lastFaultLabel, 'DISCHARGE OVERCURRENT PROTECTION');
+      expect(restored.ocSettingsValid, true);
+      expect(restored.ocWarnA, 36.0);
+      expect(restored.ocProtect1A, 45.0);
+      expect(restored.ocProtect1DelayMs, 1000);
+      expect(restored.ocProtect2A, 60.0);
+      expect(restored.ocProtect2DelayMs, 500);
+      expect(restored.ocAgeSec, 8);
       expect(restored.packVolts, 39.62);
       expect(restored.current, -12.4);
       expect(restored.soc, 78);
@@ -86,6 +99,40 @@ void main() {
         expect(legacyFault.alarmLabel, 'UNCLASSIFIED ALERT');
       },
     );
+
+    test('O/C settings degrade safely on absent or malformed payloads', () {
+      // Firmware before the Modbus settings read sends no `oc` at all.
+      final noOc = BmsData.fromJson({'link': true, 'pv': 41.2});
+      expect(noOc.ocSettingsValid, false);
+      expect(noOc.ocWarnA, isNull);
+      expect(noOc.ocProtect1DelayMs, isNull);
+      expect(noOc.ocAgeSec, isNull);
+
+      // A truncated/malformed array is distrustged as a whole, never
+      // partially applied.
+      final truncated = BmsData.fromJson({
+        'link': true,
+        'oc': [36.0, 45.0],
+      });
+      expect(truncated.ocSettingsValid, false);
+
+      final malformed = BmsData.fromJson({
+        'link': true,
+        'oc': [36.0, 'x', 1000, 60.0, 500],
+      });
+      expect(malformed.ocSettingsValid, false);
+
+      // The real wire shape parses completely, delays included.
+      final good = BmsData.fromJson({
+        'link': true,
+        'oc': [36.0, 45.0, 1000, 60.0, 500],
+        'oca': 8,
+      });
+      expect(good.ocSettingsValid, true);
+      expect(good.ocProtect1DelayMs, 1000);
+      expect(good.ocProtect2A, 60.0);
+      expect(good.ocAgeSec, 8);
+    });
 
     test('freshness mask invalidates only the missing response groups', () {
       final b = BmsData.fromJson({
