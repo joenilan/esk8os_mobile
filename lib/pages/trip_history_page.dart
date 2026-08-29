@@ -685,12 +685,23 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
       t['startTime'] as int,
     );
     final isComplete = t['endTime'] != null;
-    final rawDist = t['distance'] as double;
+    // Distance-fusion policy (schema v8): prefer the persisted fused figure
+    // (board odometry with GPS covering dropouts). NULL = a pre-policy ride —
+    // fall back to the raw GPS distance exactly as before.
+    final fusedDistM = (t['fusedDistanceM'] as num?)?.toDouble();
+    final rawDist = fusedDistM ?? (t['distance'] as double);
     final distDisplay = widget.isMph ? (rawDist / 1609.34) : (rawDist / 1000.0);
+    final fusionSwitches = (t['fusionSwitches'] as num?)?.toInt() ?? 0;
     final rawMax = t['maxSpeed'] as double;
     final maxDisplay = widget.isMph ? (rawMax / 1.60934) : rawMax;
     final phoneGps = t['source'] == 'phone-gps';
-    final sourceLabel = phoneGps ? 'PHONE GPS' : 'BOARD + GPS';
+    // Evidence, not marketing: when the ride switched distance sources
+    // (board dropouts covered by GPS), say so right on the row.
+    final sourceLabel = phoneGps
+        ? 'PHONE GPS'
+        : fusionSwitches > 0
+        ? 'BOARD + GPS · FUSED ×$fusionSwitches'
+        : 'BOARD + GPS';
     final sourceIcon = phoneGps ? Icons.phone_android : Icons.bluetooth;
 
     return Padding(

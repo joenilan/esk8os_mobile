@@ -20,9 +20,18 @@ class RideDistanceFusion {
   double _boardOffsetKm = 0;
   double _gpsOffsetKm = 0;
   RideDistanceSource _source = RideDistanceSource.none;
+  int _switchCount = 0;
+  bool _dropoutActive = false;
 
   double get distanceKm => _effectiveKm;
   RideDistanceSource get source => _source;
+
+  /// Mid-ride source transitions, persisted as evidence: the number of times
+  /// the ride left an established board source for GPS (a dropout — BLE lost,
+  /// board off, or a stalled counter) plus each return. The normal startup
+  /// path (GPS first fixes, then the board qualifying) never counts, so zero
+  /// means the summary distance came from one sensor the whole ride.
+  int get switchCount => _switchCount;
 
   void reset() {
     _effectiveKm = 0;
@@ -33,6 +42,8 @@ class RideDistanceFusion {
     _boardOffsetKm = 0;
     _gpsOffsetKm = 0;
     _source = RideDistanceSource.none;
+    _switchCount = 0;
+    _dropoutActive = false;
   }
 
   double update({
@@ -44,6 +55,10 @@ class RideDistanceFusion {
   }) {
     gpsKm = gpsKm.isFinite ? gpsKm.clamp(0, double.infinity) : 0;
     boardKm = boardKm.isFinite ? boardKm.clamp(0, double.infinity) : 0;
+
+    // The board block below advances _lastBoardKm; the reconnect policy needs
+    // the counter as it was BEFORE this update to detect gap advancement.
+    final lastBoardKmBeforeUpdate = _lastBoardKm;
 
     if (boardLive) {
       final previous = _lastBoardKm;
@@ -80,11 +95,35 @@ class RideDistanceFusion {
 
     if (desired != _source) {
       if (desired == RideDistanceSource.board) {
-        _boardOffsetKm = _effectiveKm - boardKm;
+        // Reconnect policy: if the board's counter advanced through the
+        // dropout (BLE lost but the VESC kept riding), it is the authoritative
+        // whole-ride total — drop the GPS-coverage offset so no distance is
+        // lost or double-counted. If it did not advance (powered off), keep
+        // the offset so the GPS-covered tail survives.
+        if (_dropoutActive &&
+            lastBoardKmBeforeUpdate != null &&
+            boardKm > lastBoardKmBeforeUpdate + _progressKm) {
+          _boardOffsetKm = 0.0;
+        } else {
+          _boardOffsetKm = _effectiveKm - boardKm;
+        }
       } else if (desired == RideDistanceSource.gps) {
         _gpsOffsetKm = _effectiveKm - gpsKm;
       }
+      final previousSource = _source;
       _source = desired;
+      // Evidence counting (see [switchCount]): leaving an established board
+      // source is a dropout; a return only counts once a dropout is open.
+      if (previousSource == RideDistanceSource.board &&
+          desired == RideDistanceSource.gps) {
+        _dropoutActive = true;
+        _switchCount++;
+      } else if (_dropoutActive &&
+          previousSource == RideDistanceSource.gps &&
+          desired == RideDistanceSource.board) {
+        _dropoutActive = false;
+        _switchCount++;
+      }
     }
 
     final candidate = switch (_source) {

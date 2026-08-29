@@ -31,7 +31,10 @@ class LibraryBackupResult {
 /// (shared off the phone, so it survives an uninstall) and read them back in —
 /// the safety net so an app update / re-signing can't lose your history.
 class TripBackup {
-  static const int _formatVersion = 2;
+  // v3: trips carry the distance-fusion evidence columns (fusedDistanceM,
+  // fusedSource, fusionSwitches). Older app versions reject a v3 backup
+  // cleanly instead of failing mid-restore on unknown columns.
+  static const int formatVersion = 3;
 
   /// Export the complete rider-owned library. Trails contain copied geometry;
   /// source ride IDs remain optional provenance and are remapped on restore.
@@ -68,7 +71,7 @@ class TripBackup {
     final trails = await db.getAllTrails();
     final waypoints = await db.getAllWaypoints();
     return <String, dynamic>{
-      'format': _formatVersion,
+      'format': formatVersion,
       'exportedAt': DateTime.now().toIso8601String(),
       'trips': [
         for (final t in trips)
@@ -143,7 +146,7 @@ class TripBackup {
       throw const FormatException('Not a valid EVEE trip backup');
     }
     final format = data['format'];
-    if (format is! int || format < 1 || format > _formatVersion) {
+    if (format is! int || format < 1 || format > formatVersion) {
       throw const FormatException('Unsupported EVEE backup version');
     }
     final tripIdMap = <int, int>{};

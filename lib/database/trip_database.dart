@@ -9,7 +9,7 @@ import '../models/trail.dart';
 class TripDatabase {
   static final TripDatabase instance = TripDatabase._init();
   static Database? _database;
-  static const int schemaVersion = 7;
+  static const int schemaVersion = 8;
   final Database? _databaseOverride;
 
   TripDatabase._init() : _databaseOverride = null;
@@ -96,6 +96,17 @@ class TripDatabase {
         "DEFAULT 'board-assisted'",
       );
     }
+    if (oldV < 8) {
+      // v8: distance-fusion policy. fusedDistanceM is the monotonic board+GPS
+      // figure (board authoritative while its counter advances, GPS covering
+      // dropouts); NULL on pre-policy rides so the UI can fall back. The
+      // source + switch count are persisted evidence, never hidden.
+      await db.execute('ALTER TABLE trips ADD COLUMN fusedDistanceM REAL');
+      await db.execute('ALTER TABLE trips ADD COLUMN fusedSource TEXT');
+      await db.execute(
+        'ALTER TABLE trips ADD COLUMN fusionSwitches INTEGER DEFAULT 0',
+      );
+    }
   }
 
   static Future<void> _createDB(Database db, int version) async {
@@ -112,7 +123,10 @@ class TripDatabase {
         wattHours REAL DEFAULT 0,
         regenWh REAL DEFAULT 0,
         effWhMi REAL DEFAULT 0,
-        source TEXT NOT NULL DEFAULT 'board-assisted'
+        source TEXT NOT NULL DEFAULT 'board-assisted',
+        fusedDistanceM REAL,
+        fusedSource TEXT,
+        fusionSwitches INTEGER DEFAULT 0
       )
     ''');
 
@@ -227,6 +241,9 @@ class TripDatabase {
     double wattHours = 0,
     double regenWh = 0,
     double effWhMi = 0,
+    double? fusedDistanceM,
+    String? fusedSource,
+    int? fusionSwitches,
   }) async {
     final db = await database;
     await db.update(
@@ -241,6 +258,14 @@ class TripDatabase {
         'wattHours': wattHours,
         'regenWh': regenWh,
         'effWhMi': effWhMi,
+        // Fusion fields are written only when supplied so legacy callers
+        // (orphan recovery derives GPS-only numbers) never clobber evidence.
+        // ignore: use_null_aware_elements
+        if (fusedDistanceM != null) 'fusedDistanceM': fusedDistanceM,
+        // ignore: use_null_aware_elements
+        if (fusedSource != null) 'fusedSource': fusedSource,
+        // ignore: use_null_aware_elements
+        if (fusionSwitches != null) 'fusionSwitches': fusionSwitches,
       },
       where: 'id = ?',
       whereArgs: [id],

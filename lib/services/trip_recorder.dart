@@ -579,6 +579,12 @@ class TripRecorder extends ChangeNotifier {
               wattHours: wattHours,
               regenWh: regenWh,
               effWhMi: effWhMi,
+              // The fused figure is the honest summary: board odometry while
+              // its counter advances, GPS covering dropouts, monotonic either
+              // way. Persisted with its source evidence (schema v8).
+              fusedDistanceM: _distanceFusion.distanceKm * 1000.0,
+              fusedSource: _distanceFusion.source.name,
+              fusionSwitches: _distanceFusion.switchCount,
             );
           }
         });
@@ -689,6 +695,9 @@ class TripRecorder extends ChangeNotifier {
           wattHours: _boardWattHours,
           regenWh: _boardRegenWh,
           effWhMi: _boardEffWhMi,
+          fusedDistanceM: _distanceFusion.distanceKm * 1000.0,
+          fusedSource: _distanceFusion.source.name,
+          fusionSwitches: _distanceFusion.switchCount,
         ),
       );
     }
