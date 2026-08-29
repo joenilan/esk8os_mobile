@@ -1,9 +1,63 @@
 # ESK8OS Mobile - Current Handoff
 
-Updated 2026-07-29. Start in `E:\AI\esk8os_mobile` on branch `main`.
+Updated 2026-08-29. Start in `E:\AI\esk8os_mobile` on branch `main`.
 
 Read `AGENTS.md` completely before changing code. It contains the VESC
 source-of-truth rules and the data-preserving build/install procedure.
+
+## LATEST — 2026-08-29: distance fusion, segment lines, MapLibre/OpenFreeMap vector stack, offline regions
+
+All committed through `3c549b0` (unpushed — push waits on the rider's
+on-device validation + the ESP boards' v0.12.0 flash). The phone runs the
+latest signed build (installed in place every round; trip data intact).
+
+**Distance-fusion policy (schema v8, backup v3).** The fused board+GPS
+distance is persisted (`fusedDistanceM`, `fusedSource`, `fusionSwitches`)
+at checkpoints and stop. Reconnect policy: a board counter that advanced
+through a BLE dropout is the authoritative whole-ride total (offset reset,
+never double-counted); a frozen counter keeps the GPS-covered tail with GPS
+as source. History rows prefer the fused figure and show `BOARD + GPS ·
+FUSED ×N` when dropouts occurred. NULL fused fields (pre-policy rides) fall
+back to raw GPS distance.
+
+**CARTO enforcement.** CARTO free basemaps now serve an "API KEY REQUIRED"
+error IMAGE with HTTP 200 (verified 2026-08-29). The old raster path is
+dead. Stopgap shipped: light = OSM standard raster, dark = Esri World Dark
+Gray Canvas (no keys). Long-term = the vector stack below.
+
+**Vector stack (MapLibre 0.2.2 + OpenFreeMap, no API key).** `EveeVectorMap`
+in `lib/maps/` behind the same seam as raster `EveeMap`. Adopted surfaces,
+all behind the persisted `vectorBasemap` beta toggle (layers icon):
+playback (scrub trail + marker as native layers, follow camera throttled at
+20 m, gesture drops follow), trail detail (POI dots, long-click create via
+`MapEventLongClick`, click-to-view nearest, fit bounds), live ride map
+(route, position dot, follow, heading-up bearing via `moveCamera`). Light =
+OpenFreeMap Liberty, dark = OFM Dark. The overlay isolate stays raster
+(native map views can't exist in `flutter_overlay_window`'s engine).
+
+**Smoothing.** `RidePathSmoother.displayTrack` — zero-phase forward+backward
+EMA, endpoints anchored, strictly 1:1 with input points (index-consistent
+slicing/keyframes). Applied to playback + live display geometry only;
+recorded rows keep raw fixes (guardrail).
+
+**Playback segments.** Rows split on >5 s timestamp gaps (pause/kill/GPS
+outage): the display line never connects across a break, smoothing is
+per-segment, trail base+tip are segment-aware on both map stacks.
+
+**Offline regions.** Trail detail's download action saves the trail's
+padded bounding box (z10-14, ~1 km padding, OpenFreeMap Liberty) via the
+MapLibre offline manager with a progress dialog. Saved state detected on
+load by bounds-center match (the plugin cannot read region metadata back).
+KNOWN LIMIT: maplibre 0.2.2 has no per-region delete — long-press offers a
+full offline-store reset behind a confirm.
+
+**Pending on-device validation (rider):** vector live map during a real
+ride (follow + heading-up under motion), playback segments on a ride with
+a pause, offline download + airplane-mode rendering, POI create/view on
+vector. **Known cosmetic debt:** POI icon badges on vector (dots only —
+symbol icons need asset images), app screenshots on evee.zombie.digital
+still show CARTO-era maps, APK grew ~30 MB from MapLibre natives (ABI
+splits would slim it).
 
 ## Current Product Program: Board-Independent EVEE
 
