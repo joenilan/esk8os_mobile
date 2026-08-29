@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_overlay_window/flutter_overlay_window.dart';
 import 'package:latlong2/latlong.dart';
+import '../maps/evee_map.dart';
 
 /// The floating bubble shown over other apps while a trip records in the
 /// background. Runs in its own engine (the [overlayMain] entry point), and gets
@@ -137,20 +138,11 @@ class _TripOverlayState extends State<TripOverlay> {
         },
       ),
       children: [
-        // CartoDB dark, brightness-bumped to match the in-app trip map.
-        ColorFiltered(
-          colorFilter: const ColorFilter.matrix([
-            1.5, 0, 0, 0, 15, //
-            0, 1.5, 0, 0, 15, //
-            0, 0, 1.5, 0, 15, //
-            0, 0, 0, 1, 0, //
-          ]),
-          child: TileLayer(
-            urlTemplate:
-                'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-            subdomains: const ['a', 'b', 'c', 'd'],
-            retinaMode: RetinaMode.isHighDensity(context),
-          ),
+        // Shared EveeMap source; dark with the same brightness bump as the
+        // in-app maps, retina tiles when the overlay surface warrants them.
+        EveeMap.basemap(
+          light: false,
+          retina: RetinaMode.isHighDensity(context),
         ),
         if (_pos != null)
           MarkerLayer(

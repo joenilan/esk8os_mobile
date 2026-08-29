@@ -26,11 +26,73 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
   bool _isLoading = true;
   _LibrarySection _section = _LibrarySection.rides;
   String _dbSizeStr = 'Calculating…';
+  // Library search + trail filters (roadmap: local search/filtering).
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _query = '';
+  String? _surfaceFilter;
+  String? _difficultyFilter;
 
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  // ---- search / filter plumbing -------------------------------------------
+
+  List<Map<String, dynamic>> get _filteredTrips {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return _trips;
+    // Rides have no name — match the rendered date line or the source label.
+    return _trips.where((t) {
+      final start = DateTime.fromMillisecondsSinceEpoch(t['startTime'] as int);
+      final dateStr = DateFormat('MMM d, yyyy · h:mm a').format(start);
+      final source = t['source'] == 'phone-gps' ? 'phone gps' : 'board gps';
+      return dateStr.toLowerCase().contains(q) || source.contains(q);
+    }).toList();
+  }
+
+  List<Trail> get _filteredTrails {
+    final q = _query.trim().toLowerCase();
+    return _trails.where((t) {
+      if (_surfaceFilter != null && t.surface != _surfaceFilter) return false;
+      if (_difficultyFilter != null && t.difficulty != _difficultyFilter) {
+        return false;
+      }
+      if (q.isEmpty) return true;
+      return t.name.toLowerCase().contains(q) ||
+          t.description.toLowerCase().contains(q);
+    }).toList();
+  }
+
+  List<Waypoint> get _filteredWaypoints {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return _waypoints;
+    return _waypoints.where((w) {
+      return w.name.toLowerCase().contains(q) ||
+          w.notes.toLowerCase().contains(q) ||
+          w.type.toLowerCase().contains(q);
+    }).toList();
+  }
+
+  bool get _filtersActive =>
+      _query.trim().isNotEmpty ||
+      _surfaceFilter != null ||
+      _difficultyFilter != null;
+
+  void _clearFilters() {
+    _searchCtrl.clear();
+    setState(() {
+      _query = '';
+      _surfaceFilter = null;
+      _difficultyFilter = null;
+    });
   }
 
   Future<void> _loadData() async {
@@ -268,43 +330,254 @@ class _TripHistoryPageState extends State<TripHistoryPage> {
             ],
           ),
         ),
-        Expanded(child: _buildLibraryBody(unitStr, speedUnitStr)),
+        Expanded(
+          child: Column(
+            children: [
+              _buildSearchBar(),
+              Expanded(child: _buildLibraryBody(unitStr, speedUnitStr)),
+            ],
+          ),
+        ),
       ],
     );
   }
+
+  Widget _buildSearchBar() {
+    final isTrails = _section == _LibrarySection.trails;
+    final surfaces = _trails.map((t) => t.surface).toSet().toList()..sort();
+    final difficulties = _trails.map((t) => t.difficulty).toSet().toList()
+      ..sort();
+    return Container(
+      color: Esk8Theme.panel,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: Column(
+        children: [
+          TextField(
+            controller: _searchCtrl,
+            onChanged: (v) => setState(() => _query = v),
+            style: TextStyle(color: Esk8Theme.textPrimary, fontSize: 14),
+            decoration: InputDecoration(
+              isDense: true,
+              prefixIcon: Icon(Icons.search, size: 20, color: Esk8Theme.dim),
+              suffixIcon: _query.isEmpty
+                  ? null
+                  : IconButton(
+                      icon: Icon(Icons.close, size: 18, color: Esk8Theme.dim),
+                      onPressed: () {
+                        _searchCtrl.clear();
+                        setState(() => _query = '');
+                      },
+                    ),
+              hintText: switch (_section) {
+                _LibrarySection.rides => 'Search rides by date or source',
+                _LibrarySection.trails => 'Search trails by name or notes',
+                _LibrarySection.waypoints => 'Search POIs by name or notes',
+              },
+              hintStyle: TextStyle(color: Esk8Theme.dim, fontSize: 13),
+              filled: true,
+              fillColor: Esk8Theme.scaffold,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              enabledBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: Esk8Theme.border),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderSide: BorderSide(color: Esk8Theme.accent),
+              ),
+            ),
+          ),
+          if (isTrails && surfaces.length > 1) ...[
+            const SizedBox(height: 8),
+            _filterChips(
+              'SURFACE',
+              surfaces,
+              _surfaceFilter,
+              (v) => setState(() => _surfaceFilter = v),
+            ),
+          ],
+          if (isTrails && difficulties.length > 1) ...[
+            const SizedBox(height: 6),
+            _filterChips(
+              'DIFFICULTY',
+              difficulties,
+              _difficultyFilter,
+              (v) => setState(() => _difficultyFilter = v),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// One row of square toggle chips (ALL + the distinct values present in the
+  /// library). Sharp borders to match the panel aesthetic.
+  Widget _filterChips(
+    String label,
+    List<String> values,
+    String? selected,
+    ValueChanged<String?> onTap,
+  ) {
+    return Row(
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            color: Esk8Theme.dim,
+            fontSize: 10,
+            letterSpacing: 1.2,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              _miniChip('ALL', selected == null, () => onTap(null)),
+              for (final v in values)
+                _miniChip(
+                  v,
+                  selected == v,
+                  () => onTap(selected == v ? null : v),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _miniChip(String label, bool selected, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: selected ? Esk8Theme.accent : Esk8Theme.border,
+          ),
+          color: selected
+              ? Esk8Theme.accent.withValues(alpha: 0.15)
+              : Colors.transparent,
+        ),
+        child: Text(
+          label.toUpperCase(),
+          style: TextStyle(
+            fontSize: 11,
+            letterSpacing: 1,
+            fontWeight: FontWeight.bold,
+            color: selected ? Esk8Theme.accent : Esk8Theme.dim,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Distinct from the "no data" empty states: the library has content, the
+  /// current search/filters just match nothing.
+  Widget _noMatchState() => Center(
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.search_off, size: 44, color: Esk8Theme.dim),
+        const SizedBox(height: 16),
+        Text(
+          'NO MATCHES',
+          style: TextStyle(
+            fontSize: 18,
+            letterSpacing: 2.5,
+            fontWeight: FontWeight.bold,
+            color: Esk8Theme.textMuted,
+          ),
+        ),
+        const SizedBox(height: 12),
+        TextButton(
+          onPressed: _clearFilters,
+          child: Text(
+            'Clear search & filters',
+            style: TextStyle(color: Esk8Theme.accent),
+          ),
+        ),
+      ],
+    ),
+  );
 
   Widget _buildLibraryBody(String unitStr, String speedUnitStr) {
     if (_isLoading) {
       return Center(child: CircularProgressIndicator(color: Esk8Theme.accent));
     }
+    Widget? countLine;
+    if (_filtersActive) {
+      final shown = switch (_section) {
+        _LibrarySection.rides => _filteredTrips.length,
+        _LibrarySection.trails => _filteredTrails.length,
+        _LibrarySection.waypoints => _filteredWaypoints.length,
+      };
+      final total = switch (_section) {
+        _LibrarySection.rides => _trips.length,
+        _LibrarySection.trails => _trails.length,
+        _LibrarySection.waypoints => _waypoints.length,
+      };
+      countLine = Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        child: Text(
+          '$shown of $total',
+          style: TextStyle(
+            color: Esk8Theme.dim,
+            fontSize: 12,
+            letterSpacing: 1,
+          ),
+        ),
+      );
+    }
     return switch (_section) {
-      _LibrarySection.rides =>
-        _trips.isEmpty
+      _LibrarySection.rides => _buildList(
+        countLine: countLine,
+        empty: _trips.isEmpty
             ? _emptyRideState()
-            : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: _trips.length,
-                itemBuilder: (context, index) =>
-                    _tripRow(_trips[index], unitStr, speedUnitStr),
-              ),
-      _LibrarySection.trails =>
-        _trails.isEmpty
+            : (_filteredTrips.isEmpty ? _noMatchState() : null),
+        itemCount: _filteredTrips.length,
+        rowBuilder: (context, index) =>
+            _tripRow(_filteredTrips[index], unitStr, speedUnitStr),
+      ),
+      _LibrarySection.trails => _buildList(
+        countLine: countLine,
+        empty: _trails.isEmpty
             ? _emptyTrailState()
-            : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: _trails.length,
-                itemBuilder: (context, index) => _trailRow(_trails[index]),
-              ),
-      _LibrarySection.waypoints =>
-        _waypoints.isEmpty
+            : (_filteredTrails.isEmpty ? _noMatchState() : null),
+        itemCount: _filteredTrails.length,
+        rowBuilder: (context, index) => _trailRow(_filteredTrails[index]),
+      ),
+      _LibrarySection.waypoints => _buildList(
+        countLine: countLine,
+        empty: _waypoints.isEmpty
             ? _emptyWaypointState()
-            : ListView.builder(
-                padding: const EdgeInsets.all(16),
-                itemCount: _waypoints.length,
-                itemBuilder: (context, index) =>
-                    _waypointRow(_waypoints[index]),
-              ),
+            : (_filteredWaypoints.isEmpty ? _noMatchState() : null),
+        itemCount: _filteredWaypoints.length,
+        rowBuilder: (context, index) => _waypointRow(_filteredWaypoints[index]),
+      ),
     };
+  }
+
+  Widget _buildList({
+    required Widget? countLine,
+    required Widget? empty,
+    required int itemCount,
+    required IndexedWidgetBuilder rowBuilder,
+  }) {
+    if (empty != null) return empty;
+    return Column(
+      children: [
+        ?countLine,
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16),
+            itemCount: itemCount,
+            itemBuilder: rowBuilder,
+          ),
+        ),
+      ],
+    );
   }
 
   /// Anchored empty state, matching the scan-home board treatment.

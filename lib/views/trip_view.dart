@@ -5,6 +5,7 @@ import 'package:flutter/scheduler.dart'; // Ticker for smooth map rotation
 import 'package:flutter_compass/flutter_compass.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
+import '../maps/evee_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../ble/esk8os_ble.dart';
@@ -519,46 +520,9 @@ class _TripViewState extends State<TripView>
               },
             ),
             children: [
-              // Light vs dark basemap (persisted). Dark tiles get a brightness
-              // bump; light tiles are used as-is.
-              if (_mapLight)
-                // Voyager = normal colours with readable roads/labels (light_all
-                // was too washed-out).
-                TileLayer(
-                  urlTemplate:
-                      'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-                  subdomains: const ['a', 'b', 'c', 'd'],
-                )
-              else
-                ColorFiltered(
-                  colorFilter: const ColorFilter.matrix([
-                    1.5,
-                    0,
-                    0,
-                    0,
-                    15,
-                    0,
-                    1.5,
-                    0,
-                    0,
-                    15,
-                    0,
-                    0,
-                    1.5,
-                    0,
-                    15,
-                    0,
-                    0,
-                    0,
-                    1,
-                    0,
-                  ]),
-                  child: TileLayer(
-                    urlTemplate:
-                        'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-                    subdomains: const ['a', 'b', 'c', 'd'],
-                  ),
-                ),
+              // Light vs dark basemap (persisted) — shared EveeMap source with
+              // attribution + proper tile User-Agent on every surface.
+              EveeMap.basemap(light: _mapLight),
               if (linePoints.length >= 2)
                 PolylineLayer(
                   polylines: [

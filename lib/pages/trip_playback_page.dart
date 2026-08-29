@@ -4,6 +4,7 @@ import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import '../maps/evee_map.dart';
 import 'package:intl/intl.dart';
 import '../ble/esk8os_ble.dart';
 import '../database/trip_database.dart';
@@ -541,29 +542,10 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
     return BmsData.tryFromStorageJson(row['bmsJson']);
   }
 
-  /// The base tile layer — matches the live map's light/dark preference. Dark
-  /// tiles get the same brightness bump used on the trip view.
+  /// The base tile layer — matches the live map's light/dark preference via
+  /// the shared EveeMap source (attribution + User-Agent included).
   Widget _tileLayer() {
-    if (_mapLight) {
-      return TileLayer(
-        urlTemplate:
-            'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-        subdomains: const ['a', 'b', 'c', 'd'],
-      );
-    }
-    return ColorFiltered(
-      colorFilter: const ColorFilter.matrix([
-        1.5, 0, 0, 0, 15, //
-        0, 1.5, 0, 0, 15, //
-        0, 0, 1.5, 0, 15, //
-        0, 0, 0, 1, 0, //
-      ]),
-      child: TileLayer(
-        urlTemplate:
-            'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
-        subdomains: const ['a', 'b', 'c', 'd'],
-      ),
-    );
+    return EveeMap.basemap(light: _mapLight);
   }
 
   @override
