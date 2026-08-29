@@ -138,12 +138,9 @@ class _TripOverlayState extends State<TripOverlay> {
         },
       ),
       children: [
-        // Shared EveeMap source; dark with the same brightness bump as the
-        // in-app maps, retina tiles when the overlay surface warrants them.
-        EveeMap.basemap(
-          light: false,
-          retina: RetinaMode.isHighDensity(context),
-        ),
+        // Shared EveeMap source; the dark provider is already a dark style,
+        // so no brightness filtering is needed here anymore.
+        EveeMap.basemap(light: false),
         if (_pos != null)
           MarkerLayer(
             markers: [
