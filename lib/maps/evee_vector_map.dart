@@ -26,6 +26,7 @@ class EveeVectorMap extends StatelessWidget {
     this.trailBase,
     this.tipSegment,
     this.marker,
+    this.waypointDots = const [],
     this.polylineColor = const Color(0xFFB950D7),
     this.onMapController,
     this.onMapEvent,
@@ -61,6 +62,11 @@ class EveeVectorMap extends StatelessWidget {
 
   /// The scrub/playback position dot.
   final LatLng? marker;
+
+  /// POI dots (trail-detail waypoints) — small accent circles, distinct from
+  /// the bigger [marker] dot. Tap targets are handled by the caller via
+  /// [onMapEvent] click events.
+  final List<LatLng> waypointDots;
   final Color polylineColor;
   final void Function(MapController controller)? onMapController;
   final void Function(MapEvent event)? onMapEvent;
@@ -131,6 +137,17 @@ class EveeVectorMap extends StatelessWidget {
                     ),
                   ],
                   radius: 7,
+                  color: polylineColor,
+                  strokeWidth: 2,
+                  strokeColor: Colors.white,
+                ),
+              if (waypointDots.isNotEmpty)
+                CircleLayer(
+                  points: [
+                    for (final w in waypointDots)
+                      Point(coordinates: Position(w.longitude, w.latitude)),
+                  ],
+                  radius: 5,
                   color: polylineColor,
                   strokeWidth: 2,
                   strokeColor: Colors.white,

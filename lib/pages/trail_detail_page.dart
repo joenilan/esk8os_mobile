@@ -1,7 +1,11 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:maplibre/maplibre.dart' as ml;
 import '../maps/evee_map.dart';
+import '../maps/evee_vector_map.dart';
 
 import '../database/trip_database.dart';
 import '../models/trail.dart';
@@ -32,11 +36,26 @@ class _TrailDetailPageState extends State<TrailDetailPage> {
   List<Waypoint> _waypoints = const [];
   bool _loading = true;
   bool _mapLight = AppPrefs.mapLight;
+  // Vector beta (roadmap step 5): the same MapLibre + OpenFreeMap stack as
+  // playback, with long-click POI creation and click-to-view via nearest-POI.
+  bool _useVectorMap = AppPrefs.vectorBasemap;
+  ml.MapController? _vectorController;
 
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  /// Ground distance in meters between two points (equirectangular — plenty
+  /// for tap targets at city zooms).
+  static double _latLngDist(LatLng a, LatLng b) {
+    final dLat = (a.latitude - b.latitude) * 111320;
+    final dLng =
+        (a.longitude - b.longitude) *
+        111320 *
+        math.cos(a.latitude * math.pi / 180);
+    return math.sqrt(dLat * dLat + dLng * dLng);
   }
 
   Future<void> _load() async {
@@ -70,7 +89,29 @@ class _TrailDetailPageState extends State<TrailDetailPage> {
     ];
     if (all.isEmpty) return;
     if (all.length == 1) {
-      _mapController.move(all.first, 16);
+      if (_useVectorMap && _vectorController != null) {
+        _vectorController!.moveCamera(
+          center: ml.Position(all.first.longitude, all.first.latitude),
+          zoom: 16,
+        );
+      } else {
+        _mapController.move(all.first, 16);
+      }
+      return;
+    }
+    if (_useVectorMap && _vectorController != null) {
+      final west = all.map((p) => p.longitude).reduce(math.min);
+      final east = all.map((p) => p.longitude).reduce(math.max);
+      final south = all.map((p) => p.latitude).reduce(math.min);
+      final north = all.map((p) => p.latitude).reduce(math.max);
+      _vectorController!.fitBounds(
+        bounds: ml.LngLatBounds(
+          longitudeWest: west,
+          longitudeEast: east,
+          latitudeSouth: south,
+          latitudeNorth: north,
+        ),
+      );
       return;
     }
     _mapController.fitCamera(
@@ -374,6 +415,19 @@ class _TrailDetailPageState extends State<TrailDetailPage> {
           ),
         ),
         IconButton(
+          tooltip: _useVectorMap
+              ? 'Vector basemap (beta) — tap for raster'
+              : 'Try the vector basemap (beta)',
+          onPressed: () => setState(() {
+            _useVectorMap = !_useVectorMap;
+            AppPrefs.vectorBasemap = _useVectorMap;
+          }),
+          icon: Icon(
+            Icons.layers_outlined,
+            color: _useVectorMap ? Esk8Theme.green : Esk8Theme.accent,
+          ),
+        ),
+        IconButton(
           tooltip: 'Fit trail',
           onPressed: _points.isEmpty ? null : _fitRoute,
           icon: Icon(Icons.center_focus_strong, color: Esk8Theme.accent),
@@ -463,78 +517,136 @@ class _TrailDetailPageState extends State<TrailDetailPage> {
                 )
               : Stack(
                   children: [
-                    FlutterMap(
-                      mapController: _mapController,
-                      options: MapOptions(
-                        initialCenter: LatLng(
+                    if (_useVectorMap)
+                      // Roadmap step-5 beta: the same MapLibre + OpenFreeMap
+                      // stack as playback. Long-click creates a POI and a
+                      // click opens the nearest one, matching the raster map.
+                      EveeVectorMap(
+                        center: LatLng(
                           _points.first.latitude,
                           _points.first.longitude,
                         ),
-                        initialZoom: 15,
-                        onMapReady: _fitRoute,
-                        onLongPress: (_, point) => _addWaypoint(point),
-                      ),
-                      children: [
-                        // Shared EveeMap source — this also picks up the dark
-                        // brightness bump the other map surfaces already had.
-                        EveeMap.basemap(light: _mapLight),
-                        PolylineLayer(
-                          polylines: [
-                            for (final segment in _segments)
-                              Polyline(
-                                points: segment,
-                                strokeWidth: 4,
-                                color: Esk8Theme.accent,
-                              ),
-                          ],
+                        zoom: 15,
+                        dark: !_mapLight,
+                        polylines: _segments,
+                        waypointDots: [
+                          for (final waypoint in _waypoints)
+                            LatLng(waypoint.latitude, waypoint.longitude),
+                        ],
+                        polylineColor: Esk8Theme.accent,
+                        onMapController: (controller) =>
+                            _vectorController = controller,
+                        onMapEvent: (event) {
+                          final isLongClick = event is ml.MapEventLongClick;
+                          final isClick = event is ml.MapEventClick;
+                          if (!isLongClick && !isClick) return;
+                          final p = (event as ml.MapEventUserInput).point;
+                          final tapped = LatLng(
+                            p.lat.toDouble(),
+                            p.lng.toDouble(),
+                          );
+                          if (isLongClick) {
+                            _addWaypoint(tapped);
+                            return;
+                          }
+                          // Click: open the nearest POI within a touch's
+                          // worth of ground distance at the current zoom.
+                          final mpp =
+                              156543.03392 *
+                              math.cos(tapped.latitude * math.pi / 180) /
+                              math.pow(2, 15);
+                          final threshold = (24 * mpp).clamp(10.0, 150.0);
+                          Waypoint? nearest;
+                          var best = double.infinity;
+                          for (final waypoint in _waypoints) {
+                            final w = LatLng(
+                              waypoint.latitude,
+                              waypoint.longitude,
+                            );
+                            final d = _latLngDist(tapped, w);
+                            if (d < best) {
+                              best = d;
+                              nearest = waypoint;
+                            }
+                          }
+                          if (nearest != null && best <= threshold) {
+                            _showWaypoint(nearest);
+                          }
+                        },
+                      )
+                    else
+                      FlutterMap(
+                        mapController: _mapController,
+                        options: MapOptions(
+                          initialCenter: LatLng(
+                            _points.first.latitude,
+                            _points.first.longitude,
+                          ),
+                          initialZoom: 15,
+                          onMapReady: _fitRoute,
+                          onLongPress: (_, point) => _addWaypoint(point),
                         ),
-                        MarkerLayer(
-                          markers: [
-                            for (final waypoint in _waypoints)
-                              Marker(
-                                point: LatLng(
-                                  waypoint.latitude,
-                                  waypoint.longitude,
+                        children: [
+                          // Shared EveeMap source — this also picks up the dark
+                          // brightness bump the other map surfaces already had.
+                          EveeMap.basemap(light: _mapLight),
+                          PolylineLayer(
+                            polylines: [
+                              for (final segment in _segments)
+                                Polyline(
+                                  points: segment,
+                                  strokeWidth: 4,
+                                  color: Esk8Theme.accent,
                                 ),
-                                width: 38,
-                                height: 38,
-                                child: GestureDetector(
-                                  onTap: () => _showWaypoint(waypoint),
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: Esk8Theme.panel,
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: Esk8Theme.accent,
-                                        width: 2,
+                            ],
+                          ),
+                          MarkerLayer(
+                            markers: [
+                              for (final waypoint in _waypoints)
+                                Marker(
+                                  point: LatLng(
+                                    waypoint.latitude,
+                                    waypoint.longitude,
+                                  ),
+                                  width: 38,
+                                  height: 38,
+                                  child: GestureDetector(
+                                    onTap: () => _showWaypoint(waypoint),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: Esk8Theme.panel,
+                                        shape: BoxShape.circle,
+                                        border: Border.all(
+                                          color: Esk8Theme.accent,
+                                          width: 2,
+                                        ),
                                       ),
-                                    ),
-                                    child: Icon(
-                                      _waypointIcon(waypoint.type),
-                                      color: Esk8Theme.accent,
-                                      size: 20,
+                                      child: Icon(
+                                        _waypointIcon(waypoint.type),
+                                        color: Esk8Theme.accent,
+                                        size: 20,
+                                      ),
                                     ),
                                   ),
                                 ),
-                              ),
-                          ],
-                        ),
-                        SimpleAttributionWidget(
-                          source: Text(
-                            '© OpenStreetMap contributors · © CARTO',
-                            style: TextStyle(
-                              color: _mapLight
-                                  ? Colors.black54
-                                  : Colors.white54,
-                              fontSize: 10,
-                            ),
+                            ],
                           ),
-                          backgroundColor: _mapLight
-                              ? const Color(0xAAFFFFFF)
-                              : const Color(0xAA1E1E1E),
-                        ),
-                      ],
-                    ),
+                          SimpleAttributionWidget(
+                            source: Text(
+                              '© OpenStreetMap contributors · © CARTO',
+                              style: TextStyle(
+                                color: _mapLight
+                                    ? Colors.black54
+                                    : Colors.white54,
+                                fontSize: 10,
+                              ),
+                            ),
+                            backgroundColor: _mapLight
+                                ? const Color(0xAAFFFFFF)
+                                : const Color(0xAA1E1E1E),
+                          ),
+                        ],
+                      ),
                     Positioned(
                       left: 12,
                       bottom: 24,
