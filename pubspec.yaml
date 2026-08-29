@@ -55,6 +55,7 @@ dependencies:
   package_info_plus: ^10.1.0
   flutter_foreground_task: ^8.17.0
   flutter_overlay_window: ^0.4.5
+  maplibre: ^0.2.2
 
 dev_dependencies:
   flutter_test:

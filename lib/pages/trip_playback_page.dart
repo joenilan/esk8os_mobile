@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../maps/evee_map.dart';
+import '../maps/evee_vector_map.dart';
 import 'package:intl/intl.dart';
 import '../ble/esk8os_ble.dart';
 import '../database/trip_database.dart';
@@ -80,6 +81,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   // Map style is shared with the live trip map (AppPrefs.mapLight) so playback
   // matches what you ride with; the toggle here flips that same pref.
   bool _mapLight = AppPrefs.mapLight;
+  bool _vectorBasemap = AppPrefs.vectorBasemap;
   bool _follow = false; // recenter the camera on the marker as it moves
   bool get _phoneGps => widget.tripData['source'] == 'phone-gps';
 
@@ -630,6 +632,19 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
               if (_follow) _recenterIfFollow();
             }),
           ),
+          IconButton(
+            icon: Icon(
+              Icons.layers_outlined,
+              color: _vectorBasemap ? Esk8Theme.green : accent,
+            ),
+            tooltip: _vectorBasemap
+                ? 'Vector basemap (beta) — tap for raster'
+                : 'Try the vector basemap (beta)',
+            onPressed: () {
+              AppPrefs.vectorBasemap = !_vectorBasemap;
+              setState(() => _vectorBasemap = !_vectorBasemap);
+            },
+          ),
         ],
         IconButton(
           icon: Icon(_showGraphs ? Icons.map : Icons.show_chart, color: accent),
@@ -649,6 +664,19 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
             children: [
               if (_showGraphs)
                 _buildGraphs()
+              else if (_vectorBasemap)
+                // Roadmap step-5 prototype: MapLibre + OpenFreeMap vector
+                // rendering of the same route. The scrub marker/trail stay on
+                // the raster map until the vector camera work is validated.
+                EveeVectorMap(
+                  center: _route.isNotEmpty
+                      ? _route.first
+                      : const LatLng(0, 0),
+                  zoom: 15,
+                  dark: !_mapLight,
+                  polylines: _route.length >= 2 ? [_route] : const [],
+                  polylineColor: Esk8Theme.accent,
+                )
               else
                 FlutterMap(
                   mapController: _mapController,

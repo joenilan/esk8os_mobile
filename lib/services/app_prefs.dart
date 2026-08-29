@@ -33,6 +33,13 @@ class AppPrefs {
       true; // light basemap by default — feels more natural
   static set mapLight(bool v) => _p.setBool('mapLight', v);
 
+  /// Experimental: render playback maps with the MapLibre + OpenFreeMap vector
+  /// stack instead of raster tiles (roadmap step-5 prototype). Phone-only
+  /// preference; the live ride map keeps the proven raster path until the
+  /// prototype is ride-validated.
+  static bool get vectorBasemap => _p.getBool('vectorBasemap') ?? false;
+  static set vectorBasemap(bool v) => _p.setBool('vectorBasemap', v);
+
   /// Last display unit reported by a real board/settings frame. This is only a
   /// phone-side presentation cache so disconnected ride history uses the
   /// rider's familiar units; it never changes the board's unit setting.
