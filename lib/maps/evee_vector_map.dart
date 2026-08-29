@@ -23,7 +23,8 @@ class EveeVectorMap extends StatelessWidget {
     this.zoom = 16,
     this.dark = false,
     this.polylines = const [],
-    this.trail,
+    this.trailBase,
+    this.tipSegment,
     this.marker,
     this.polylineColor = const Color(0xFFB950D7),
     this.onMapController,
@@ -48,8 +49,13 @@ class EveeVectorMap extends StatelessWidget {
   /// The full route, drawn dimmed under everything else.
   final List<List<LatLng>> polylines;
 
-  /// The traveled portion of the ride, drawn at full strength.
-  final List<LatLng>? trail;
+  /// The traveled portion of the ride, drawn at full strength. Pass the same
+  /// instance when unchanged — the native layer diff skips identical sources.
+  final List<LatLng>? trailBase;
+
+  /// The 2-point segment connecting the trail base to the interpolated scrub
+  /// marker, so line and dot move as one entity. Rebuilt every frame.
+  final List<LatLng>? tipSegment;
 
   /// The scrub/playback position dot.
   final LatLng? marker;
@@ -84,12 +90,25 @@ class EveeVectorMap extends StatelessWidget {
                   color: polylineColor.withValues(alpha: 0.5),
                   width: 4,
                 ),
-              if (trail != null && trail!.length >= 2)
+              if (trailBase != null && trailBase!.length >= 2)
                 PolylineLayer(
                   polylines: [
                     LineString(
                       coordinates: [
-                        for (final p in trail!)
+                        for (final p in trailBase!)
+                          Position(p.longitude, p.latitude),
+                      ],
+                    ),
+                  ],
+                  color: polylineColor,
+                  width: 4,
+                ),
+              if (tipSegment != null && tipSegment!.length == 2)
+                PolylineLayer(
+                  polylines: [
+                    LineString(
+                      coordinates: [
+                        for (final p in tipSegment!)
                           Position(p.longitude, p.latitude),
                       ],
                     ),

@@ -42,7 +42,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   // every animation frame (that was dropping frames -> the marker "pulsed"). The
   // full route is fully static; the trail only changes when _idx crosses a point.
   Widget? _routeLayer;
-  Widget? _trailLayer;
+  Widget? _trailBase;
   int _trailForIdx = -1;
 
   static const _routeColor = Color(0xFFB950D7);
@@ -94,11 +94,20 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   // flutter_map's MapController and geolocator's Position.)
   ml.MapController? _vectorController;
   LatLng? _vectorLastFollow;
+  List<LatLng> _vectorTrailBase = const [];
+  int _vectorTrailForIdx = -1;
   bool _follow = false; // recenter the camera on the marker as it moves
   bool get _phoneGps => widget.tripData['source'] == 'phone-gps';
 
   int get _idx =>
       _pos.round().clamp(0, _telemetry.isEmpty ? 0 : _telemetry.length - 1);
+
+  /// The row the traveled-trail base line reaches: the last COMPLETED row.
+  /// The line tip then connects to the interpolated marker with a tiny
+  /// per-frame segment, so line and dot move as one entity instead of the
+  /// line snapping per row (it even jumped AHEAD of the dot with rounding).
+  int get _trailEndIdx =>
+      _pos.floor().clamp(0, _telemetry.isEmpty ? 0 : _telemetry.length - 1);
 
   @override
   void initState() {
@@ -249,20 +258,31 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
 
   /// Traveled-trail line — rebuilt only when the integer point index changes
   /// (not every frame), so it doesn't re-simplify the growing path 60x/sec.
+  /// The TIP is separate: a 2-point segment ending exactly at the interpolated
+  /// marker, rebuilt every frame — that's what glues line and dot together.
   Widget _buildTrailLayer() {
-    if (_trailLayer == null || _trailForIdx != _idx) {
-      _trailForIdx = _idx;
-      _trailLayer = PolylineLayer(
+    if (_trailBase == null || _trailForIdx != _trailEndIdx) {
+      _trailForIdx = _trailEndIdx;
+      _trailBase = PolylineLayer(
         polylines: [
           Polyline(
-            points: _routeDisplay.sublist(0, _idx + 1),
+            points: _routeDisplay.sublist(0, _trailEndIdx + 1),
             strokeWidth: 4.0,
             color: _routeColor,
           ),
         ],
       );
     }
-    return _trailLayer!;
+    final tip = PolylineLayer(
+      polylines: [
+        Polyline(
+          points: [_routeDisplay[_trailEndIdx], _markerPos()],
+          strokeWidth: 4.0,
+          color: _routeColor,
+        ),
+      ],
+    );
+    return Stack(fit: StackFit.expand, children: [_trailBase!, tip]);
   }
 
   void _recenterIfFollow() {
@@ -690,6 +710,17 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
                   animation: _playCtrl,
                   builder: (_, _) {
                     final marker = _markerPos();
+                    final endIdx = _trailEndIdx;
+                    // Trail base: cached per completed row so the big source
+                    // only re-diffs when the row advances. Tip: 2 points,
+                    // rebuilt every frame, ending exactly at the marker —
+                    // line and dot move as one entity.
+                    if (_vectorTrailForIdx != endIdx) {
+                      _vectorTrailForIdx = endIdx;
+                      _vectorTrailBase = List<LatLng>.from(
+                        _routeDisplay.sublist(0, endIdx + 1),
+                      );
+                    }
                     final controller = _vectorController;
                     if (_follow && controller != null) {
                       final last = _vectorLastFollow;
@@ -712,8 +743,9 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
                       polylines: _routeDisplay.length >= 2
                           ? [_routeDisplay]
                           : const [],
-                      trail: _routeDisplay.length >= 2
-                          ? _routeDisplay.sublist(0, _idx + 1)
+                      trailBase: _vectorTrailBase,
+                      tipSegment: _routeDisplay.length >= 2
+                          ? [_routeDisplay[endIdx], marker]
                           : null,
                       marker: marker,
                       polylineColor: Esk8Theme.accent,
