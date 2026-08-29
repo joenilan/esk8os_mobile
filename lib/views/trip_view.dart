@@ -11,6 +11,7 @@ import 'package:latlong2/latlong.dart';
 import '../ble/esk8os_ble.dart';
 import '../pages/trip_history_page.dart';
 import '../services/app_prefs.dart';
+import '../services/ride_path_smoother.dart';
 import '../services/trip_recorder.dart';
 import '../widgets/confirm_dialog.dart';
 import '../widgets/esk8_theme.dart';
@@ -394,11 +395,13 @@ class _TripViewState extends State<TripView>
     // fix), so the line tip and the marker glide together instead of the line
     // snapping ahead and the marker visibly chasing it. (The tip now advances
     // per GPS fix rather than per animation frame — the polyline is too heavy
-    // to rebuild at 60 fps on a long ride.)
+    // to rebuild at 60 fps on a long ride.) The base geometry is the
+    // zero-phase smoothed track — display-only; the recorder keeps raw fixes.
     final smoothNow = _smoothPos.value;
-    final linePoints = (smoothNow != null && route.length >= 2)
-        ? [...route.sublist(0, route.length - 1), smoothNow]
-        : route;
+    final routeDisplay = RidePathSmoother.displayTrack(route);
+    final linePoints = (smoothNow != null && routeDisplay.length >= 2)
+        ? [...routeDisplay.sublist(0, routeDisplay.length - 1), smoothNow]
+        : routeDisplay;
 
     // Preserve the raw board and GPS values as separate evidence. The glance
     // card uses the recorder's monotonic fusion so a live-but-stuck/reset board

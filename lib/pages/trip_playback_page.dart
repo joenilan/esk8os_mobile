@@ -11,6 +11,7 @@ import 'package:intl/intl.dart';
 import '../ble/esk8os_ble.dart';
 import '../database/trip_database.dart';
 import '../services/app_prefs.dart';
+import '../services/ride_path_smoother.dart';
 import '../services/trip_share.dart';
 import '../widgets/esk8_theme.dart';
 import '../widgets/esk8_widgets.dart';
@@ -59,6 +60,10 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
   List<Map<String, dynamic>> _telemetry = [];
   bool _hasBmsData = false;
   List<LatLng> _route = [];
+
+  /// Zero-phase smoothed copy of [_route] — the display geometry. Raw fixes
+  /// stay in [_route] (and in the DB) as evidence.
+  List<LatLng> _routeDisplay = [];
   // Keyframes = (pointIndex, position) only where the position actually CHANGED.
   // The GPS updates ~every 5s but we log 1 Hz, so ~80% of points are duplicates;
   // the marker must glide between distinct fixes (spread over the duplicate span),
@@ -126,6 +131,10 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
         _route = data
             .map((t) => LatLng(t['lat'] as double, t['lng'] as double))
             .toList();
+        // Display geometry: zero-phase smoothed copy of the raw fixes (raw
+        // rows stay untouched in the DB). 1:1 index mapping keeps slicing
+        // and keyframes consistent with the recorded samples.
+        _routeDisplay = RidePathSmoother.displayTrack(_route);
         _isLoading = false;
       });
       // ~80 ms per recorded point; scrubbable either way.
@@ -146,28 +155,30 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
         }
       }
       // Keyframes at distinct GPS positions, keyed by cumulative distance (must
-      // strictly increase — ignores GPS jitter while stopped).
+      // strictly increase — ignores GPS jitter while stopped). Positions ride
+      // the SMOOTHED display geometry so the marker stays glued to the line.
       _keyframes.clear();
-      if (_route.isNotEmpty) {
-        _keyframes.add((0, _route.first));
-        for (var i = 1; i < _route.length; i++) {
-          if (_dist(_route[i], _keyframes.last.$2) > 0.5 &&
+      if (_routeDisplay.isNotEmpty) {
+        _keyframes.add((0, _routeDisplay.first));
+        for (var i = 1; i < _routeDisplay.length; i++) {
+          if (_dist(_routeDisplay[i], _keyframes.last.$2) > 0.5 &&
               _cumDist[i] > _keyframes.last.$1) {
-            _keyframes.add((_cumDist[i], _route[i]));
+            _keyframes.add((_cumDist[i], _routeDisplay[i]));
           }
         }
-        final lastD = _cumDist[_route.length - 1];
-        if (_keyframes.last.$2 != _route.last && lastD > _keyframes.last.$1) {
-          _keyframes.add((lastD, _route.last));
+        final lastD = _cumDist[_routeDisplay.length - 1];
+        if (_keyframes.last.$2 != _routeDisplay.last &&
+            lastD > _keyframes.last.$1) {
+          _keyframes.add((lastD, _routeDisplay.last));
         }
       }
       // Cache the static full-route line once (identical instance => Flutter skips
       // rebuilding it each frame).
-      if (_route.length >= 2) {
+      if (_routeDisplay.length >= 2) {
         _routeLayer = PolylineLayer(
           polylines: [
             Polyline(
-              points: _route,
+              points: _routeDisplay,
               strokeWidth: 4.0,
               color: _routeColor.withValues(alpha: 0.5),
             ),
@@ -244,7 +255,7 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
       _trailLayer = PolylineLayer(
         polylines: [
           Polyline(
-            points: _route.sublist(0, _idx + 1),
+            points: _routeDisplay.sublist(0, _idx + 1),
             strokeWidth: 4.0,
             color: _routeColor,
           ),
@@ -693,14 +704,16 @@ class _TripPlaybackPageState extends State<TripPlaybackPage>
                       }
                     }
                     return EveeVectorMap(
-                      center: _route.isNotEmpty
-                          ? _route.first
+                      center: _routeDisplay.isNotEmpty
+                          ? _routeDisplay.first
                           : const LatLng(0, 0),
                       zoom: 15,
                       dark: !_mapLight,
-                      polylines: _route.length >= 2 ? [_route] : const [],
-                      trail: _route.length >= 2
-                          ? _route.sublist(0, _idx + 1)
+                      polylines: _routeDisplay.length >= 2
+                          ? [_routeDisplay]
+                          : const [],
+                      trail: _routeDisplay.length >= 2
+                          ? _routeDisplay.sublist(0, _idx + 1)
                           : null,
                       marker: marker,
                       polylineColor: Esk8Theme.accent,
