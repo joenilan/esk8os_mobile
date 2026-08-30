@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:latlong2/latlong.dart';
 import 'package:maplibre/maplibre.dart';
 
@@ -8,15 +9,18 @@ import 'package:maplibre/maplibre.dart';
 /// no tile caps, real map styling instead of raster images — behind the same
 /// maps/ seam as the raster [EveeMap] basemap.
 ///
-/// Scope: Android in-app surfaces (playback first). The floating overlay runs
-/// in a separate engine where native map views don't exist; it stays raster.
-/// The caller owns the camera via [onMapController] and observes gestures via
-/// [onMapEvent]; route/trail/marker layers diff natively on rebuild, so a
-/// per-frame rebuild is cheap (same model as the raster path).
+/// Scope: Android in-app surfaces (playback, trail detail, live ride). The
+/// floating overlay runs in a separate engine where native map views don't
+/// exist; it stays raster. The caller owns the camera via [onMapController]
+/// and observes gestures via [onMapEvent]; layers diff natively on rebuild.
+///
+/// POI markers render as a symbol layer with pre-rendered per-type icons
+/// (assets/map_markers/poi_TYPE.png) registered via StyleController.addImage
+/// on style load — there is no icon-font path in maplibre 0.2.2.
 ///
 /// Attribution: OpenFreeMap serves OpenStreetMap data and requires on-map
 /// attribution, same rule as the raster path.
-class EveeVectorMap extends StatelessWidget {
+class EveeVectorMap extends StatefulWidget {
   const EveeVectorMap({
     super.key,
     required this.center,
@@ -31,13 +35,6 @@ class EveeVectorMap extends StatelessWidget {
     this.onMapController,
     this.onMapEvent,
   });
-
-  // OpenFreeMap hosted styles (verified live 2026-08-29): liberty (colorful,
-  // like the OSM default), bright, positron (grayscale) and dark. No key,
-  // no registration. Liberty reads best in daylight; dark matches the theme.
-  static const String _styleLight =
-      'https://tiles.openfreemap.org/styles/liberty';
-  static const String _styleDark = 'https://tiles.openfreemap.org/styles/dark';
 
   static const String attributionText =
       '© OpenStreetMap contributors · © OpenFreeMap';
@@ -63,18 +60,72 @@ class EveeVectorMap extends StatelessWidget {
   /// The scrub/playback position dot.
   final LatLng? marker;
 
-  /// POI dots (trail-detail waypoints) — small accent circles, distinct from
-  /// the bigger [marker] dot. Tap targets are handled by the caller via
-  /// [onMapEvent] click events.
-  final List<LatLng> waypointDots;
+  /// POI markers with a map icon per type. Icons are pre-rendered assets
+  /// (see scripts/gen_poi_icons.py); a type without an icon asset falls
+  /// back to the plain disc.
+  final List<PoiMarker> waypointDots;
+
   final Color polylineColor;
   final void Function(MapController controller)? onMapController;
   final void Function(MapEvent event)? onMapEvent;
 
   @override
+  State<EveeVectorMap> createState() => _EveeVectorMapState();
+}
+
+/// A named POI position for the symbol layer.
+class PoiMarker {
+  const PoiMarker({required this.position, this.type = 'note'});
+
+  final LatLng position;
+
+  /// One of the trail POI types; selects the icon asset. Unknown types fall
+  /// back to the plain pin ("poi_note").
+  final String type;
+}
+
+class _EveeVectorMapState extends State<EveeVectorMap> {
+  static const String _styleLight =
+      'https://tiles.openfreemap.org/styles/liberty';
+  static const String _styleDark = 'https://tiles.openfreemap.org/styles/dark';
+
+  /// Icon PNGs registered into the style, named `poi_<type>`.
+  final Set<String> _registeredImages = {};
+
+  static const List<String> _poiTypes = [
+    'trailhead',
+    'hazard',
+    'parking',
+    'charging',
+    'water',
+    'viewpoint',
+    'scenic',
+    'food',
+    'restroom',
+    'shelter',
+    'repair',
+    'note',
+  ];
+
+  /// Register every POI icon into the loaded style. A failed asset load
+  /// (missing file) is skipped — that type's MarkerLayer is suppressed and
+  /// the caller can rely on dots instead, never a crash.
+  Future<void> _loadPoiImages(StyleController style) async {
+    for (final kind in _poiTypes) {
+      try {
+        final bytes = await rootBundle.load('assets/map_markers/poi_$kind.png');
+        await style.addImage('poi_$kind', bytes.buffer.asUint8List());
+        _registeredImages.add('poi_$kind');
+      } catch (_) {
+        // Icon unavailable: skip; that type's layer just won't render.
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final routeLines = [
-      for (final segment in polylines)
+      for (final segment in widget.polylines)
         if (segment.length >= 2)
           LineString(
             coordinates: [
@@ -82,91 +133,110 @@ class EveeVectorMap extends StatelessWidget {
             ],
           ),
     ];
+    final trailLines = (widget.trailBase ?? const <List<LatLng>>[])
+        .where((seg) => seg.length >= 2)
+        .map(
+          (seg) => LineString(
+            coordinates: [
+              for (final p in seg) Position(p.longitude, p.latitude),
+            ],
+          ),
+        )
+        .toList();
+    // One symbol layer per POI type — MarkerLayer's iconImage is per-layer.
+    final poisByType = <String, List<PoiMarker>>{};
+    for (final poi in widget.waypointDots) {
+      final key = _poiTypes.contains(poi.type) ? poi.type : 'note';
+      (poisByType[key] ??= []).add(poi);
+    }
     return Stack(
       children: [
         Positioned.fill(
           child: MapLibreMap(
             options: MapOptions(
-              initStyle: dark ? _styleDark : _styleLight,
-              initZoom: zoom,
-              initCenter: Position(center.longitude, center.latitude),
+              initStyle: widget.dark ? _styleDark : _styleLight,
+              initZoom: widget.zoom,
+              initCenter: Position(
+                widget.center.longitude,
+                widget.center.latitude,
+              ),
             ),
             layers: [
               if (routeLines.isNotEmpty)
                 PolylineLayer(
                   polylines: routeLines,
-                  color: polylineColor.withValues(alpha: 0.5),
+                  color: widget.polylineColor.withValues(alpha: 0.5),
                   width: 4,
                 ),
-              if (trailBase != null && trailBase!.any((seg) => seg.length >= 2))
+              if (trailLines.isNotEmpty)
                 PolylineLayer(
-                  polylines: [
-                    for (final seg in trailBase!)
-                      if (seg.length >= 2)
-                        LineString(
-                          coordinates: [
-                            for (final p in seg)
-                              Position(p.longitude, p.latitude),
-                          ],
-                        ),
-                  ],
-                  color: polylineColor,
+                  polylines: trailLines,
+                  color: widget.polylineColor,
                   width: 4,
                 ),
-              if (tipSegment != null && tipSegment!.length == 2)
+              if (widget.tipSegment != null && widget.tipSegment!.length == 2)
                 PolylineLayer(
                   polylines: [
                     LineString(
                       coordinates: [
-                        for (final p in tipSegment!)
+                        for (final p in widget.tipSegment!)
                           Position(p.longitude, p.latitude),
                       ],
                     ),
                   ],
-                  color: polylineColor,
+                  color: widget.polylineColor,
                   width: 4,
                 ),
-              if (marker != null)
+              for (final entry in poisByType.entries)
+                MarkerLayer(
+                  points: [
+                    for (final poi in entry.value)
+                      Point(
+                        coordinates: Position(
+                          poi.position.longitude,
+                          poi.position.latitude,
+                        ),
+                      ),
+                  ],
+                  iconImage: 'poi_${entry.key}',
+                  iconSize: 0.9,
+                  iconAllowOverlap: true,
+                ),
+              if (widget.marker != null)
                 CircleLayer(
                   points: [
                     Point(
                       coordinates: Position(
-                        marker!.longitude,
-                        marker!.latitude,
+                        widget.marker!.longitude,
+                        widget.marker!.latitude,
                       ),
                     ),
                   ],
                   radius: 7,
-                  color: polylineColor,
-                  strokeWidth: 2,
-                  strokeColor: Colors.white,
-                ),
-              if (waypointDots.isNotEmpty)
-                CircleLayer(
-                  points: [
-                    for (final w in waypointDots)
-                      Point(coordinates: Position(w.longitude, w.latitude)),
-                  ],
-                  radius: 5,
-                  color: polylineColor,
+                  color: widget.polylineColor,
                   strokeWidth: 2,
                   strokeColor: Colors.white,
                 ),
             ],
-            onMapCreated: (controller) => onMapController?.call(controller),
-            onEvent: onMapEvent,
+            onMapCreated: (controller) =>
+                widget.onMapController?.call(controller),
+            onStyleLoaded: (style) async {
+              await _loadPoiImages(style);
+              if (mounted) setState(() {});
+            },
+            onEvent: widget.onMapEvent,
           ),
         ),
-        const Positioned(
+        Positioned(
           bottom: 0,
           right: 0,
           child: ColoredBox(
             color: Colors.black45,
             child: Padding(
-              padding: EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               child: Text(
-                attributionText,
-                style: TextStyle(fontSize: 10, color: Colors.white),
+                EveeVectorMap.attributionText,
+                style: const TextStyle(fontSize: 10, color: Colors.white),
               ),
             ),
           ),

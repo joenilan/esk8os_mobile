@@ -657,7 +657,13 @@ class _TrailDetailPageState extends State<TrailDetailPage> {
                         polylines: _segments,
                         waypointDots: [
                           for (final waypoint in _waypoints)
-                            LatLng(waypoint.latitude, waypoint.longitude),
+                            PoiMarker(
+                              position: LatLng(
+                                waypoint.latitude,
+                                waypoint.longitude,
+                              ),
+                              type: waypoint.type,
+                            ),
                         ],
                         polylineColor: Esk8Theme.accent,
                         onMapController: (controller) =>
