@@ -660,9 +660,13 @@ class _DashboardPageState extends State<DashboardPage>
   final List<Telemetry> _telemetryHistory = <Telemetry>[];
   Timer? _autoTimer;
   DateTime? _stoppedSince;
+  DateTime? _pausedSince; // when the auto-pause (or rider pause) began
   bool _seenStopped = false; // gate: auto-start only after a real standstill
   bool _wasOverSpeed = false;
   bool _overlayShown = false;
+  // A rest stop PAUSES the ride; only a genuinely long park finishes it.
+  static const int _restPauseMin = 3;
+  static const int _parkedFinishMin = 30;
   static const _appChannel = MethodChannel('esk8os/app');
   // overlayListener is a single-subscription stream — listen ONCE per process,
   // not per DashboardPage (reconnecting would otherwise throw and gray the app).
@@ -781,15 +785,37 @@ class _DashboardPageState extends State<DashboardPage>
           _seenStopped = false;
           rec.start(widget.dev, isMph: _boardSettings?.mph ?? true);
         }
-      } else if (rec.recordingUsesBoard && !rec.isPaused) {
-        if (t.speed < 1) {
-          _stoppedSince ??= DateTime.now();
-          if (DateTime.now().difference(_stoppedSince!).inMinutes >= 3) {
-            rec.stop(); // parked a while -> end the trip
+      } else if (rec.recordingUsesBoard) {
+        if (rec.isPaused) {
+          // Paused (by us at a rest stop, or by the rider): keep holding the
+          // ride while the stop lasts, finish it only if the park stretches
+          // past the long limit — packed up, gone for the day.
+          _pausedSince ??= DateTime.now();
+          if (DateTime.now().difference(_pausedSince!).inMinutes >=
+              _parkedFinishMin) {
+            rec.stop();
+            _pausedSince = null;
+            _stoppedSince = null;
+          } else if (t.live && t.speed > 3) {
+            rec.resume(); // rolling again -> pick the ride back up
+            _pausedSince = null;
             _stoppedSince = null;
           }
         } else {
-          _stoppedSince = null;
+          _pausedSince = null;
+          if (t.speed < 1) {
+            _stoppedSince ??= DateTime.now();
+            if (DateTime.now().difference(_stoppedSince!).inMinutes >=
+                _restPauseMin) {
+              // Rest stop: HOLD the ride (pause), never end it — the rider
+              // sitting on a bench must not split their commute in two.
+              rec.pause();
+              _pausedSince = DateTime.now();
+              _stoppedSince = null;
+            }
+          } else {
+            _stoppedSince = null;
+          }
         }
       }
     }
