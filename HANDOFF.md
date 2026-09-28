@@ -1,9 +1,32 @@
 # ESK8OS Mobile - Current Handoff
 
-Updated 2026-08-29. Start in `E:\AI\esk8os_mobile` on branch `main`.
+Updated 2026-09-28. Start in `E:\AI\esk8os_mobile` on branch `main`.
 
 Read `AGENTS.md` completely before changing code. It contains the VESC
 source-of-truth rules and the data-preserving build/install procedure.
+
+## CURRENT PHYSICAL ANDROID TARGET — 2026-09-28
+
+The normal EVEE development/ride-validation phone is now the dedicated
+Blackhole Samsung Galaxy S23:
+
+- model: `SM-S911U`
+- ADB serial: `RFCW405TSXD`
+- Android 16 / API 36
+- EVEE package: `com.joenilan.esk8os_mobile`
+
+Read `DEVELOPMENT_PHONE.md` before physical-device work. It is the source of
+truth for this phone's permissions/runtime profile, signed-install procedure,
+and installed support apps.
+
+All mutating ADB commands must explicitly target `RFCW405TSXD`. The user's
+other Samsung, `RFGL42MHF7Z`, is not the normal EVEE target and should remain
+read-only unless the user explicitly asks to modify it.
+
+Installed support tools include SMART BMS Pro (authoritative DALY app), nRF
+Connect (BLE/GATT diagnosis), GPSTest (GNSS diagnosis), WiFi Analyzer (ESP32/AP
+and 2.4 GHz diagnosis), LocalSend (local file transfer), and optional Shizuku.
+IRL Pro is also installed for streaming but is not an EVEE dependency.
 
 ## LATEST — 2026-08-29: distance fusion, segment lines, MapLibre/OpenFreeMap vector stack, offline regions
 
@@ -553,9 +576,10 @@ them accidentally in this task.
 - Signed release APK built successfully at
   `build\app\outputs\flutter-apk\app-release.apk`.
 - APK package: `com.joenilan.esk8os_mobile`.
-- Installed review build: `0.2.33`, version code `35`, installed in place and
-  launched on `RFGL42MHF7Z` with the signing certificate matched and app data
-  preserved.
+- Historical pre-Blackhole verification: installed review build `0.2.33`,
+  version code `35`, installed in place and launched on `RFGL42MHF7Z` with the
+  signing certificate matched and app data preserved. This is not the current
+  default development phone.
 - Previous installed build was `0.2.32`, version code `34`.
 - Signing certificate SHA-256:
   `929ae55957d78da15ca261867f136f6c97228cc7a261b5b5066dead81b2b747f`.
@@ -576,6 +600,7 @@ been committed.
 ```powershell
 Set-Location E:\AI\esk8os_mobile
 Get-Content -Raw .\AGENTS.md
+Get-Content -Raw .\DEVELOPMENT_PHONE.md
 Get-Content -Raw .\HANDOFF.md
 git status --short
 C:\dev\flutter\bin\flutter.bat test
@@ -608,13 +633,13 @@ on uninstall.
 When the phone is connected, compare signatures without installing:
 
 ```powershell
-.\scripts\install-signed-release.ps1 -BuildOnly -Devices RFGL42MHF7Z
+.\scripts\install-signed-release.ps1 -BuildOnly -Devices RFCW405TSXD
 ```
 
 Only when the user explicitly requests the update:
 
 ```powershell
-.\scripts\install-signed-release.ps1 -Devices RFGL42MHF7Z -Launch
+.\scripts\install-signed-release.ps1 -Devices RFCW405TSXD -Launch
 ```
 
 The script verifies the new APK, pulls the installed base APK read-only,

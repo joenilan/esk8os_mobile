@@ -58,6 +58,16 @@ UI program is tracked in `PRODUCT_ROADMAP.md`.
 
 Requires Flutter (stable), Android SDK (via Android Studio), JDK 17, Windows Developer Mode (for plugin symlinks), and a **physical Android device** with USB debugging.
 
+The dedicated EVEE Android development/ride-validation phone is the Blackhole
+Samsung Galaxy S23, model `SM-S911U`, ADB serial `RFCW405TSXD`, running Android
+16 / API 36. Read `DEVELOPMENT_PHONE.md` before device work; it documents the
+phone's runtime profile, safe signed-install workflow, and the installed support
+apps (SMART BMS Pro, nRF Connect, GPSTest, WiFi Analyzer, LocalSend, Shizuku,
+and IRL Pro) plus when each should be used.
+
+If multiple Samsung devices are attached, mutating commands must explicitly
+target `RFCW405TSXD`. The user's other Samsung is not the default EVEE target.
+
 ```bash
 flutter pub get
 flutter analyze

@@ -4,6 +4,25 @@ This repository is the Flutter companion app for the ESK8OS longboard display.
 Android is the primary target. Treat the connected board, the rider's phone, and
 recorded trip history as production systems and data.
 
+## Dedicated Android Development Phone
+
+Before physical-device work, read `DEVELOPMENT_PHONE.md`.
+
+The standard EVEE Android target is the dedicated Blackhole S23:
+
+- model: `SM-S911U`
+- ADB serial: `RFCW405TSXD`
+- Android 16 / API 36
+
+All mutating ADB/install/permission commands must explicitly target
+`RFCW405TSXD`. Never let a command fall through to another attached device.
+
+The user's other Samsung, `RFGL42MHF7Z`, is not the normal development
+target. Treat it as read-only unless the user explicitly asks to modify it.
+
+`DEVELOPMENT_PHONE.md` also documents the installed support tools and which
+one to use for BLE, GPS, Wi-Fi, DALY BMS, file transfer, and Android diagnosis.
+
 ## Repository Boundaries
 
 - Work from `E:\AI\esk8os_mobile`, which has its own `.git` repository.
@@ -223,13 +242,13 @@ If the phone is connected, this also compares the installed app's certificate
 to the new APK while remaining read-only:
 
 ```powershell
-.\scripts\install-signed-release.ps1 -BuildOnly -Devices RFGL42MHF7Z
+.\scripts\install-signed-release.ps1 -BuildOnly -Devices RFCW405TSXD
 ```
 
 Only when the user asks to update the phone, use the in-place installer:
 
 ```powershell
-.\scripts\install-signed-release.ps1 -Devices RFGL42MHF7Z -Launch
+.\scripts\install-signed-release.ps1 -Devices RFCW405TSXD -Launch
 ```
 
 The script requires the permanent keystore, verifies the release APK with
@@ -241,7 +260,7 @@ The manual in-place equivalent is:
 
 ```powershell
 & "$env:LOCALAPPDATA\Android\Sdk\platform-tools\adb.exe" `
-  -s RFGL42MHF7Z install -r `
+  -s RFCW405TSXD install -r `
   build\app\outputs\flutter-apk\app-release.apk
 ```
 
